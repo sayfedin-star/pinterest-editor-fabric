@@ -6,7 +6,7 @@ import Link from 'next/link';
 import { ArrowLeft, Loader2, Save, Check } from 'lucide-react';
 import { useAuth } from '@/lib/auth/AuthContext';
 import { GenerationSettingsPanel } from '@/components/campaign/GenerationSettings';
-import { GenerationSettings, DEFAULT_GENERATION_SETTINGS } from '@/lib/rendering/clientPinGenerator';
+import { GenerationSettings, DEFAULT_GENERATION_SETTINGS } from '@/components/campaign/GenerationController';
 import { supabase, isSupabaseConfigured } from '@/lib/supabase';
 import { toast } from 'sonner';
 
@@ -46,6 +46,7 @@ export default function SettingsPage() {
                         batchSize: data.default_batch_size || DEFAULT_GENERATION_SETTINGS.batchSize,
                         quality: data.default_quality || DEFAULT_GENERATION_SETTINGS.quality,
                         pauseEnabled: data.default_pause_enabled ?? DEFAULT_GENERATION_SETTINGS.pauseEnabled,
+                        renderMode: 'auto', // Always default to auto for settings page
                     });
                 }
             } catch (error) {

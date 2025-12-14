@@ -2,24 +2,56 @@
 
 // Debug logging - only in development
 const DEBUG = process.env.NODE_ENV === 'development';
-const log = (...args: unknown[]) => DEBUG && console.log(...args);
+const log = (...args: unknown[]) => DEBUG && console.log('[HybridController]', ...args);
 
 import React, { useState, useRef, useCallback, useEffect } from 'react';
-import { Play, Pause, RotateCcw, AlertCircle, CheckCircle, Loader2, RefreshCw } from 'lucide-react';
+import { Play, Pause, RotateCcw, AlertCircle, CheckCircle, Loader2, RefreshCw, Server, Monitor } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import { throttle } from 'lodash';
+import * as fabric from 'fabric';
 import { useCampaignGeneration } from '@/stores/generationStore';
-import {
-    GenerationSettings,
-    GenerationProgress,
-    generatePinsBatch,
-    clearImageCache,
-    DEFAULT_GENERATION_SETTINGS
-} from '@/lib/rendering/clientPinGenerator';
+import { renderTemplate, exportToBlob, FieldMapping } from '@/lib/fabric/engine';
 import { Element, CanvasSize } from '@/types/editor';
 import { PinCardData } from './PinCard';
 
+// ============================================
+// Types
+// ============================================
+export interface GenerationSettings {
+    batchSize: number;
+    quality: 'draft' | 'normal' | 'high' | 'ultra';
+    pauseEnabled: boolean;
+    renderMode: 'auto' | 'client' | 'server';
+}
+
+export interface GenerationProgress {
+    current: number;
+    total: number;
+    percentage: number;
+    status: 'idle' | 'generating' | 'paused' | 'completed' | 'error';
+    errors: Array<{ rowIndex: number; error: string }>;
+}
+
+// Quality to multiplier mapping
+const QUALITY_MAP: Record<GenerationSettings['quality'], number> = {
+    draft: 1,
+    normal: 2,
+    high: 3,
+    ultra: 4,
+};
+
+// Default settings
+export const DEFAULT_GENERATION_SETTINGS: GenerationSettings = {
+    batchSize: 10,
+    quality: 'normal',
+    pauseEnabled: true,
+    renderMode: 'auto',
+};
+
+// ============================================
+// Props Interface
+// ============================================
 interface GenerationControllerProps {
     campaignId: string;
     userId: string;
@@ -32,12 +64,15 @@ interface GenerationControllerProps {
     initialSettings?: GenerationSettings;
     initialProgress?: number;
     initialStatus?: 'pending' | 'processing' | 'paused' | 'completed' | 'failed';
-    generatedCount: number; // Actual count from database
+    generatedCount: number;
     onPinGenerated: (pin: PinCardData) => void;
     onProgressUpdate: (progress: GenerationProgress) => void;
     onStatusChange: (status: string) => void;
 }
 
+// ============================================
+// Component
+// ============================================
 export function GenerationController({
     campaignId,
     userId,
@@ -58,7 +93,6 @@ export function GenerationController({
     const [settings] = useState<GenerationSettings>(initialSettings);
     const [status, setStatus] = useState(initialStatus);
     const [progress, setProgress] = useState<GenerationProgress>(() => {
-        // Use the actual generated count from database for accurate display
         const actualProgress = generatedCount > 0 ? generatedCount : initialProgress;
         return {
             current: actualProgress,
@@ -69,233 +103,305 @@ export function GenerationController({
         };
     });
     const [isPausing, setIsPausing] = useState(false);
+    const [activeMode, setActiveMode] = useState<'client' | 'server' | null>(null);
 
     // Generation resume store integration
     const { state: savedState, canResume, save: saveProgress, clear: clearProgress, isStale } = useCampaignGeneration(campaignId);
 
-    // Debug: Log resume state on mount and changes
-    useEffect(() => {
-        log('[GenerationController] Resume state:', {
-            campaignId,
-            savedState,
-            canResume,
-            isStale,
-            status,
-            initialStatus
-        });
-    }, [campaignId, savedState, canResume, isStale, status, initialStatus]);
-
-    // Sync status based on actual progress and saved state on mount
-    useEffect(() => {
-        const actualCount = generatedCount || progress.current;
-        const total = csvData.length;
-        const isComplete = actualCount >= total;
-
-        log('[GenerationController] Status sync check:', {
-            actualCount,
-            total,
-            isComplete,
-            currentStatus: status,
-            canResume,
-            savedStateIndex: savedState?.lastCompletedIndex
-        });
-
-        // Case 1: All pins are generated - mark as completed and clear resume state
-        if (isComplete && status !== 'completed') {
-            log('[GenerationController] All pins generated - marking as completed');
-            setStatus('completed');
-            onStatusChange('completed');
-            clearProgress(); // Clear localStorage resume state
-            return;
-        }
-
-        // Case 2: Resume state exists but is stale/outdated (savedState shows less progress than actual)
-        if (savedState && actualCount > savedState.lastCompletedIndex + 1) {
-            log('[GenerationController] Saved state is outdated - clearing');
-            clearProgress();
-            return;
-        }
-
-        // Case 3: Resume state exists and we're showing as processing but no generator is active
-        if (canResume && status === 'processing' && !generatorRef.current) {
-            log('[GenerationController] Syncing status to paused for resume');
-            setStatus('paused');
-            onStatusChange('paused');
-        }
-    }, [canResume, status, generatedCount, progress.current, csvData.length, onStatusChange, savedState, clearProgress]);
-
-    const generatorRef = useRef<AsyncGenerator<any, void, boolean | undefined> | null>(null);
+    // Refs
     const shouldPauseRef = useRef(false);
-    // RACE-001: Track if component is mounted to prevent state updates after unmount
     const isMountedRef = useRef(true);
-    // Producer-consumer: track active upload promises
     const activeUploadsRef = useRef<Set<Promise<void>>>(new Set());
+    const fabricCanvasRef = useRef<fabric.StaticCanvas | null>(null);
 
-    // Throttled progress saver (max once every 2 seconds) - prevents localStorage thrashing
+    // Throttled progress saver
     const throttledSaveProgressRef = useRef(
         throttle((data: Parameters<typeof saveProgress>[0]) => {
             saveProgress(data);
         }, 2000, { leading: true, trailing: true })
     );
 
+    // Debug: Log resume state on mount
+    useEffect(() => {
+        log('Resume state:', { campaignId, savedState, canResume, isStale, status });
+    }, [campaignId, savedState, canResume, isStale, status]);
+
+    // Sync status based on actual progress
+    useEffect(() => {
+        const actualCount = generatedCount || progress.current;
+        const total = csvData.length;
+        const isComplete = actualCount >= total;
+
+        if (isComplete && status !== 'completed') {
+            setStatus('completed');
+            onStatusChange('completed');
+            clearProgress();
+        }
+
+        if (savedState && actualCount > savedState.lastCompletedIndex + 1) {
+            clearProgress();
+        }
+    }, [canResume, status, generatedCount, progress.current, csvData.length, onStatusChange, savedState, clearProgress]);
+
     // Cleanup on unmount
     useEffect(() => {
         return () => {
             isMountedRef.current = false;
             throttledSaveProgressRef.current.cancel();
+            if (fabricCanvasRef.current) {
+                fabricCanvasRef.current.dispose();
+                fabricCanvasRef.current = null;
+            }
         };
     }, []);
 
-    // Start generation
+    // ============================================
+    // Render Single Pin with Fabric (Client-side)
+    // ============================================
+    const renderPinClient = useCallback(async (
+        rowData: Record<string, string>,
+        rowIndex: number
+    ): Promise<{ blob: Blob; fileName: string; rowIndex: number }> => {
+        // Create or reuse canvas
+        if (!fabricCanvasRef.current) {
+            fabricCanvasRef.current = new fabric.StaticCanvas(undefined, {
+                width: canvasSize.width,
+                height: canvasSize.height,
+            });
+        }
+
+        const canvas = fabricCanvasRef.current;
+
+        // Render using shared engine
+        await renderTemplate(
+            canvas,
+            templateElements,
+            { width: canvasSize.width, height: canvasSize.height, backgroundColor },
+            rowData,
+            fieldMapping as FieldMapping
+        );
+
+        // Export to blob
+        const multiplier = QUALITY_MAP[settings.quality];
+        const blob = await exportToBlob(canvas, { multiplier });
+
+        return {
+            blob,
+            fileName: `pin-${rowIndex + 1}.png`,
+            rowIndex,
+        };
+    }, [canvasSize, templateElements, backgroundColor, fieldMapping, settings.quality]);
+
+    // ============================================
+    // Render Single Pin via Server API
+    // ============================================
+    const renderPinServer = useCallback(async (
+        rowData: Record<string, string>,
+        rowIndex: number
+    ): Promise<{ blob: Blob; fileName: string; rowIndex: number }> => {
+        const response = await fetch('/api/render-pin', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                elements: templateElements,
+                canvasSize,
+                backgroundColor,
+                rowData,
+                fieldMapping,
+                multiplier: QUALITY_MAP[settings.quality],
+            }),
+        });
+
+        if (!response.ok) {
+            throw new Error(`Server render failed: ${response.statusText}`);
+        }
+
+        const result = await response.json();
+        if (!result.success) {
+            throw new Error(result.error || 'Server render failed');
+        }
+
+        // Convert data URL to blob
+        const dataUrlResponse = await fetch(result.url);
+        const blob = await dataUrlResponse.blob();
+
+        return {
+            blob,
+            fileName: `pin-${rowIndex + 1}.png`,
+            rowIndex,
+        };
+    }, [templateElements, canvasSize, backgroundColor, fieldMapping, settings.quality]);
+
+    // ============================================
+    // Upload Single Pin
+    // ============================================
+    const uploadSinglePin = useCallback(async (pin: { blob: Blob; fileName: string; rowIndex: number }) => {
+        const formData = new FormData();
+        formData.append('file', pin.blob, pin.fileName);
+        formData.append('campaign_id', campaignId);
+        formData.append('row_index', pin.rowIndex.toString());
+
+        try {
+            const uploadResponse = await fetch('/api/upload-pin', {
+                method: 'POST',
+                body: formData,
+            });
+
+            const uploadResult = await uploadResponse.json();
+
+            if (uploadResult.url) {
+                // Save to database
+                await fetch('/api/generated-pins', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        campaign_id: campaignId,
+                        user_id: userId,
+                        image_url: uploadResult.url,
+                        data_row: csvData[pin.rowIndex],
+                        status: 'completed',
+                    }),
+                });
+
+                return {
+                    success: true,
+                    pin: {
+                        id: `${campaignId}-${pin.rowIndex}`,
+                        rowIndex: pin.rowIndex,
+                        imageUrl: uploadResult.url,
+                        status: 'completed' as const,
+                        csvData: csvData[pin.rowIndex],
+                    }
+                };
+            }
+            return { success: false, rowIndex: pin.rowIndex };
+        } catch (error) {
+            console.error('Upload error:', error);
+            return {
+                success: false,
+                pin: {
+                    id: `${campaignId}-${pin.rowIndex}`,
+                    rowIndex: pin.rowIndex,
+                    imageUrl: '',
+                    status: 'failed' as const,
+                    errorMessage: 'Upload failed',
+                    csvData: csvData[pin.rowIndex],
+                }
+            };
+        }
+    }, [campaignId, userId, csvData]);
+
+    // ============================================
+    // Start Generation (Hybrid Logic)
+    // ============================================
     const startGeneration = useCallback(async (startIndex: number = 0) => {
         if (status === 'processing') return;
-
-        // Guard: check if still mounted
         if (!isMountedRef.current) return;
 
         setStatus('processing');
         onStatusChange('processing');
         shouldPauseRef.current = false;
 
-        // Clear image cache before starting to prevent duplicate images
-        clearImageCache();
+        // Determine render mode
+        const mode = settings.renderMode === 'auto'
+            ? (csvData.length > 50 ? 'server' : 'client')
+            : settings.renderMode;
 
-        // PERF-001: Helper to upload a single pin (for parallel execution)
-        const uploadSinglePin = async (pin: { blob: Blob; fileName: string; rowIndex: number }) => {
-            const formData = new FormData();
-            formData.append('file', pin.blob, pin.fileName);
-            formData.append('campaign_id', campaignId);
-            formData.append('row_index', pin.rowIndex.toString());
+        setActiveMode(mode);
+        log(`Starting generation in ${mode} mode from index ${startIndex}`);
 
-            try {
-                const uploadResponse = await fetch('/api/upload-pin', {
-                    method: 'POST',
-                    body: formData,
-                });
-
-                const uploadResult = await uploadResponse.json();
-
-                if (uploadResult.url) {
-                    // Save to database
-                    await fetch('/api/generated-pins', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            campaign_id: campaignId,
-                            user_id: userId,
-                            image_url: uploadResult.url,
-                            data_row: csvData[pin.rowIndex],
-                            status: 'completed',
-                        }),
-                    });
-
-                    return {
-                        success: true,
-                        pin: {
-                            id: `${campaignId}-${pin.rowIndex}`,
-                            rowIndex: pin.rowIndex,
-                            imageUrl: uploadResult.url,
-                            status: 'completed' as const,
-                            csvData: csvData[pin.rowIndex],
-                        }
-                    };
-                }
-                return { success: false, rowIndex: pin.rowIndex };
-            } catch (error) {
-                console.error('Upload error:', error);
-                return {
-                    success: false,
-                    pin: {
-                        id: `${campaignId}-${pin.rowIndex}`,
-                        rowIndex: pin.rowIndex,
-                        imageUrl: '',
-                        status: 'failed' as const,
-                        errorMessage: 'Upload failed',
-                        csvData: csvData[pin.rowIndex],
-                    }
-                };
-            }
-        };
+        const errors: Array<{ rowIndex: number; error: string }> = [];
+        let current = startIndex;
 
         try {
-            // Create generator
-            generatorRef.current = generatePinsBatch(
-                templateElements,
-                canvasSize,
-                backgroundColor,
-                csvData,
-                fieldMapping,
-                settings,
-                startIndex,
-                (prog) => {
-                    if (isMountedRef.current) {
-                        setProgress(prog);
-                        onProgressUpdate(prog);
-                    }
-                }
-            );
-
-            // Producer-Consumer Pattern with Promise.race for non-blocking concurrency
             const CONCURRENCY_LIMIT = 5;
 
-            // Process pins
-            let result = await generatorRef.current.next();
-
-            while (!result.done && !shouldPauseRef.current) {
-                // Guard: check if still mounted
+            while (current < csvData.length && !shouldPauseRef.current) {
                 if (!isMountedRef.current) return;
 
-                const pin = result.value;
+                const rowData = csvData[current];
+                const rowIndex = current;
 
-                // Create upload promise that removes itself from active set when done
-                const uploadPromise = uploadSinglePin(pin).then((uploadResult) => {
-                    activeUploadsRef.current.delete(uploadPromise);
+                try {
+                    let pin: { blob: Blob; fileName: string; rowIndex: number };
 
-                    if (!isMountedRef.current) return;
-
-                    if (uploadResult.pin) {
-                        onPinGenerated(uploadResult.pin);
-
-                        // Throttled save (max every 2 seconds)
-                        throttledSaveProgressRef.current({
-                            campaignId,
-                            lastCompletedIndex: uploadResult.pin.rowIndex,
-                            totalPins: csvData.length,
-                            status: 'processing'
-                        });
+                    if (mode === 'server') {
+                        try {
+                            // Try server-side rendering first
+                            pin = await renderPinServer(rowData, rowIndex);
+                        } catch (serverError) {
+                            // SMART FALLBACK: If server fails, use client-side rendering
+                            log(`Server failed for row ${rowIndex}, falling back to client:`, serverError);
+                            pin = await renderPinClient(rowData, rowIndex);
+                        }
+                    } else {
+                        // Client-side rendering using Fabric
+                        pin = await renderPinClient(rowData, rowIndex);
                     }
-                });
 
-                activeUploadsRef.current.add(uploadPromise);
+                    // Create upload promise
+                    const uploadPromise = uploadSinglePin(pin).then((uploadResult) => {
+                        activeUploadsRef.current.delete(uploadPromise);
 
-                // Concurrency control: wait if too many active uploads
-                if (activeUploadsRef.current.size >= CONCURRENCY_LIMIT) {
-                    await Promise.race(activeUploadsRef.current);
+                        if (!isMountedRef.current) return;
+
+                        if (uploadResult.pin) {
+                            onPinGenerated(uploadResult.pin);
+
+                            // Throttled save
+                            throttledSaveProgressRef.current({
+                                campaignId,
+                                lastCompletedIndex: uploadResult.pin.rowIndex,
+                                totalPins: csvData.length,
+                                status: 'processing'
+                            });
+                        }
+                    });
+
+                    activeUploadsRef.current.add(uploadPromise);
+
+                    // Concurrency control
+                    if (activeUploadsRef.current.size >= CONCURRENCY_LIMIT) {
+                        await Promise.race(activeUploadsRef.current);
+                    }
+
+                } catch (error) {
+                    console.error(`Failed to render pin ${rowIndex}:`, error);
+                    errors.push({ rowIndex, error: error instanceof Error ? error.message : 'Unknown error' });
                 }
 
-                // Continue rendering immediately (don't wait for upload to finish)
-                result = await generatorRef.current.next(true);
+                current++;
+
+                // Update progress
+                const newProgress: GenerationProgress = {
+                    current,
+                    total: csvData.length,
+                    percentage: Math.round((current / csvData.length) * 100),
+                    status: 'generating',
+                    errors,
+                };
+                setProgress(newProgress);
+                onProgressUpdate(newProgress);
             }
 
-            // Wait for all remaining uploads to complete
+            // Wait for remaining uploads
             await Promise.all(activeUploadsRef.current);
 
-            // Guard: check if still mounted before final state updates
             if (!isMountedRef.current) return;
 
-            // Check final status
+            // Final status
             if (shouldPauseRef.current) {
                 setStatus('paused');
                 onStatusChange('paused');
-                // Force flush throttled save on pause
                 throttledSaveProgressRef.current.flush();
-                toast.info(`Paused at ${progress.current}/${progress.total} pins`);
+                toast.info(`Paused at ${current}/${csvData.length} pins`);
             } else {
                 setStatus('completed');
                 onStatusChange('completed');
                 clearProgress();
                 toast.success('Generation completed!');
             }
+
         } catch (error) {
             console.error('Generation error:', error);
             if (isMountedRef.current) {
@@ -306,13 +412,18 @@ export function GenerationController({
         } finally {
             if (isMountedRef.current) {
                 setIsPausing(false);
+                setActiveMode(null);
             }
-            clearImageCache();
+            // Cleanup canvas
+            if (fabricCanvasRef.current) {
+                fabricCanvasRef.current.dispose();
+                fabricCanvasRef.current = null;
+            }
         }
     }, [
         status, templateElements, canvasSize, backgroundColor, csvData,
-        fieldMapping, settings, campaignId, userId, onPinGenerated, onProgressUpdate,
-        onStatusChange, progress.current, progress.total, saveProgress, clearProgress
+        fieldMapping, settings, campaignId, onPinGenerated, onProgressUpdate,
+        onStatusChange, clearProgress, renderPinClient, renderPinServer, uploadSinglePin
     ]);
 
     // Pause generation
@@ -337,7 +448,6 @@ export function GenerationController({
         );
         if (!confirmed) return;
 
-        // Delete existing pins
         await fetch(`/api/generated-pins?campaign_id=${campaignId}`, {
             method: 'DELETE',
         });
@@ -353,6 +463,9 @@ export function GenerationController({
         startGeneration(0);
     }, [campaignId, csvData.length, progress.current, startGeneration]);
 
+    // ============================================
+    // Render
+    // ============================================
     return (
         <div className="space-y-4">
             {/* Progress Bar */}
@@ -365,12 +478,17 @@ export function GenerationController({
                                     status === 'processing' ? 'Generating Pins...' :
                                         'Ready to Generate'}
                         </h3>
-                        <p className="text-sm text-gray-500">
-                            {generatedCount} of {csvData.length} pins
-                        </p>
+                        <div className="flex items-center gap-2 text-sm text-gray-500">
+                            <span>{generatedCount} of {csvData.length} pins</span>
+                            {activeMode && (
+                                <span className="flex items-center gap-1 text-xs bg-gray-100 px-2 py-0.5 rounded">
+                                    {activeMode === 'server' ? <Server className="w-3 h-3" /> : <Monitor className="w-3 h-3" />}
+                                    {activeMode === 'server' ? 'Server' : 'Client'}
+                                </span>
+                            )}
+                        </div>
                     </div>
                     <div className="flex items-center gap-2">
-                        {/* Status Icon */}
                         {status === 'completed' && (
                             <CheckCircle className="w-6 h-6 text-green-500" />
                         )}
@@ -398,7 +516,7 @@ export function GenerationController({
 
                 {/* Action Buttons */}
                 <div className="flex flex-col gap-3">
-                    {/* Resume from Saved State - only show if there's actually work remaining */}
+                    {/* Resume from Saved State */}
                     {canResume && !isStale && status !== 'processing' && status !== 'completed' && savedState &&
                         savedState.lastCompletedIndex < savedState.totalPins - 1 &&
                         (generatedCount || progress.current) < csvData.length && (() => {

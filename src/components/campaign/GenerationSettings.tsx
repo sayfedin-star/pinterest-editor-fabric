@@ -3,7 +3,7 @@
 import React, { useState } from 'react';
 import { Settings, ChevronDown, ChevronUp, RefreshCw, Zap, Image as ImageIcon, Gauge, Layers } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { GenerationSettings, DEFAULT_GENERATION_SETTINGS } from '@/lib/rendering/clientPinGenerator';
+import { GenerationSettings, DEFAULT_GENERATION_SETTINGS } from './GenerationController';
 
 interface GenerationSettingsProps {
     settings: GenerationSettings;

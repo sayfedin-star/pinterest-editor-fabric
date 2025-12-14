@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "test": "jest"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.947.0",
@@ -20,6 +21,7 @@
     "@vercel/analytics": "^1.6.1",
     "clsx": "^2.1.1",
     "date-fns": "^4.1.0",
+    "fabric": "^6.9.0",
     "jszip": "^3.10.1",
     "konva": "^10.0.12",
     "lodash": "^4.17.21",
@@ -39,15 +41,19 @@
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
+    "@types/fabric": "^5.3.10",
+    "@types/jest": "^30.0.0",
     "@types/lodash": "^4.17.21",
-    "@types/node": "^20",
+    "@types/node": "^20.19.27",
     "@types/papaparse": "^5.5.1",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "babel-plugin-react-compiler": "1.0.0",
     "eslint": "^9",
     "eslint-config-next": "16.0.8",
+    "jest": "^30.2.0",
     "tailwindcss": "^4",
+    "ts-jest": "^29.4.6",
     "typescript": "^5"
   }
 }

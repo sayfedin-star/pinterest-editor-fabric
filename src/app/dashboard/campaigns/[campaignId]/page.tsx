@@ -12,13 +12,12 @@ import { cn } from '@/lib/utils';
 import { useAuth } from '@/lib/auth/AuthContext';
 import { getCampaign, updateCampaign, CampaignWithDetails } from '@/lib/db/campaigns';
 import { getTemplate } from '@/lib/db/templates';
-import { GenerationController } from '@/components/campaign/GenerationController';
+import { GenerationController, GenerationSettings, GenerationProgress, DEFAULT_GENERATION_SETTINGS } from '@/components/campaign/GenerationController';
 import { GenerationSettingsPanel } from '@/components/campaign/GenerationSettings';
 import { PinsGrid, PinCardData } from '@/components/campaign/PinCard';
 import { ExportToolbar } from '@/components/campaign/ExportToolbar';
 import { CampaignDetailsPanel } from '@/components/campaign/CampaignDetailsPanel';
 import { SelectionActionBar, DeleteConfirmationModal } from '@/components/ui/BulkActions';
-import { GenerationSettings, GenerationProgress, DEFAULT_GENERATION_SETTINGS } from '@/lib/rendering/clientPinGenerator';
 import { Element, CanvasSize } from '@/types/editor';
 import { toast } from 'sonner';
 
