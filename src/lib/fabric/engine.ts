@@ -24,20 +24,28 @@ export interface FieldMapping {
 // ============================================
 
 /**
- * Creates a TRANSPARENT placeholder for failed images.
- * This prevents failed images from covering other elements on the canvas.
- * The placeholder is invisible but maintains the element's position in the object array.
+ * Creates a VISIBLE RED placeholder for failed images.
+ * Makes it immediately obvious when an image fails to load.
  */
-function createErrorPlaceholder(width: number = 200, height: number = 200): fabric.Rect {
-    // Use a transparent rect instead of visible placeholder
-    // This prevents failed images from blocking/covering other elements
-    return new fabric.Rect({
+function createErrorPlaceholder(width: number = 200, height: number = 200): fabric.Group {
+    const rect = new fabric.Rect({
         width: width,
         height: height,
-        fill: 'transparent',
-        stroke: 'transparent',
-        opacity: 0, // Completely invisible
+        fill: '#fee2e2', // Light red background
+        stroke: '#dc2626', // Red border
+        strokeWidth: 3,
     });
+    const text = new fabric.Text('⚠ Image Failed', {
+        fontSize: Math.min(width, height) * 0.08,
+        fontFamily: 'Arial',
+        fill: '#dc2626', // Red text
+        originX: 'center',
+        originY: 'center',
+        left: width / 2,
+        top: height / 2,
+    });
+    console.error('[Engine] Created visible ERROR placeholder for failed image');
+    return new fabric.Group([rect, text], { width, height });
 }
 
 /**
@@ -295,6 +303,30 @@ function getDynamicImageUrl(
         }
     }
 
+    // Priority 3.5: NUMBER-BASED fuzzy matching
+    // Matches "Image 2" → "product_image_2" by extracting numbers
+    const cleanName = normalizedName.replace(/[^a-z0-9]/g, ''); // Remove ALL non-alphanumeric
+    const nameNumbers = cleanName.match(/\d+/g); // Extract numbers from element name
+
+    if (nameNumbers && cleanName.includes('image')) {
+        for (const [csvColumn, value] of Object.entries(rowData)) {
+            if (!value || (!value.startsWith('http') && !value.startsWith('data:'))) {
+                continue;
+            }
+
+            const cleanColumn = csvColumn.toLowerCase().replace(/[^a-z0-9]/g, '');
+            const columnNumbers = cleanColumn.match(/\d+/g);
+
+            // Match if both contain "image" (or "img") and the same number
+            if ((cleanColumn.includes('image') || cleanColumn.includes('img')) && columnNumbers) {
+                if (nameNumbers[0] === columnNumbers[0]) {
+                    debug(`Number-based match [${csvColumn}] (num=${nameNumbers[0]}):`, value.substring(0, 60));
+                    return value;
+                }
+            }
+        }
+    }
+
     // Priority 4: Fallback - Check element name against field mapping names
     for (const [field, column] of Object.entries(fieldMapping)) {
         const normalizedField = field.toLowerCase().replace(/[\s_-]+/g, '');
@@ -549,15 +581,40 @@ export async function renderTemplate(
 
     // 3. Add objects to canvas IN ORDER (crucial for correct z-index)
     // Sort by original index to maintain z-order
+    let addedCount = 0;
     results
         .sort((a, b) => a.index - b.index)
-        .forEach(({ obj }) => {
+        .forEach(({ obj, index }) => {
             if (obj) {
                 canvas.add(obj);
+                addedCount++;
             }
         });
 
-    // 4. Final Render (Crucial for Node)
+    // 4. Debug: Log canvas state before render
+    if (typeof window !== 'undefined') {
+        const objects = canvas.getObjects();
+        console.log('[Engine] Canvas state before render:', {
+            objectCount: objects.length,
+            addedCount,
+            canvasWidth: canvas.width,
+            canvasHeight: canvas.height,
+            objects: objects.map((obj, i) => ({
+                index: i,
+                type: obj.type,
+                left: obj.left,
+                top: obj.top,
+                width: obj.width,
+                height: obj.height,
+                scaleX: obj.scaleX,
+                scaleY: obj.scaleY,
+                visible: obj.visible,
+                opacity: obj.opacity,
+            }))
+        });
+    }
+
+    // 5. Final Render (Crucial for Node)
     canvas.renderAll();
 }
 
