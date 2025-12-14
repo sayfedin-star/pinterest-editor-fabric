@@ -1,55 +1,55 @@
 'use client';
 
-import React, { useRef, useEffect, useCallback } from 'react';
-import { Stage, Layer, Rect, Transformer, Path } from 'react-konva';
-import { KonvaEventObject } from 'konva/lib/Node';
-import Konva from 'konva';
+import React, { useRef, useEffect, useCallback, useState } from 'react';
+import * as fabric from 'fabric';
 import { useEditorStore } from '@/stores/editorStore';
 import { useShallow } from 'zustand/react/shallow';
-import { TextElementComponent } from './TextElement';
-import { ImageElementComponent } from './ImageElement';
-import { ShapeElementComponent } from './ShapeElement';
-import { useCreateStageRef } from '@/hooks/useStageRef';
+import { useFabricRefStore } from '@/hooks/useStageRef';
 import { ContextMenu } from './ContextMenu';
-import { SmartGuides } from './SmartGuides';
+import { renderTemplate, RenderConfig } from '@/lib/fabric/engine';
 import {
     Element,
     TextElement,
+    ImageElement,
+    ShapeElement,
     Guide,
+    DEFAULT_DUMMY_DATA,
 } from '@/types/editor';
 
 interface EditorCanvasProps {
-    // containerWidth and containerHeight are not used in this component,
-    // but are passed from the parent. Keeping them in the interface for now
-    // to avoid breaking changes in the parent component.
-    // If they are truly unused and can be removed, the interface and function signature
-    // should be updated accordingly.
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     containerWidth: number;
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     containerHeight: number;
 }
 
 const SNAP_THRESHOLD = 5;
-const CANVAS_PADDING = 100; // Padding around the canvas
+const CANVAS_PADDING = 100;
+
+// Map Fabric object to store element ID
+function getElementId(obj: fabric.FabricObject): string | undefined {
+    return (obj as fabric.FabricObject & { elementId?: string }).elementId;
+}
+
+function setElementId(obj: fabric.FabricObject, id: string) {
+    (obj as fabric.FabricObject & { elementId?: string }).elementId = id;
+}
 
 export function EditorCanvas({ containerWidth, containerHeight }: EditorCanvasProps) {
-    // Use shared stage ref for thumbnail generation
-    const { stageRef, registerRef } = useCreateStageRef();
-    const [contextMenu, setContextMenu] = React.useState<{ x: number; y: number; isOpen: boolean }>({ x: 0, y: 0, isOpen: false });
-    const transformerRef = useRef<Konva.Transformer>(null);
+    const canvasElRef = useRef<HTMLCanvasElement>(null);
+    const fabricCanvasRef = useRef<fabric.Canvas | null>(null);
+    const isUpdatingFromFabric = useRef(false); // Prevent re-render loops
+    const [contextMenu, setContextMenu] = useState<{ x: number; y: number; isOpen: boolean }>({ x: 0, y: 0, isOpen: false });
+
+    // Register fabric ref for thumbnail generation (used by Header)
+    const setFabricRef = useFabricRefStore((s) => s.setFabricRef);
 
     // On-canvas text editing state
-    const [editingId, setEditingId] = React.useState<string | null>(null);
+    const [editingId, setEditingId] = useState<string | null>(null);
     const textAreaRef = useRef<HTMLTextAreaElement>(null);
 
-    // Register stage ref on mount
-    useEffect(() => {
-        registerRef();
-    }, [registerRef]);
+    // Smart guides state
+    const [guides, setLocalGuides] = useState<Guide[]>([]);
 
-    // OPT-001: Use useShallow to prevent unnecessary re-renders
-    // This batches all store selections so component only re-renders when actual values change
+    // Store state
     const {
         elements,
         selectedIds,
@@ -60,12 +60,12 @@ export function EditorCanvas({ containerWidth, containerHeight }: EditorCanvasPr
         zoom,
         setZoom,
         backgroundColor,
-        guides,
         setGuides,
         clearGuides,
         snapToGrid,
         gridSize,
-        canvasSize
+        canvasSize,
+        previewMode,
     } = useEditorStore(
         useShallow((s) => ({
             elements: s.elements,
@@ -77,599 +77,753 @@ export function EditorCanvas({ containerWidth, containerHeight }: EditorCanvasPr
             zoom: s.zoom,
             setZoom: s.setZoom,
             backgroundColor: s.backgroundColor,
-            guides: s.guides,
             setGuides: s.setGuides,
             clearGuides: s.clearGuides,
             snapToGrid: s.snapToGrid,
             gridSize: s.gridSize,
-            canvasSize: s.canvasSize
+            canvasSize: s.canvasSize,
+            previewMode: s.previewMode,
         }))
     );
 
-    // Use dynamic canvas size from store
     const canvasWidth = canvasSize.width;
     const canvasHeight = canvasSize.height;
-
-    // Calculate scaled dimensions
     const scaledCanvasWidth = canvasWidth * zoom;
     const scaledCanvasHeight = canvasHeight * zoom;
-
-    // Total stage size includes padding
     const stageWidth = scaledCanvasWidth + CANVAS_PADDING * 2;
     const stageHeight = scaledCanvasHeight + CANVAS_PADDING * 2;
 
-    // Check if element is locked before allowing transformer
-    const selectedElement = elements.find(el => selectedIds.includes(el.id));
-    const isSelectedLocked = selectedElement?.locked ?? false;
+    // ============================================
+    // Smart Guides Calculation
+    // ============================================
+    const calculateGuides = useCallback((movingObj: fabric.FabricObject): Guide[] => {
+        const canvas = fabricCanvasRef.current;
+        if (!canvas) return [];
 
-    // Attach transformer to selected elements (but not if locked)
-    useEffect(() => {
-        if (selectedIds.length > 0 && transformerRef.current && stageRef.current && !isSelectedLocked) {
-            const selectedNodes = selectedIds
-                .map(id => stageRef.current?.findOne(`#${id}`))
-                .filter(node => node) as Konva.Node[];
-            if (selectedNodes.length > 0) {
-                transformerRef.current.nodes(selectedNodes);
-                transformerRef.current.getLayer()?.batchDraw();
-            }
-        } else if (transformerRef.current) {
-            transformerRef.current.nodes([]);
-            transformerRef.current.getLayer()?.batchDraw();
-        }
-    }, [selectedIds, elements, isSelectedLocked]);
-
-    // Wheel zoom (Ctrl + wheel)
-    const handleWheel = useCallback((e: KonvaEventObject<WheelEvent>) => {
-        if (e.evt.ctrlKey || e.evt.metaKey) {
-            e.evt.preventDefault();
-            const scaleBy = 1.1;
-            const direction = e.evt.deltaY > 0 ? -1 : 1;
-            const newZoom = direction > 0 ? zoom * scaleBy : zoom / scaleBy;
-            setZoom(Math.max(0.25, Math.min(2, newZoom)));
-        }
-    }, [zoom, setZoom]);
-
-    // Handle Context Menu
-    const handleContextMenu = (e: KonvaEventObject<PointerEvent>) => {
-        e.evt.preventDefault();
-        const stage = e.target.getStage();
-        if (!stage) return;
-        const clickedNode = e.target;
-        const isBackground = clickedNode === stage || clickedNode.id() === 'canvas-background' || clickedNode.id() === 'stage-background';
-        if (!isBackground) {
-            const elementId = clickedNode.id();
-            if (elementId && elementId.length > 10) selectElement(elementId);
-        } else {
-            selectElement(null);
-        }
-        setContextMenu({ x: e.evt.clientX, y: e.evt.clientY, isOpen: true });
-    };
-
-    // Handle stage click (deselect)
-    const handleStageClick = (e: KonvaEventObject<MouseEvent | TouchEvent>) => {
-        if (contextMenu.isOpen) setContextMenu(prev => ({ ...prev, isOpen: false }));
-        // Close text editing on click outside
-        if (editingId) setEditingId(null);
-        const clickedOnEmpty = e.target === e.target.getStage() ||
-            e.target.attrs.id === 'canvas-background' ||
-            e.target.attrs.id === 'stage-background';
-        if (clickedOnEmpty) {
-            selectElement(null);
-        }
-    };
-
-    // Handle double-click for on-canvas text editing
-    const handleDoubleClick = useCallback((e: KonvaEventObject<MouseEvent>) => {
-        const clickedNode = e.target;
-        const elementId = clickedNode.id() || clickedNode.getParent()?.id();
-        const element = elements.find(el => el.id === elementId);
-
-        if (element && element.type === 'text' && !element.locked) {
-            setEditingId(element.id);
-            // Focus textarea after state update
-            setTimeout(() => textAreaRef.current?.focus(), 0);
-        } else {
-            setEditingId(null);
-        }
-    }, [elements]);
-
-    // Handle element selection with Shift+Click for multi-select
-    const handleSelect = useCallback((elementId: string, e?: KonvaEventObject<MouseEvent>) => {
-        if (e?.evt?.shiftKey) {
-            toggleSelection(elementId);
-        } else {
-            selectElement(elementId);
-        }
-    }, [selectElement, toggleSelection]);
-
-    // Calculate snap guides with distance measurements and equal spacing detection
-    const calculateGuides = useCallback((movingElement: Element, pos: { x: number; y: number }): Guide[] => {
         const newGuides: Guide[] = [];
-        const otherElements = elements.filter((el) => el.id !== movingElement.id && el.visible);
+        const otherObjects = canvas.getObjects().filter(o => o !== movingObj && o.selectable);
 
-        const width = movingElement.width;
-        const height = movingElement.height;
-
+        const movingBounds = movingObj.getBoundingRect();
         const movingEdges = {
-            left: pos.x,
-            right: pos.x + width,
-            centerX: pos.x + width / 2,
-            top: pos.y,
-            bottom: pos.y + height,
-            centerY: pos.y + height / 2
+            left: movingBounds.left,
+            right: movingBounds.left + movingBounds.width,
+            centerX: movingBounds.left + movingBounds.width / 2,
+            top: movingBounds.top,
+            bottom: movingBounds.top + movingBounds.height,
+            centerY: movingBounds.top + movingBounds.height / 2,
         };
 
-        // --- Canvas Boundary Snapping (Enhanced) ---
+        // Canvas boundary guides
         const canvasEdges = {
             vertical: [
                 { value: 0, label: 'Left' },
                 { value: canvasWidth, label: 'Right' },
-                { value: canvasWidth / 2, label: 'Center' }
+                { value: canvasWidth / 2, label: 'Center' },
             ],
             horizontal: [
                 { value: 0, label: 'Top' },
                 { value: canvasHeight, label: 'Bottom' },
-                { value: canvasHeight / 2, label: 'Center' }
-            ]
+                { value: canvasHeight / 2, label: 'Center' },
+            ],
         };
 
-        // Check Vertical Canvas Edges (Left/Right/Center of canvas)
+        // Check vertical canvas edges
         canvasEdges.vertical.forEach(edge => {
-            // Snap left edge of object to canvas line
-            if (Math.abs(movingEdges.left - edge.value) < SNAP_THRESHOLD) {
-                if (!newGuides.some(g => g.type === 'vertical' && Math.abs(g.position - edge.value) < 1)) {
-                    newGuides.push({
-                        type: 'vertical',
-                        position: edge.value,
-                        points: [edge.value, 0, edge.value, canvasHeight],
-                        guideType: 'alignment',
-                        metadata: { label: edge.label }
-                    });
-                }
-            }
-            // Snap right edge of object to canvas line
-            if (Math.abs(movingEdges.right - edge.value) < SNAP_THRESHOLD) {
-                if (!newGuides.some(g => g.type === 'vertical' && Math.abs(g.position - edge.value) < 1)) {
-                    newGuides.push({
-                        type: 'vertical',
-                        position: edge.value,
-                        points: [edge.value, 0, edge.value, canvasHeight],
-                        guideType: 'alignment',
-                        metadata: { label: edge.label }
-                    });
-                }
-            }
-            // Snap center of object to canvas line
-            if (Math.abs(movingEdges.centerX - edge.value) < SNAP_THRESHOLD) {
-                if (!newGuides.some(g => g.type === 'vertical' && Math.abs(g.position - edge.value) < 1)) {
-                    newGuides.push({
-                        type: 'vertical',
-                        position: edge.value,
-                        points: [edge.value, 0, edge.value, canvasHeight],
-                        guideType: 'alignment',
-                        metadata: { label: edge.label }
-                    });
-                }
+            if (Math.abs(movingEdges.left - edge.value) < SNAP_THRESHOLD ||
+                Math.abs(movingEdges.right - edge.value) < SNAP_THRESHOLD ||
+                Math.abs(movingEdges.centerX - edge.value) < SNAP_THRESHOLD) {
+                newGuides.push({
+                    type: 'vertical',
+                    position: edge.value,
+                    points: [edge.value, 0, edge.value, canvasHeight],
+                    guideType: 'alignment',
+                    metadata: { label: edge.label },
+                });
             }
         });
 
-        // Check Horizontal Canvas Edges (Top/Bottom/Center of canvas)
+        // Check horizontal canvas edges
         canvasEdges.horizontal.forEach(edge => {
-            if (Math.abs(movingEdges.top - edge.value) < SNAP_THRESHOLD) {
-                if (!newGuides.some(g => g.type === 'horizontal' && Math.abs(g.position - edge.value) < 1)) {
-                    newGuides.push({
-                        type: 'horizontal',
-                        position: edge.value,
-                        points: [0, edge.value, canvasWidth, edge.value],
-                        guideType: 'alignment',
-                        metadata: { label: edge.label }
-                    });
-                }
-            }
-            if (Math.abs(movingEdges.bottom - edge.value) < SNAP_THRESHOLD) {
-                if (!newGuides.some(g => g.type === 'horizontal' && Math.abs(g.position - edge.value) < 1)) {
-                    newGuides.push({
-                        type: 'horizontal',
-                        position: edge.value,
-                        points: [0, edge.value, canvasWidth, edge.value],
-                        guideType: 'alignment',
-                        metadata: { label: edge.label }
-                    });
-                }
-            }
-            if (Math.abs(movingEdges.centerY - edge.value) < SNAP_THRESHOLD) {
-                if (!newGuides.some(g => g.type === 'horizontal' && Math.abs(g.position - edge.value) < 1)) {
-                    newGuides.push({
-                        type: 'horizontal',
-                        position: edge.value,
-                        points: [0, edge.value, canvasWidth, edge.value],
-                        guideType: 'alignment',
-                        metadata: { label: edge.label }
-                    });
-                }
+            if (Math.abs(movingEdges.top - edge.value) < SNAP_THRESHOLD ||
+                Math.abs(movingEdges.bottom - edge.value) < SNAP_THRESHOLD ||
+                Math.abs(movingEdges.centerY - edge.value) < SNAP_THRESHOLD) {
+                newGuides.push({
+                    type: 'horizontal',
+                    position: edge.value,
+                    points: [0, edge.value, canvasWidth, edge.value],
+                    guideType: 'alignment',
+                    metadata: { label: edge.label },
+                });
             }
         });
 
-        // Element-to-element guides with distance measurements
-        otherElements.forEach((el) => {
+        // Element-to-element guides
+        otherObjects.forEach(obj => {
+            const bounds = obj.getBoundingRect();
             const elEdges = {
-                left: el.x,
-                right: el.x + el.width,
-                centerX: el.x + el.width / 2,
-                top: el.y,
-                bottom: el.y + el.height,
-                centerY: el.y + el.height / 2
+                left: bounds.left,
+                right: bounds.left + bounds.width,
+                centerX: bounds.left + bounds.width / 2,
+                top: bounds.top,
+                bottom: bounds.top + bounds.height,
+                centerY: bounds.top + bounds.height / 2,
             };
 
-            // Vertical guides with distance
-            (['left', 'right', 'centerX'] as const).forEach((edge) => {
-                const diff = Math.abs(movingEdges[edge] - elEdges[edge]);
-                if (diff < SNAP_THRESHOLD) {
-                    const exists = newGuides.some(g => g.type === 'vertical' && g.position === elEdges[edge]);
-                    if (!exists) {
-                        newGuides.push({
-                            type: 'vertical',
-                            position: elEdges[edge],
-                            points: [elEdges[edge], 0, elEdges[edge], canvasHeight],
-                            guideType: 'snap'
-                        });
-                    }
-                }
-
-                // Calculate horizontal distance between elements
-                if (edge === 'right' && movingEdges.left > elEdges.right) {
-                    const distance = Math.round(movingEdges.left - elEdges.right);
-                    if (distance > 0 && distance < 200) {
-                        newGuides.push({
-                            type: 'vertical',
-                            position: (elEdges.right + movingEdges.left) / 2,
-                            points: [elEdges.right, elEdges.centerY, movingEdges.left, movingEdges.centerY],
-                            guideType: 'distance',
-                            metadata: {
-                                distance,
-                                label: `${distance}px`,
-                                connectedElements: [el.id, movingElement.id]
-                            }
-                        });
-                    }
-                }
-            });
-
-            // Horizontal guides with distance
-            (['top', 'bottom', 'centerY'] as const).forEach((edge) => {
-                const diff = Math.abs(movingEdges[edge] - elEdges[edge]);
-                if (diff < SNAP_THRESHOLD) {
-                    const exists = newGuides.some(g => g.type === 'horizontal' && g.position === elEdges[edge]);
-                    if (!exists) {
-                        newGuides.push({
-                            type: 'horizontal',
-                            position: elEdges[edge],
-                            points: [0, elEdges[edge], canvasWidth, elEdges[edge]],
-                            guideType: 'snap'
-                        });
-                    }
-                }
-
-                // Calculate vertical distance between elements
-                if (edge === 'bottom' && movingEdges.top > elEdges.bottom) {
-                    const distance = Math.round(movingEdges.top - elEdges.bottom);
-                    if (distance > 0 && distance < 200) {
-                        newGuides.push({
-                            type: 'horizontal',
-                            position: (elEdges.bottom + movingEdges.top) / 2,
-                            points: [elEdges.centerX, elEdges.bottom, movingEdges.centerX, movingEdges.top],
-                            guideType: 'distance',
-                            metadata: {
-                                distance,
-                                label: `${distance}px`,
-                                connectedElements: [el.id, movingElement.id]
-                            }
-                        });
-                    }
-                }
-            });
-        });
-
-        // Equal spacing detection (3+ elements in a row)
-        if (otherElements.length >= 2) {
-            // Check horizontal spacing
-            const horizontalElements = [...otherElements, movingElement]
-                .sort((a, b) => a.x - b.x);
-
-            if (horizontalElements.length >= 3) {
-                const gaps = [];
-                for (let i = 0; i < horizontalElements.length - 1; i++) {
-                    const gap = horizontalElements[i + 1].x - (horizontalElements[i].x + horizontalElements[i].width);
-                    gaps.push(gap);
-                }
-
-                // Check if gaps are equal (within threshold)
-                const avgGap = gaps.reduce((sum, g) => sum + g, 0) / gaps.length;
-                const allEqualSpacing = gaps.every(g => Math.abs(g - avgGap) < SNAP_THRESHOLD * 2);
-
-                if (allEqualSpacing && avgGap > 10) {
-                    const midY = horizontalElements.reduce((sum, el) => sum + el.y + el.height / 2, 0) / horizontalElements.length;
+            // Vertical alignment
+            ['left', 'right', 'centerX'].forEach((edge) => {
+                const movingVal = movingEdges[edge as keyof typeof movingEdges];
+                const elVal = elEdges[edge as keyof typeof elEdges];
+                if (Math.abs(movingVal - elVal) < SNAP_THRESHOLD) {
                     newGuides.push({
-                        type: 'horizontal',
-                        position: midY,
-                        points: [horizontalElements[0].x, midY, horizontalElements[horizontalElements.length - 1].x + horizontalElements[horizontalElements.length - 1].width, midY],
-                        guideType: 'spacing',
-                        metadata: {
-                            isEqualSpacing: true,
-                            label: '=',
-                            distance: Math.round(avgGap)
-                        }
+                        type: 'vertical',
+                        position: elVal,
+                        points: [elVal, 0, elVal, canvasHeight],
+                        guideType: 'snap',
                     });
                 }
-            }
-        }
+            });
+
+            // Horizontal alignment
+            ['top', 'bottom', 'centerY'].forEach((edge) => {
+                const movingVal = movingEdges[edge as keyof typeof movingEdges];
+                const elVal = elEdges[edge as keyof typeof elEdges];
+                if (Math.abs(movingVal - elVal) < SNAP_THRESHOLD) {
+                    newGuides.push({
+                        type: 'horizontal',
+                        position: elVal,
+                        points: [0, elVal, canvasWidth, elVal],
+                        guideType: 'snap',
+                    });
+                }
+            });
+        });
 
         return newGuides;
-    }, [elements, canvasWidth, canvasHeight]);
+    }, [canvasWidth, canvasHeight]);
 
-    // Drag handlers - elements can move freely outside canvas
-    const handleDragMove = useCallback((e: KonvaEventObject<DragEvent>, element: Element) => {
-        if (element.locked) return;
+    // ============================================
+    // Render Smart Guides as Fabric Lines
+    // ============================================
+    const renderGuidesOverlay = useCallback((newGuides: Guide[]) => {
+        const canvas = fabricCanvasRef.current;
+        if (!canvas) return;
 
-        const shape = e.target;
-        const pos = { x: shape.x(), y: shape.y() };
+        // Remove existing guide lines
+        const existingGuides = canvas.getObjects().filter(o =>
+            (o as fabric.FabricObject & { isGuide?: boolean }).isGuide
+        );
+        existingGuides.forEach(g => canvas.remove(g));
 
-        // Calculate guides for snapping
-        const newGuides = calculateGuides(element, pos);
-        setGuides(newGuides);
+        // Add new guide lines
+        newGuides.forEach(guide => {
+            const color = guide.guideType === 'spacing' ? '#10B981' :
+                guide.guideType === 'alignment' ? '#8B5CF6' :
+                    guide.guideType === 'distance' ? '#3B82F6' : '#FF6B9D';
 
-        // Snap to guides
-        newGuides.forEach((guide) => {
-            if (guide.type === 'vertical') {
-                const movingCenterX = pos.x + element.width / 2;
-                const movingLeft = pos.x;
-                const movingRight = pos.x + element.width;
+            const line = new fabric.Line(guide.points as [number, number, number, number], {
+                stroke: color,
+                strokeWidth: 1,
+                strokeDashArray: [4, 4],
+                selectable: false,
+                evented: false,
+                opacity: 0.8,
+            });
+            (line as fabric.FabricObject & { isGuide?: boolean }).isGuide = true;
+            canvas.add(line);
+            canvas.bringObjectToFront(line);
+        });
 
-                if (Math.abs(movingCenterX - guide.position) < SNAP_THRESHOLD) {
-                    pos.x = guide.position - element.width / 2;
-                } else if (Math.abs(movingLeft - guide.position) < SNAP_THRESHOLD) {
-                    pos.x = guide.position;
-                } else if (Math.abs(movingRight - guide.position) < SNAP_THRESHOLD) {
-                    pos.x = guide.position - element.width;
-                }
-            } else {
-                const movingCenterY = pos.y + element.height / 2;
-                const movingTop = pos.y;
-                const movingBottom = pos.y + element.height;
+        setLocalGuides(newGuides);
+    }, []);
 
-                if (Math.abs(movingCenterY - guide.position) < SNAP_THRESHOLD) {
-                    pos.y = guide.position - element.height / 2;
-                } else if (Math.abs(movingTop - guide.position) < SNAP_THRESHOLD) {
-                    pos.y = guide.position;
-                } else if (Math.abs(movingBottom - guide.position) < SNAP_THRESHOLD) {
-                    pos.y = guide.position - element.height;
+    const clearGuidesOverlay = useCallback(() => {
+        const canvas = fabricCanvasRef.current;
+        if (!canvas) return;
+
+        const existingGuides = canvas.getObjects().filter(o =>
+            (o as fabric.FabricObject & { isGuide?: boolean }).isGuide
+        );
+        existingGuides.forEach(g => canvas.remove(g));
+        setLocalGuides([]);
+    }, []);
+
+    // ============================================
+    // Initialize Fabric Canvas
+    // ============================================
+    const initCanvas = useCallback(async () => {
+        if (!canvasElRef.current) return;
+
+        // Dispose old canvas
+        if (fabricCanvasRef.current) {
+            fabricCanvasRef.current.dispose();
+        }
+
+        const canvas = new fabric.Canvas(canvasElRef.current, {
+            width: canvasWidth,
+            height: canvasHeight,
+            selection: true,
+            preserveObjectStacking: true,
+            backgroundColor: backgroundColor,
+            controlsAboveOverlay: true,
+        });
+
+        fabricCanvasRef.current = canvas;
+
+        // Configure selection styling
+        fabric.FabricObject.prototype.set({
+            borderColor: '#0076D3',
+            cornerColor: '#0076D3',
+            cornerStyle: 'circle',
+            cornerSize: 8,
+            transparentCorners: false,
+            borderScaleFactor: 1.5,
+        });
+
+        // ============================================
+        // Event Handlers
+        // ============================================
+
+        // Selection events
+        canvas.on('selection:created', (e) => {
+            if (isUpdatingFromFabric.current) return;
+            const selected = e.selected;
+            if (selected && selected.length > 0) {
+                const id = getElementId(selected[0]);
+                if (id) {
+                    selectElement(id);
                 }
             }
         });
 
-        // Grid snapping (only if no guide snapping occurred)
-        if (snapToGrid && newGuides.length === 0) {
-            pos.x = Math.round(pos.x / gridSize) * gridSize;
-            pos.y = Math.round(pos.y / gridSize) * gridSize;
+        canvas.on('selection:updated', (e) => {
+            if (isUpdatingFromFabric.current) return;
+            const selected = e.selected;
+            if (selected && selected.length > 0) {
+                const id = getElementId(selected[0]);
+                if (id) {
+                    selectElement(id);
+                }
+            }
+        });
+
+        canvas.on('selection:cleared', () => {
+            if (isUpdatingFromFabric.current) return;
+            selectElement(null);
+        });
+
+        // Object moving - show guides and snap
+        canvas.on('object:moving', (e) => {
+            const obj = e.target;
+            if (!obj) return;
+
+            const newGuides = calculateGuides(obj);
+            renderGuidesOverlay(newGuides);
+
+            // Snap to guides
+            newGuides.forEach(guide => {
+                const bounds = obj.getBoundingRect();
+                if (guide.type === 'vertical') {
+                    const centerX = bounds.left + bounds.width / 2;
+                    const left = bounds.left;
+                    const right = bounds.left + bounds.width;
+
+                    if (Math.abs(centerX - guide.position) < SNAP_THRESHOLD) {
+                        obj.set({ left: (obj.left || 0) + (guide.position - centerX) });
+                    } else if (Math.abs(left - guide.position) < SNAP_THRESHOLD) {
+                        obj.set({ left: (obj.left || 0) + (guide.position - left) });
+                    } else if (Math.abs(right - guide.position) < SNAP_THRESHOLD) {
+                        obj.set({ left: (obj.left || 0) + (guide.position - right) });
+                    }
+                } else {
+                    const centerY = bounds.top + bounds.height / 2;
+                    const top = bounds.top;
+                    const bottom = bounds.top + bounds.height;
+
+                    if (Math.abs(centerY - guide.position) < SNAP_THRESHOLD) {
+                        obj.set({ top: (obj.top || 0) + (guide.position - centerY) });
+                    } else if (Math.abs(top - guide.position) < SNAP_THRESHOLD) {
+                        obj.set({ top: (obj.top || 0) + (guide.position - top) });
+                    } else if (Math.abs(bottom - guide.position) < SNAP_THRESHOLD) {
+                        obj.set({ top: (obj.top || 0) + (guide.position - bottom) });
+                    }
+                }
+            });
+
+            // Grid snapping (if no guide snapping)
+            if (snapToGrid && newGuides.length === 0) {
+                obj.set({
+                    left: Math.round((obj.left || 0) / gridSize) * gridSize,
+                    top: Math.round((obj.top || 0) / gridSize) * gridSize,
+                });
+            }
+        });
+
+        // Object modified - sync to store (CRUCIAL: avoid re-render loop)
+        canvas.on('object:modified', (e) => {
+            const obj = e.target;
+            if (!obj) return;
+
+            const elementId = getElementId(obj);
+            if (!elementId) return;
+
+            clearGuidesOverlay();
+
+            // Set flag to prevent re-render
+            isUpdatingFromFabric.current = true;
+
+            const scaleX = obj.scaleX || 1;
+            const scaleY = obj.scaleY || 1;
+
+            updateElement(elementId, {
+                x: obj.left || 0,
+                y: obj.top || 0,
+                width: Math.max(20, (obj.width || 100) * scaleX),
+                height: Math.max(20, (obj.height || 100) * scaleY),
+                rotation: obj.angle || 0,
+            });
+
+            // Reset scale (we've applied it to width/height)
+            obj.set({ scaleX: 1, scaleY: 1 });
+            obj.setCoords();
+
+            pushHistory();
+
+            // Reset flag after state update
+            setTimeout(() => {
+                isUpdatingFromFabric.current = false;
+            }, 50);
+        });
+
+        // Mouse up - clear guides
+        canvas.on('mouse:up', () => {
+            clearGuidesOverlay();
+        });
+
+        // Double-click for text editing
+        canvas.on('mouse:dblclick', (e) => {
+            const obj = e.target;
+            if (!obj) return;
+
+            const elementId = getElementId(obj);
+            if (!elementId) return;
+
+            const element = elements.find(el => el.id === elementId);
+            if (element && element.type === 'text' && !element.locked) {
+                setEditingId(element.id);
+                setTimeout(() => textAreaRef.current?.focus(), 0);
+            }
+        });
+
+        // Context menu
+        canvas.on('mouse:down', (e) => {
+            const evt = e.e as MouseEvent;
+            if (evt.button === 2) { // Right click
+                evt.preventDefault();
+                setContextMenu({
+                    x: evt.clientX,
+                    y: evt.clientY,
+                    isOpen: true,
+                });
+            } else if (contextMenu.isOpen) {
+                setContextMenu(prev => ({ ...prev, isOpen: false }));
+            }
+            if (editingId) {
+                setEditingId(null);
+            }
+        });
+
+        // Wheel zoom
+        canvas.on('mouse:wheel', (opt) => {
+            if (opt.e.ctrlKey || opt.e.metaKey) {
+                opt.e.preventDefault();
+                opt.e.stopPropagation();
+                const delta = opt.e.deltaY;
+                const scaleBy = 1.1;
+                const direction = delta > 0 ? -1 : 1;
+                const newZoom = direction > 0 ? zoom * scaleBy : zoom / scaleBy;
+                setZoom(Math.max(0.25, Math.min(2, newZoom)));
+            }
+        });
+
+        return canvas;
+    }, [canvasWidth, canvasHeight, backgroundColor, selectElement, updateElement,
+        pushHistory, calculateGuides, renderGuidesOverlay, clearGuidesOverlay,
+        snapToGrid, gridSize, zoom, setZoom, elements, editingId, contextMenu.isOpen]);
+
+    // ============================================
+    // Render Elements to Canvas
+    // ============================================
+    const renderElements = useCallback(async () => {
+        const canvas = fabricCanvasRef.current;
+        if (!canvas || isUpdatingFromFabric.current) return;
+
+        // Store current selection
+        const activeObject = canvas.getActiveObject();
+        const selectedId = activeObject ? getElementId(activeObject) : null;
+
+        // Clear canvas
+        canvas.clear();
+        canvas.backgroundColor = backgroundColor;
+
+        // Sort elements by zIndex
+        const sortedElements = [...elements].sort((a, b) => a.zIndex - b.zIndex);
+
+        // Render each element
+        for (const element of sortedElements) {
+            if (!element.visible) continue;
+
+            let fabricObject: fabric.FabricObject | null = null;
+
+            if (element.type === 'text') {
+                const textEl = element as TextElement;
+
+                // Get display text
+                let displayText = textEl.text;
+                if (textEl.isDynamic && textEl.dynamicField && previewMode) {
+                    const dummyData = DEFAULT_DUMMY_DATA as unknown as Record<string, string>;
+                    displayText = dummyData[textEl.dynamicField] || `[${textEl.dynamicField}]`;
+                } else if (textEl.isDynamic && textEl.dynamicField && !previewMode) {
+                    displayText = `{{${textEl.dynamicField}}}`;
+                }
+
+                // Create text object
+                const textObj = new fabric.Textbox(displayText, {
+                    left: textEl.x,
+                    top: textEl.y,
+                    width: textEl.width,
+                    height: textEl.height,
+                    fontSize: textEl.fontSize,
+                    fontFamily: textEl.fontFamily,
+                    fontStyle: textEl.fontStyle === 'italic' ? 'italic' : 'normal',
+                    fontWeight: textEl.fontStyle === 'bold' ? 'bold' : 'normal',
+                    fill: textEl.fill,
+                    textAlign: textEl.align || 'center',
+                    lineHeight: textEl.lineHeight || 1.2,
+                    charSpacing: (textEl.letterSpacing || 0) * 10,
+                    opacity: textEl.opacity,
+                    angle: textEl.rotation || 0,
+                    selectable: !textEl.locked,
+                    evented: !textEl.locked,
+                    lockMovementX: textEl.locked,
+                    lockMovementY: textEl.locked,
+                    lockRotation: textEl.locked,
+                    lockScalingX: textEl.locked,
+                    lockScalingY: textEl.locked,
+                });
+
+                // Add shadow if enabled
+                if (textEl.shadowColor && textEl.shadowBlur) {
+                    textObj.set({
+                        shadow: new fabric.Shadow({
+                            color: textEl.shadowColor,
+                            blur: textEl.shadowBlur,
+                            offsetX: textEl.shadowOffsetX || 0,
+                            offsetY: textEl.shadowOffsetY || 0,
+                        }),
+                    });
+                }
+
+                // Add stroke if enabled
+                if (textEl.stroke && textEl.strokeWidth) {
+                    textObj.set({
+                        stroke: textEl.stroke,
+                        strokeWidth: textEl.strokeWidth,
+                    });
+                }
+
+                // Background box for text
+                if (textEl.backgroundEnabled) {
+                    const group = new fabric.Group([
+                        new fabric.Rect({
+                            width: textEl.width,
+                            height: textEl.height,
+                            fill: textEl.backgroundColor || '#FFFFFF',
+                            rx: textEl.backgroundCornerRadius || 8,
+                            ry: textEl.backgroundCornerRadius || 8,
+                        }),
+                        textObj,
+                    ], {
+                        left: textEl.x,
+                        top: textEl.y,
+                        angle: textEl.rotation || 0,
+                        opacity: textEl.opacity,
+                        selectable: !textEl.locked,
+                        evented: !textEl.locked,
+                    });
+                    setElementId(group, element.id);
+                    canvas.add(group);
+                    continue;
+                }
+
+                fabricObject = textObj;
+            }
+
+            else if (element.type === 'image') {
+                const imageEl = element as ImageElement;
+
+                // Get display URL
+                let displayUrl = imageEl.imageUrl;
+
+                // Proxy Canva backgrounds
+                if (imageEl.isCanvaBackground && displayUrl) {
+                    displayUrl = `/api/proxy-image?url=${encodeURIComponent(displayUrl)}`;
+                }
+
+                // Dynamic image in preview mode
+                if (imageEl.isDynamic && imageEl.dynamicSource && previewMode) {
+                    displayUrl = imageEl.dynamicSource === 'logo'
+                        ? DEFAULT_DUMMY_DATA.logo
+                        : DEFAULT_DUMMY_DATA.image;
+                }
+
+                if (displayUrl) {
+                    try {
+                        const img = await fabric.FabricImage.fromURL(displayUrl, {
+                            crossOrigin: 'anonymous',
+                        });
+                        img.set({
+                            left: imageEl.x,
+                            top: imageEl.y,
+                            scaleX: imageEl.width / (img.width || 1),
+                            scaleY: imageEl.height / (img.height || 1),
+                            angle: imageEl.rotation || 0,
+                            opacity: imageEl.opacity,
+                            selectable: !imageEl.locked,
+                            evented: !imageEl.locked,
+                        });
+
+                        // Corner radius via clipPath
+                        if (imageEl.cornerRadius && imageEl.cornerRadius > 0) {
+                            const clipRect = new fabric.Rect({
+                                width: img.width || imageEl.width,
+                                height: img.height || imageEl.height,
+                                rx: imageEl.cornerRadius,
+                                ry: imageEl.cornerRadius,
+                                originX: 'center',
+                                originY: 'center',
+                            });
+                            img.set({ clipPath: clipRect });
+                        }
+
+                        fabricObject = img;
+                    } catch (error) {
+                        console.warn('[EditorCanvas] Failed to load image:', displayUrl, error);
+                        // Create placeholder
+                        const placeholder = new fabric.Rect({
+                            left: imageEl.x,
+                            top: imageEl.y,
+                            width: imageEl.width,
+                            height: imageEl.height,
+                            fill: '#F3F4F6',
+                            stroke: '#D1D5DB',
+                            strokeWidth: 2,
+                            strokeDashArray: [8, 4],
+                            selectable: !imageEl.locked,
+                            evented: !imageEl.locked,
+                        });
+                        fabricObject = placeholder;
+                    }
+                } else {
+                    // Placeholder for empty/dynamic images
+                    const placeholder = new fabric.Rect({
+                        left: imageEl.x,
+                        top: imageEl.y,
+                        width: imageEl.width,
+                        height: imageEl.height,
+                        fill: '#F3F4F6',
+                        stroke: '#D1D5DB',
+                        strokeWidth: 2,
+                        strokeDashArray: [8, 4],
+                        rx: imageEl.cornerRadius || 0,
+                        ry: imageEl.cornerRadius || 0,
+                        selectable: !imageEl.locked,
+                        evented: !imageEl.locked,
+                    });
+                    fabricObject = placeholder;
+                }
+            }
+
+            else if (element.type === 'shape') {
+                const shapeEl = element as ShapeElement;
+
+                switch (shapeEl.shapeType) {
+                    case 'rect':
+                        fabricObject = new fabric.Rect({
+                            left: shapeEl.x,
+                            top: shapeEl.y,
+                            width: shapeEl.width,
+                            height: shapeEl.height,
+                            fill: shapeEl.fill || 'transparent',
+                            stroke: shapeEl.stroke || '#000000',
+                            strokeWidth: shapeEl.strokeWidth || 1,
+                            rx: shapeEl.cornerRadius || 0,
+                            ry: shapeEl.cornerRadius || 0,
+                            angle: shapeEl.rotation || 0,
+                            opacity: shapeEl.opacity,
+                            selectable: !shapeEl.locked,
+                            evented: !shapeEl.locked,
+                        });
+                        break;
+
+                    case 'circle':
+                        fabricObject = new fabric.Circle({
+                            left: shapeEl.x,
+                            top: shapeEl.y,
+                            radius: Math.min(shapeEl.width, shapeEl.height) / 2,
+                            fill: shapeEl.fill || 'transparent',
+                            stroke: shapeEl.stroke || '#000000',
+                            strokeWidth: shapeEl.strokeWidth || 1,
+                            angle: shapeEl.rotation || 0,
+                            opacity: shapeEl.opacity,
+                            selectable: !shapeEl.locked,
+                            evented: !shapeEl.locked,
+                        });
+                        break;
+
+                    case 'line':
+                        const linePoints = (shapeEl.points || [0, 0, shapeEl.width, 0]) as [number, number, number, number];
+                        fabricObject = new fabric.Line(linePoints, {
+                            left: shapeEl.x,
+                            top: shapeEl.y,
+                            stroke: shapeEl.stroke || '#000000',
+                            strokeWidth: shapeEl.strokeWidth || 1,
+                            angle: shapeEl.rotation || 0,
+                            opacity: shapeEl.opacity,
+                            selectable: !shapeEl.locked,
+                            evented: !shapeEl.locked,
+                        });
+                        break;
+
+                    case 'path':
+                        if (shapeEl.pathData) {
+                            fabricObject = new fabric.Path(shapeEl.pathData, {
+                                left: shapeEl.x,
+                                top: shapeEl.y,
+                                fill: shapeEl.fill || 'transparent',
+                                stroke: shapeEl.stroke || '#000000',
+                                strokeWidth: shapeEl.strokeWidth || 1,
+                                angle: shapeEl.rotation || 0,
+                                opacity: shapeEl.opacity,
+                                selectable: !shapeEl.locked,
+                                evented: !shapeEl.locked,
+                            });
+                        }
+                        break;
+                }
+            }
+
+            if (fabricObject) {
+                setElementId(fabricObject, element.id);
+                canvas.add(fabricObject);
+            }
         }
 
-        shape.position(pos);
-    }, [calculateGuides, setGuides, snapToGrid, gridSize]);
+        // Restore selection
+        if (selectedId) {
+            const objToSelect = canvas.getObjects().find(o => getElementId(o) === selectedId);
+            if (objToSelect) {
+                canvas.setActiveObject(objToSelect);
+            }
+        }
 
-    const handleDragEnd = useCallback((e: KonvaEventObject<DragEvent>, element: Element) => {
-        if (element.locked) return;
+        canvas.renderAll();
+    }, [elements, backgroundColor, previewMode]);
 
-        updateElement(element.id, {
-            x: e.target.x(),
-            y: e.target.y()
-        });
-        clearGuides();
-        pushHistory();
-    }, [updateElement, clearGuides, pushHistory]);
+    // ============================================
+    // Effects
+    // ============================================
 
-    // Transform handler
-    const handleTransformEnd = useCallback((e: KonvaEventObject<Event>, element: Element) => {
-        if (element.locked) return;
-
-        const node = e.target;
-        const scaleX = node.scaleX();
-        const scaleY = node.scaleY();
-
-        updateElement(element.id, {
-            x: node.x(),
-            y: node.y(),
-            width: Math.max(20, node.width() * scaleX),
-            height: Math.max(20, node.height() * scaleY),
-            rotation: node.rotation()
+    // Initialize canvas on mount
+    useEffect(() => {
+        initCanvas().then(() => {
+            // Register fabric ref for external access (thumbnail generation)
+            setFabricRef(fabricCanvasRef);
         });
 
-        // Reset scale
-        node.scaleX(1);
-        node.scaleY(1);
+        return () => {
+            if (fabricCanvasRef.current) {
+                fabricCanvasRef.current.dispose();
+                fabricCanvasRef.current = null;
+            }
+        };
+    }, [initCanvas, setFabricRef]);
 
-        pushHistory();
-    }, [updateElement, pushHistory]);
+    // Re-render elements when they change (but not from Fabric updates)
+    useEffect(() => {
+        if (!isUpdatingFromFabric.current) {
+            renderElements();
+        }
+    }, [elements, backgroundColor, previewMode, renderElements]);
 
-    // Sort elements by zIndex for rendering
-    const sortedElements = [...elements].sort((a, b) => a.zIndex - b.zIndex);
+    // Update canvas size when zoom changes
+    useEffect(() => {
+        const canvas = fabricCanvasRef.current;
+        if (canvas) {
+            canvas.setZoom(zoom);
+            canvas.setDimensions({
+                width: canvasWidth * zoom,
+                height: canvasHeight * zoom,
+            });
+            canvas.renderAll();
+        }
+    }, [zoom, canvasWidth, canvasHeight]);
+
+    // Sync store selection to canvas
+    useEffect(() => {
+        const canvas = fabricCanvasRef.current;
+        if (!canvas || isUpdatingFromFabric.current) return;
+
+        if (selectedIds.length === 0) {
+            canvas.discardActiveObject();
+        } else {
+            const objToSelect = canvas.getObjects().find(o => getElementId(o) === selectedIds[0]);
+            if (objToSelect && canvas.getActiveObject() !== objToSelect) {
+                canvas.setActiveObject(objToSelect);
+            }
+        }
+        canvas.renderAll();
+    }, [selectedIds]);
+
+    // ============================================
+    // Text Editing Overlay
+    // ============================================
+    const editingElement = editingId ? elements.find(el => el.id === editingId) as TextElement | undefined : null;
 
     return (
         <div
-            className="flex items-start justify-start"
+            className="flex items-start justify-start relative"
             style={{
                 minWidth: stageWidth,
                 minHeight: stageHeight,
-                padding: 0
+                padding: 0,
             }}
+            onContextMenu={(e) => e.preventDefault()}
         >
-            <Stage
-                ref={stageRef}
-                width={stageWidth}
-                height={stageHeight}
-                onWheel={handleWheel}
-                onClick={handleStageClick}
-                onTap={handleStageClick}
-                onDblClick={handleDoubleClick}
-                onContextMenu={handleContextMenu}
-                // High-quality rendering for retina/high-DPI displays
-                pixelRatio={typeof window !== 'undefined' ? Math.min(window.devicePixelRatio || 1, 2) : 1}
+            {/* Gray background area */}
+            <div
                 style={{
-                    backgroundColor: '#e5e7eb' // gray-200
+                    position: 'absolute',
+                    top: 0,
+                    left: 0,
+                    width: stageWidth,
+                    height: stageHeight,
+                    backgroundColor: '#e5e7eb',
+                }}
+            />
+
+            {/* Canvas container with padding */}
+            <div
+                style={{
+                    position: 'relative',
+                    marginLeft: CANVAS_PADDING,
+                    marginTop: CANVAS_PADDING,
+                    boxShadow: '0 4px 20px rgba(0,0,0,0.15)',
                 }}
             >
-                {/* Stage Background Layer (gray area around canvas) */}
-                <Layer listening={true}>
-                    <Rect
-                        id="stage-background"
-                        x={0}
-                        y={0}
-                        width={stageWidth}
-                        height={stageHeight}
-                        fill="#e5e7eb"
-                        listening={true}
-                    />
-                </Layer>
+                <canvas ref={canvasElRef} />
+            </div>
 
-                {/* Canvas Content Group - scaled and positioned */}
-                <Layer
-                    x={CANVAS_PADDING}
-                    y={CANVAS_PADDING}
-                    scaleX={zoom}
-                    scaleY={zoom}
-                >
-                    {/* White Canvas Background */}
-                    <Rect
-                        id="canvas-background"
-                        x={0}
-                        y={0}
-                        width={canvasWidth}
-                        height={canvasHeight}
-                        fill={backgroundColor}
-                        shadowColor="rgba(0,0,0,0.15)"
-                        shadowBlur={20}
-                        shadowOffsetX={0}
-                        shadowOffsetY={4}
-                        listening={true}
-                    />
-
-                    {/* Visual Grid Overlay - shown when snapToGrid is enabled */}
-                    {/* PERFORMANCE: Uses single Path instead of many Line elements */}
-                    {snapToGrid && (() => {
-                        // Build path data for entire grid in one string
-                        let pathData = '';
-                        // Vertical lines
-                        for (let x = 0; x <= canvasWidth; x += gridSize) {
-                            pathData += `M${x},0 L${x},${canvasHeight} `;
-                        }
-                        // Horizontal lines
-                        for (let y = 0; y <= canvasHeight; y += gridSize) {
-                            pathData += `M0,${y} L${canvasWidth},${y} `;
-                        }
-                        return (
-                            <Path
-                                data={pathData}
-                                stroke="#e5e7eb"
-                                strokeWidth={0.5 / zoom}
-                                listening={false}
-                                perfectDrawDisabled={true}
-                            />
-                        );
-                    })()}
-
-                    {/* Render Elements */}
-                    {sortedElements.map((element) => {
-                        if (!element.visible) return null;
-
-                        if (element.type === 'text') {
-                            return (
-                                <TextElementComponent
-                                    key={element.id}
-                                    element={element}
-                                    isSelected={selectedIds.includes(element.id)}
-                                    onSelect={(e?: KonvaEventObject<MouseEvent>) => handleSelect(element.id, e)}
-                                    onDblClick={() => {
-                                        if (!element.locked) {
-                                            setEditingId(element.id);
-                                        }
-                                    }}
-                                    onDragMove={(e) => handleDragMove(e, element)}
-                                    onDragEnd={(e) => handleDragEnd(e, element)}
-                                    onTransformEnd={(e) => handleTransformEnd(e, element)}
-                                />
-                            );
-                        }
-
-                        if (element.type === 'image') {
-                            return (
-                                <ImageElementComponent
-                                    key={element.id}
-                                    element={element}
-                                    isSelected={selectedIds.includes(element.id)}
-                                    onSelect={(e?: KonvaEventObject<MouseEvent>) => handleSelect(element.id, e)}
-                                    onDragMove={(e) => handleDragMove(e, element)}
-                                    onDragEnd={(e) => handleDragEnd(e, element)}
-                                    onTransformEnd={(e) => handleTransformEnd(e, element)}
-                                />
-                            );
-                        }
-
-                        if (element.type === 'shape') {
-                            return (
-                                <ShapeElementComponent
-                                    key={element.id}
-                                    element={element}
-                                    isSelected={selectedIds.includes(element.id)}
-                                    onSelect={(e?: KonvaEventObject<MouseEvent>) => handleSelect(element.id, e)}
-                                    onDragMove={(e) => handleDragMove(e, element)}
-                                    onDragEnd={(e) => handleDragEnd(e, element)}
-                                    onTransformEnd={(e) => handleTransformEnd(e, element)}
-                                />
-                            );
-                        }
-
-                        return null;
-                    })}
-
-                    {/* Smart Snap Guides */}
-                    <SmartGuides
-                        guides={guides}
-                        zoom={zoom}
-                        canvasWidth={canvasWidth}
-                        canvasHeight={canvasHeight}
-                    />
-                </Layer>
-
-                {/* Transformer Layer - separate so it's not affected by zoom transform */}
-                <Layer>
-                    <Transformer
-                        ref={transformerRef}
-                        boundBoxFunc={(oldBox, newBox) => {
-                            // Only limit minimum size, no boundary constraints
-                            if (newBox.width < 20 || newBox.height < 20) {
-                                return oldBox;
-                            }
-                            return newBox;
-                        }}
-                        rotateEnabled={true}
-                        enabledAnchors={[
-                            'top-left',
-                            'top-right',
-                            'bottom-left',
-                            'bottom-right',
-                            'middle-left',
-                            'middle-right',
-                            'top-center',
-                            'bottom-center'
-                        ]}
-                        borderStroke="#0076D3"
-                        borderStrokeWidth={1.5}
-                        anchorStroke="#0076D3"
-                        anchorFill="#ffffff"
-                        anchorSize={8}
-                        anchorCornerRadius={2}
-                    />
-                </Layer>
-            </Stage>
+            {/* Context Menu */}
             <ContextMenu
                 x={contextMenu.x}
                 y={contextMenu.y}
@@ -678,63 +832,53 @@ export function EditorCanvas({ containerWidth, containerHeight }: EditorCanvasPr
             />
 
             {/* On-Canvas Text Editing Overlay */}
-            {editingId && (() => {
-                const element = elements.find(el => el.id === editingId) as TextElement | undefined;
-                if (!element) return null;
-
-                // Calculate position relative to container
-                const style: React.CSSProperties = {
-                    position: 'absolute',
-                    top: (element.y * zoom + CANVAS_PADDING) + 'px',
-                    left: (element.x * zoom + CANVAS_PADDING) + 'px',
-                    width: (element.width * zoom) + 'px',
-                    minHeight: (element.height * zoom) + 'px',
-                    fontSize: (element.fontSize * zoom) + 'px',
-                    fontFamily: element.fontFamily,
-                    color: element.fill,
-                    lineHeight: element.lineHeight || 1.2,
-                    textAlign: (element.align || 'center') as React.CSSProperties['textAlign'],
-                    background: 'transparent',
-                    border: '2px dashed #0076D3',
-                    borderRadius: '2px',
-                    outline: 'none',
-                    resize: 'none',
-                    padding: element.backgroundEnabled ? (element.backgroundPadding || 0) * zoom + 'px' : '4px',
-                    zIndex: 100,
-                    transform: `rotate(${element.rotation || 0}deg)`,
-                    transformOrigin: 'top left',
-                    overflow: 'hidden',
-                    boxSizing: 'border-box',
-                };
-
-                return (
-                    <textarea
-                        ref={textAreaRef}
-                        value={element.text}
-                        style={style}
-                        autoFocus
-                        onBlur={() => {
+            {editingElement && (
+                <textarea
+                    ref={textAreaRef}
+                    value={editingElement.text}
+                    style={{
+                        position: 'absolute',
+                        top: (editingElement.y * zoom + CANVAS_PADDING) + 'px',
+                        left: (editingElement.x * zoom + CANVAS_PADDING) + 'px',
+                        width: (editingElement.width * zoom) + 'px',
+                        minHeight: (editingElement.height * zoom) + 'px',
+                        fontSize: (editingElement.fontSize * zoom) + 'px',
+                        fontFamily: editingElement.fontFamily,
+                        color: editingElement.fill,
+                        lineHeight: editingElement.lineHeight || 1.2,
+                        textAlign: (editingElement.align || 'center') as React.CSSProperties['textAlign'],
+                        background: 'transparent',
+                        border: '2px dashed #0076D3',
+                        borderRadius: '2px',
+                        outline: 'none',
+                        resize: 'none',
+                        padding: '4px',
+                        zIndex: 100,
+                        transform: `rotate(${editingElement.rotation || 0}deg)`,
+                        transformOrigin: 'top left',
+                        overflow: 'hidden',
+                        boxSizing: 'border-box',
+                    }}
+                    autoFocus
+                    onBlur={() => {
+                        setEditingId(null);
+                        pushHistory();
+                    }}
+                    onChange={(e) => {
+                        updateElement(editingElement.id, { text: e.target.value });
+                    }}
+                    onKeyDown={(e) => {
+                        if (e.key === 'Enter' && !e.shiftKey) {
+                            e.preventDefault();
                             setEditingId(null);
                             pushHistory();
-                        }}
-                        onChange={(e) => {
-                            updateElement(element.id, { text: e.target.value });
-                        }}
-                        onKeyDown={(e) => {
-                            // Shift+Enter for newline, Enter to finish
-                            if (e.key === 'Enter' && !e.shiftKey) {
-                                e.preventDefault();
-                                setEditingId(null);
-                                pushHistory();
-                            }
-                            // Escape to cancel
-                            if (e.key === 'Escape') {
-                                setEditingId(null);
-                            }
-                        }}
-                    />
-                );
-            })()}
+                        }
+                        if (e.key === 'Escape') {
+                            setEditingId(null);
+                        }
+                    }}
+                />
+            )}
         </div>
     );
 }

@@ -1,36 +1,41 @@
-// useStageRef - Shared Konva Stage ref between components
-// This allows the Header to access the Stage for thumbnail generation
+// useFabricRef - Shared Fabric Canvas ref between components
+// This allows the Header to access the Canvas for thumbnail generation
 
 import { useRef, useCallback, MutableRefObject } from 'react';
-import Konva from 'konva';
+import * as fabric from 'fabric';
 import { create } from 'zustand';
 
-// Store for the stage ref - allows sharing between components
-interface StageRefStore {
-    stageRef: MutableRefObject<Konva.Stage | null> | null;
-    setStageRef: (ref: MutableRefObject<Konva.Stage | null>) => void;
+// Store for the canvas ref - allows sharing between components
+interface FabricRefStore {
+    fabricRef: MutableRefObject<fabric.Canvas | null> | null;
+    setFabricRef: (ref: MutableRefObject<fabric.Canvas | null>) => void;
 }
 
-export const useStageRefStore = create<StageRefStore>((set) => ({
-    stageRef: null,
-    setStageRef: (ref) => set({ stageRef: ref }),
+export const useFabricRefStore = create<FabricRefStore>((set) => ({
+    fabricRef: null,
+    setFabricRef: (ref) => set({ fabricRef: ref }),
 }));
 
-// Hook to create and register the stage ref (used in EditorCanvas)
-export function useCreateStageRef() {
-    const stageRef = useRef<Konva.Stage | null>(null);
-    const setStageRef = useStageRefStore((s) => s.setStageRef);
+// Hook to create and register the fabric ref (used in EditorCanvas)
+export function useCreateFabricRef() {
+    const fabricRef = useRef<fabric.Canvas | null>(null);
+    const setFabricRef = useFabricRefStore((s) => s.setFabricRef);
 
     // Register the ref on mount
     const registerRef = useCallback(() => {
-        setStageRef(stageRef);
-    }, [setStageRef]);
+        setFabricRef(fabricRef);
+    }, [setFabricRef]);
 
-    return { stageRef, registerRef };
+    return { fabricRef, registerRef };
 }
 
-// Hook to access the stage ref (used in Header and other components)
-export function useStageRef(): MutableRefObject<Konva.Stage | null> | null {
-    const stageRef = useStageRefStore((s) => s.stageRef);
-    return stageRef;
+// Hook to access the fabric ref (used in Header and other components)
+export function useFabricRef(): MutableRefObject<fabric.Canvas | null> | null {
+    const fabricRef = useFabricRefStore((s) => s.fabricRef);
+    return fabricRef;
 }
+
+// Legacy aliases for compatibility
+export const useStageRefStore = useFabricRefStore;
+export const useCreateStageRef = useCreateFabricRef;
+export const useStageRef = useFabricRef;

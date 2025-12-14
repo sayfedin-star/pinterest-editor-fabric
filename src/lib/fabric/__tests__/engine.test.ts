@@ -129,7 +129,8 @@ describe('Shared Engine (Node Environment)', () => {
 
             const config: RenderConfig = { width: 800, height: 600 };
 
-            await renderTemplate(mockCanvas, elements, config);
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            await renderTemplate(mockCanvas as any, elements, config);
 
             expect(mockCanvas.add).toHaveBeenCalledTimes(1);
             const addedObject = mockCanvas.add.mock.calls[0][0];
@@ -211,7 +212,8 @@ describe('Shared Engine (Node Environment)', () => {
 
             const config: RenderConfig = { width: 800, height: 600 };
 
-            await renderTemplate(mockCanvas, elements, config);
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            await renderTemplate(mockCanvas as any, elements, config);
 
             expect(mockCanvas.add).not.toHaveBeenCalled();
         });
@@ -241,7 +243,8 @@ describe('Shared Engine (Node Environment)', () => {
 
             const config: RenderConfig = { width: 800, height: 600 };
 
-            await renderTemplate(mockCanvas, elements, config);
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            await renderTemplate(mockCanvas as any, elements, config);
 
             expect(mockCanvas.add).toHaveBeenCalledTimes(1);
             const addedObject = mockCanvas.add.mock.calls[0][0];
@@ -305,7 +308,8 @@ describe('Shared Engine (Node Environment)', () => {
 
             const config: RenderConfig = { width: 800, height: 600 };
 
-            await renderTemplate(mockCanvas, elements, config);
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            await renderTemplate(mockCanvas as any, elements, config);
 
             expect(mockCanvas.add).toHaveBeenCalledTimes(2);
             // First called element should be the one with lower zIndex

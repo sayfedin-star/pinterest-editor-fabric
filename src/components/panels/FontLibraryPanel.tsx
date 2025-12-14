@@ -219,8 +219,8 @@ export function FontLibraryPanel({ isOpen, onClose }: FontLibraryPanelProps) {
                         }
                     }
                     setCustomFonts(loadedFonts);
-                    // Force Konva to redraw with the new fonts
-                    stage?.batchDraw();
+                    // Force canvas to redraw with the new fonts
+                    stage?.renderAll();
                 }
             } catch (err) {
                 console.error('Failed to load saved fonts:', err);
@@ -254,7 +254,7 @@ export function FontLibraryPanel({ isOpen, onClose }: FontLibraryPanelProps) {
                 const fontName = await registerCustomFont(e.target.files[0]);
                 // For session-only fonts, create a temp object with a random id
                 setCustomFonts(prev => [{ id: `temp-${Date.now()}`, name: fontName, url: '' }, ...prev]);
-                stage?.batchDraw(); // Force Konva redraw
+                stage?.renderAll(); // Force canvas redraw
                 if (isTextSelected && selectedId) {
                     updateElement(selectedId, { fontFamily: fontName });
                     pushHistory();
@@ -310,8 +310,8 @@ export function FontLibraryPanel({ isOpen, onClose }: FontLibraryPanelProps) {
             // 5. Update Local State with the new font object
             setCustomFonts(prev => [{ id: Date.now().toString(), name: cleanName, url: publicUrl }, ...prev]);
 
-            // 6. Force Konva to redraw with the new font
-            stage?.batchDraw();
+            // 6. Force canvas to redraw with the new font
+            stage?.renderAll();
 
             // 7. Auto-apply to selected text if applicable
             if (isTextSelected && selectedId) {

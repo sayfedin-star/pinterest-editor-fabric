@@ -1,7 +1,7 @@
 // Canvas Utilities for Thumbnail Generation and Export
-// Works with Konva Stage to generate thumbnails and export images
+// Works with Fabric Canvas to generate thumbnails and export images
 
-import Konva from 'konva';
+import * as fabric from 'fabric';
 
 export interface ThumbnailOptions {
     maxWidth?: number;
@@ -18,36 +18,41 @@ const DEFAULT_THUMBNAIL_OPTIONS: ThumbnailOptions = {
 };
 
 /**
- * Generate a thumbnail from a Konva Stage
- * @param stage Konva Stage reference
+ * Generate a thumbnail from a Fabric Canvas
+ * @param canvas Fabric Canvas reference
  * @param options Thumbnail generation options
  * @returns Base64 data URL of the thumbnail
  */
 export function generateThumbnail(
-    stage: Konva.Stage,
+    canvas: fabric.Canvas | fabric.StaticCanvas | null,
     options: ThumbnailOptions = {}
 ): string | null {
     try {
+        if (!canvas) {
+            console.warn('generateThumbnail: No canvas provided');
+            return null;
+        }
+
         const opts = { ...DEFAULT_THUMBNAIL_OPTIONS, ...options };
 
         // Get original dimensions
-        const originalWidth = stage.width();
-        const originalHeight = stage.height();
+        const originalWidth = canvas.getWidth();
+        const originalHeight = canvas.getHeight();
 
         // Calculate scale to fit thumbnail dimensions
         const scaleX = (opts.maxWidth || 300) / originalWidth;
         const scaleY = (opts.maxHeight || 450) / originalHeight;
         const scale = Math.min(scaleX, scaleY);
 
-        // Calculate pixel ratio for quality (use lower for thumbnails)
-        const pixelRatio = Math.min(scale * 2, 1); // Cap at 1 for thumbnails
+        // Calculate multiplier for quality (cap at 1 for thumbnails to save space)
+        const multiplier = Math.min(scale * 2, 1);
 
-        // Generate data URL
-        const mimeType = opts.format === 'jpeg' ? 'image/jpeg' : 'image/png';
-        const dataUrl = stage.toDataURL({
-            mimeType,
+        // Generate data URL using Fabric's toDataURL
+        const format = opts.format === 'jpeg' ? 'jpeg' : 'png';
+        const dataUrl = canvas.toDataURL({
+            format,
             quality: opts.quality,
-            pixelRatio,
+            multiplier,
         });
 
         return dataUrl;
@@ -58,19 +63,24 @@ export function generateThumbnail(
 }
 
 /**
- * Generate a full-size export from a Konva Stage
- * @param stage Konva Stage reference
- * @param pixelRatio Pixel ratio for export quality (default: 2 for retina)
+ * Generate a full-size export from a Fabric Canvas
+ * @param canvas Fabric Canvas reference
+ * @param multiplier Multiplier for export quality (default: 2 for retina)
  * @returns Base64 data URL of the export
  */
 export function generateExport(
-    stage: Konva.Stage,
-    pixelRatio: number = 2
+    canvas: fabric.Canvas | fabric.StaticCanvas | null,
+    multiplier: number = 2
 ): string | null {
     try {
-        const dataUrl = stage.toDataURL({
-            mimeType: 'image/png',
-            pixelRatio,
+        if (!canvas) {
+            console.warn('generateExport: No canvas provided');
+            return null;
+        }
+
+        const dataUrl = canvas.toDataURL({
+            format: 'png',
+            multiplier,
         });
 
         return dataUrl;
