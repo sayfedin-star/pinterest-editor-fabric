@@ -24,41 +24,89 @@ export interface FieldMapping {
 // ============================================
 
 /**
- * Handles loading images in both Browser (Client) and Node.js (Server) environments.
+ * Creates a visual placeholder for failed images.
+ * Used as a safety net when both direct and proxy loading fail.
+ */
+function createErrorPlaceholder(width: number = 200, height: number = 200): fabric.Group {
+    const rect = new fabric.Rect({
+        width: width,
+        height: height,
+        fill: '#f3f4f6',
+        stroke: '#9ca3af',
+        strokeWidth: 2,
+    });
+    // Add text indicator
+    const text = new fabric.Text('Image Failed', {
+        fontSize: Math.min(width, height) * 0.1,
+        fontFamily: 'Arial',
+        fill: '#6b7280',
+        originX: 'center',
+        originY: 'center',
+        left: width / 2,
+        top: height / 2,
+    });
+    return new fabric.Group([rect, text], { width, height });
+}
+
+/**
+ * ROBUST IMAGE LOADER: Direct -> Proxy -> Placeholder
  * 
- * CRITICAL: This function MUST route external URLs through the proxy in browser
- * to prevent CORS "tainted canvas" errors that break toDataURL() exports.
+ * Strategy (inspired by the working Konva implementation):
+ * 1. Attempt DIRECT load first (optimistic - works for Midjourney, Unsplash, most CDNs)
+ * 2. If direct fails (CORS/network error), try PROXY as fallback
+ * 3. If proxy also fails, return a PLACEHOLDER to prevent batch crashes
  * 
- * Strategy:
- * - Browser + HTTP/HTTPS URL (not same origin): Route through /api/proxy-image
- * - Browser + Data URL or same-origin: Load directly
- * - Node.js: Fetch buffer -> Base64 data URL (Node has no CORS restrictions)
+ * Node.js Environment: Fetch buffer -> Base64 data URL (no CORS restrictions)
  */
 async function loadImageToCanvas(
     url: string,
     options: Partial<fabric.ImageProps> = {}
-): Promise<fabric.FabricImage> {
+): Promise<fabric.FabricObject> {
     // CRITICAL: Check environment INSIDE the function, not at module level
-    // This ensures accurate detection even with bundler optimizations
     const isBrowser = typeof window !== 'undefined' && typeof document !== 'undefined';
     const isNodeEnv = !isBrowser;
 
-    let loadUrl = url;
-
     // Early exit for empty URLs
     if (!url) {
-        console.error('[SharedEngine] Empty URL provided to loadImageToCanvas');
-        throw new Error('Empty image URL');
+        console.warn('[Engine] Empty URL - returning placeholder');
+        const placeholder = createErrorPlaceholder(
+            typeof options.width === 'number' ? options.width : 200,
+            typeof options.height === 'number' ? options.height : 200
+        );
+        if (options.left) placeholder.set({ left: options.left });
+        if (options.top) placeholder.set({ top: options.top });
+        return placeholder;
     }
 
-    // Handle Data URLs - no proxy needed
+    // Helper to try loading a specific URL
+    const tryLoad = async (urlToTry: string): Promise<fabric.FabricImage> => {
+        const img = await fabric.FabricImage.fromURL(urlToTry, {
+            crossOrigin: 'anonymous',
+            ...options
+        });
+        if (!img || !img.width || !img.height) {
+            throw new Error('Fabric loaded empty or invalid image');
+        }
+        return img;
+    };
+
+    // Handle Data URLs - load directly (no CORS issues)
     if (url.startsWith('data:')) {
-        console.log('[SharedEngine] Loading data URL directly');
-        loadUrl = url;
+        console.log('[Engine] Loading data URL directly');
+        try {
+            return await tryLoad(url);
+        } catch (error) {
+            console.error('[Engine] Data URL load failed:', error);
+            return createErrorPlaceholder(
+                typeof options.width === 'number' ? options.width : 200,
+                typeof options.height === 'number' ? options.height : 200
+            );
+        }
     }
-    // Node.js Environment: Fetch buffer -> Base64
-    else if (isNodeEnv) {
-        console.log('[SharedEngine] Node.js: Fetching image as buffer:', url.substring(0, 80) + '...');
+
+    // Node.js Environment: Fetch buffer -> Base64 (no CORS restrictions)
+    if (isNodeEnv) {
+        console.log('[Engine] Node.js: Fetching image as buffer:', url.substring(0, 80) + '...');
         try {
             const response = await fetch(url);
             if (!response.ok) {
@@ -69,70 +117,85 @@ async function loadImageToCanvas(
             const buffer = Buffer.from(arrayBuffer);
             const base64 = buffer.toString('base64');
             const contentType = response.headers.get('content-type') || 'image/png';
-            loadUrl = `data:${contentType};base64,${base64}`;
+            const dataUrl = `data:${contentType};base64,${base64}`;
+
+            return await tryLoad(dataUrl);
         } catch (fetchError) {
-            console.error('[SharedEngine] Node.js fetch failed:', fetchError);
-            throw fetchError;
-        }
-    }
-    // Browser Environment: Check if URL needs proxying
-    else if (isBrowser) {
-        // AGGRESSIVE PROXY: Any http/https URL that is NOT our origin MUST go through proxy
-        const isHttpUrl = url.startsWith('http://') || url.startsWith('https://');
-
-        if (isHttpUrl) {
-            // Check if it's same origin
-            let isSameOrigin = false;
-            try {
-                const parsedUrl = new URL(url);
-                isSameOrigin = parsedUrl.origin === window.location.origin;
-            } catch {
-                // If URL parsing fails, assume it needs proxy
-                isSameOrigin = false;
-            }
-
-            if (!isSameOrigin) {
-                // MUST proxy external URLs to avoid CORS tainted canvas
-                const proxyUrl = `/api/proxy-image?url=${encodeURIComponent(url)}`;
-                console.log('[SharedEngine] Browser: Proxying external URL:', url.substring(0, 60) + '...');
-                console.log('[SharedEngine] -> Proxy URL:', proxyUrl.substring(0, 80));
-                loadUrl = proxyUrl;
-            } else {
-                console.log('[SharedEngine] Browser: Same-origin URL, loading directly');
-                loadUrl = url;
-            }
-        } else {
-            // Relative URL or other protocol - load directly
-            console.log('[SharedEngine] Browser: Non-HTTP URL, loading directly:', url.substring(0, 60));
-            loadUrl = url;
+            console.error('[Engine] Node.js fetch failed:', fetchError);
+            throw fetchError; // In Node.js, let it throw - no fallback needed
         }
     }
 
-    // Load the image with Fabric
+    // Browser Environment: SMART FALLBACK STRATEGY
+    // =============================================
+
+    const isHttpUrl = url.startsWith('http://') || url.startsWith('https://');
+
+    // Check if it's same origin (no proxy needed)
+    let isSameOrigin = false;
+    if (isHttpUrl) {
+        try {
+            const parsedUrl = new URL(url);
+            isSameOrigin = parsedUrl.origin === window.location.origin;
+        } catch {
+            isSameOrigin = false;
+        }
+    }
+
+    // Same-origin or non-HTTP URLs: load directly
+    if (!isHttpUrl || isSameOrigin) {
+        console.log('[Engine] Loading same-origin/relative URL directly');
+        try {
+            return await tryLoad(url);
+        } catch (error) {
+            console.error('[Engine] Same-origin load failed:', error);
+            const placeholder = createErrorPlaceholder(
+                typeof options.width === 'number' ? options.width : 200,
+                typeof options.height === 'number' ? options.height : 200
+            );
+            if (options.left) placeholder.set({ left: options.left });
+            if (options.top) placeholder.set({ top: options.top });
+            return placeholder;
+        }
+    }
+
+    // EXTERNAL HTTP/HTTPS URLs: Use Smart Fallback
+    // STRATEGY 1: Try DIRECT load first (optimistic)
     try {
-        console.log('[SharedEngine] Loading via Fabric.fromURL:', loadUrl.substring(0, 80) + '...');
-
-        const img = await fabric.FabricImage.fromURL(loadUrl, {
-            crossOrigin: 'anonymous',
-            ...options
-        });
-
-        if (!img || !img.width || !img.height) {
-            throw new Error('Fabric loaded empty or invalid image');
-        }
-
-        console.log('[SharedEngine] Successfully loaded image:', img.width, 'x', img.height);
+        console.log('[Engine] Attempt 1: Direct load', url.substring(0, 60) + '...');
+        const img = await tryLoad(url);
+        console.log('[Engine] Direct load SUCCESS:', img.width, 'x', img.height);
         return img;
 
-    } catch (fabricError) {
-        console.error('[SharedEngine] Fabric.fromURL failed for:', loadUrl.substring(0, 80));
-        console.error('[SharedEngine] Original URL was:', url.substring(0, 80));
-        console.error('[SharedEngine] Error:', fabricError);
+    } catch (directError) {
+        // Direct load failed (likely CORS or network error)
+        console.warn('[Engine] Direct load failed, trying proxy...', directError);
 
-        // IMPORTANT: Throw the error so the caller knows the pin failed
-        // Do NOT return an empty image - that hides failures
-        throw new Error(`Failed to load image: ${fabricError instanceof Error ? fabricError.message : 'Unknown error'}`);
+        // STRATEGY 2: Try PROXY fallback
+        try {
+            const proxyUrl = `/api/proxy-image?url=${encodeURIComponent(url)}`;
+            console.log('[Engine] Attempt 2: Proxy load', proxyUrl.substring(0, 80));
+            const img = await tryLoad(proxyUrl);
+            console.log('[Engine] Proxy load SUCCESS:', img.width, 'x', img.height);
+            return img;
+
+        } catch (proxyError) {
+            console.error('[Engine] Proxy load failed:', proxyError);
+        }
     }
+
+    // STRATEGY 3: Return PLACEHOLDER (safety net)
+    console.error('[Engine] All attempts failed for:', url.substring(0, 80));
+    const placeholder = createErrorPlaceholder(
+        typeof options.width === 'number' ? options.width : 200,
+        typeof options.height === 'number' ? options.height : 200
+    );
+
+    // Apply basic positioning from options if they exist
+    if (options.left) placeholder.set({ left: options.left });
+    if (options.top) placeholder.set({ top: options.top });
+
+    return placeholder;
 }
 
 // ============================================
