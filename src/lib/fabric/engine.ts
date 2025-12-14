@@ -177,6 +177,19 @@ export async function renderTemplate(
                     });
                 }
                 fabricObject = img;
+            } else {
+                // ✅ FIX: Show placeholder for empty images
+                fabricObject = new fabric.Rect({
+                    ...commonOptions,
+                    width: imageEl.width || 200,
+                    height: imageEl.height || 200,
+                    fill: '#f3f4f6', // Light gray
+                    stroke: '#d1d5db', // Border
+                    strokeWidth: 2,
+                    strokeDashArray: [8, 4], // Dashed border
+                    rx: imageEl.cornerRadius || 0,
+                    ry: imageEl.cornerRadius || 0,
+                });
             }
         }
         else if (el.type === 'shape') {
