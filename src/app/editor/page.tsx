@@ -10,6 +10,7 @@ import { RightPanel } from '@/components/layout/RightPanel';
 import { FontLibraryPanel } from '@/components/panels/FontLibraryPanel';
 import { KeyboardShortcutsModal, useKeyboardShortcutsModal } from '@/components/ui/KeyboardShortcutsModal';
 import { DesktopOnlyMessage, useIsMobile } from '@/components/ui/DesktopOnlyMessage';
+import { CanvasErrorBoundary } from '@/components/ui/ErrorBoundary';
 import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts';
 import { useAuth } from '@/lib/auth/AuthContext';
 import { Loader2 } from 'lucide-react';
@@ -79,8 +80,10 @@ export default function EditorPage() {
                     {/* Toolbar with font library toggle */}
                     <Toolbar onOpenFontLibrary={() => setFontLibraryOpen(true)} />
 
-                    {/* Canvas */}
-                    <CanvasArea />
+                    {/* Canvas - Wrapped with Error Boundary */}
+                    <CanvasErrorBoundary>
+                        <CanvasArea />
+                    </CanvasErrorBoundary>
                 </div>
 
                 {/* Right Panel */}

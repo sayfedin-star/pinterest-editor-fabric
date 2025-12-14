@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { cookies } from 'next/headers';
+import { CreateGeneratedPinSchema, validateRequest } from '@/lib/validations';
 
 // Debug logging - only in development
 const DEBUG = process.env.NODE_ENV === 'development';
@@ -59,16 +60,17 @@ export async function POST(request: NextRequest) {
         const body = await request.json();
         log('[generated-pins] POST body:', JSON.stringify(body, null, 2));
 
-        const { campaign_id, image_url, data_row, status, error_message } = body;
-
-        // Validate required fields
-        if (!campaign_id) {
-            log('[generated-pins] Missing campaign_id');
+        // 2. Validate request body with Zod schema
+        const validation = validateRequest(CreateGeneratedPinSchema, body);
+        if (!validation.success) {
+            log('[generated-pins] Validation failed:', validation.error);
             return NextResponse.json(
-                { error: 'campaign_id is required' },
+                { error: 'Validation failed', details: validation.error },
                 { status: 400 }
             );
         }
+
+        const { campaign_id, image_url, data_row, status, error_message } = validation.data;
 
         // 2. Insert Record (RLS will ensure users can only insert their own data)
         // SECURITY: Force user_id from authenticated session, ignore any user_id in body

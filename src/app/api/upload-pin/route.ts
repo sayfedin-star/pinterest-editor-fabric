@@ -6,6 +6,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { S3Client } from '@aws-sdk/client-s3';
 import { Upload } from '@aws-sdk/lib-storage';
 import { Readable } from 'stream';
+import { UploadPinMetadataSchema, validateRequest } from '@/lib/validations';
 
 // Debug logging - only in development
 const DEBUG = process.env.NODE_ENV === 'development';
@@ -63,23 +64,30 @@ export async function POST(request: NextRequest) {
 
         log('[upload-pin] Received:', { campaignId, rowIndexStr, hasFile: !!file });
 
-        // Validate required fields
-        if (!file || !campaignId || !rowIndexStr) {
-            log('[upload-pin] Missing required fields');
+        // Validate file presence
+        if (!file) {
+            log('[upload-pin] Missing file');
             return NextResponse.json(
-                { error: 'Missing required fields: file, campaign_id, row_index' },
+                { error: 'Missing required field: file' },
                 { status: 400 }
             );
         }
 
-        const rowIndex = parseInt(rowIndexStr, 10);
-        if (isNaN(rowIndex) || rowIndex < 0) {
-            log('[upload-pin] Invalid row_index:', rowIndexStr);
+        // Validate metadata with Zod schema
+        const validation = validateRequest(UploadPinMetadataSchema, {
+            campaign_id: campaignId,
+            row_index: rowIndexStr,
+        });
+
+        if (!validation.success) {
+            log('[upload-pin] Validation failed:', validation.error);
             return NextResponse.json(
-                { error: 'Invalid row_index: must be a non-negative number' },
+                { error: 'Validation failed', details: validation.error },
                 { status: 400 }
             );
         }
+
+        const { campaign_id, row_index: rowIndex } = validation.data;
 
         // Validate file size (max 10MB) - check before streaming
         const maxSize = 10 * 1024 * 1024;
@@ -103,7 +111,7 @@ export async function POST(request: NextRequest) {
 
         // Generate S3 key
         const timestamp = Date.now();
-        const key = `pins/${campaignId}/${rowIndex}-${timestamp}.png`;
+        const key = `pins/${campaign_id}/${rowIndex}-${timestamp}.png`;
         const bucket = process.env.TEBI_BUCKET!;
 
         log('[upload-pin] Uploading to:', { bucket, key });
