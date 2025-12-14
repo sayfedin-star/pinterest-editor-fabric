@@ -377,7 +377,6 @@ export default function CampaignDetailPage() {
                         <GenerationController
                             campaignId={campaign.id}
                             userId={currentUser?.id || ''}
-                            campaignName={campaign.name}
                             templateElements={template.elements}
                             canvasSize={template.canvas_size}
                             backgroundColor={template.background_color}

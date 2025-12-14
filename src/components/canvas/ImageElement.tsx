@@ -69,7 +69,8 @@ function useImage(url: string | undefined): [HTMLImageElement | null, string] {
 
 export function ImageElementComponent({
     element,
-    isSelected,
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    isSelected: _isSelected,
     onSelect,
     onDragMove,
     onDragEnd,

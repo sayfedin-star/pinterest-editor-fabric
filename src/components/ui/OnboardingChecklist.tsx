@@ -199,7 +199,7 @@ export function OnboardingChecklist() {
 
             {/* Steps */}
             <div className="divide-y divide-gray-100">
-                {steps.map((step, index) => {
+                {steps.map((step, _index) => {
                     const isCompleted = state.completedSteps.includes(step.id);
 
                     return (

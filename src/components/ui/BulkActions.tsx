@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { X, Trash2, CheckSquare, Square, Loader2, AlertTriangle } from 'lucide-react';
+import { X, Trash2, CheckSquare, Loader2, AlertTriangle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 // ============================================

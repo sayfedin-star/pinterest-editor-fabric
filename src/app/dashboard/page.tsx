@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import Link from 'next/link';
 import {
     Plus,
@@ -18,10 +18,8 @@ import {
     ChevronRight,
     Pause,
     AlertCircle,
-    FileText,
     Edit3,
-    Upload,
-    Download
+    Upload
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/lib/auth/AuthContext';

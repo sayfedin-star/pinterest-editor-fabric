@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { ChevronRight, Home } from 'lucide-react';
-import { cn } from '@/lib/utils';
+
 
 // Route label mapping
 const routeLabels: Record<string, string> = {
@@ -52,7 +52,7 @@ export function Breadcrumbs() {
                 <span className="sr-only">Home</span>
             </Link>
 
-            {breadcrumbs.map((crumb, index) => (
+            {breadcrumbs.map((crumb, _index) => (
                 <div key={crumb.href} className="flex items-center gap-1">
                     <ChevronRight className="w-4 h-4 text-gray-300" />
                     {crumb.isLast ? (

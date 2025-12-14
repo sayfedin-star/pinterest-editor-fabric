@@ -20,7 +20,8 @@ interface TextElementComponentProps {
 
 export function TextElementComponent({
     element,
-    isSelected,
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    isSelected: _isSelected,
     onSelect,
     onDblClick,
     onDragMove,

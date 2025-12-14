@@ -1,7 +1,7 @@
 import { MoreHorizontal, Calendar, ArrowRight } from 'lucide-react';
 import Image from 'next/image';
 import Link from 'next/link';
-import { formatDistanceToNow } from 'date-fns'; // We might need to install date-fns or use native Intl
+
 
 // Fallback if date-fns is not installed, simple formatter
 const formatDate = (date: Date) => {

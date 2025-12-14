@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 interface EmptyStateProps {
     type: 'dashboard' | 'templates' | 'campaigns' | 'pins';
     showGettingStarted?: boolean;

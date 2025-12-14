@@ -522,7 +522,7 @@ export function FontLibraryPanel({ isOpen, onClose }: FontLibraryPanelProps) {
                                                                 if (path) await supabase.storage.from('fonts').remove([path]);
                                                                 setCustomFonts(prev => prev.filter(f => f.id !== font.id));
                                                                 toast.success('Font deleted');
-                                                            } catch (err) {
+                                                            } catch (_err) {
                                                                 toast.error('Failed to delete font');
                                                             }
                                                         }}

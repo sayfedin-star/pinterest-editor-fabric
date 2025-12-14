@@ -1,8 +1,8 @@
 'use client';
 
 import React, { useEffect, useState, useCallback } from 'react';
-import { X, Command, ArrowUp, ArrowDown, ArrowLeft, ArrowRight, Delete, Copy, Trash2 } from 'lucide-react';
-import { cn } from '@/lib/utils';
+import { X, Command } from 'lucide-react';
+
 
 interface ShortcutGroup {
     title: string;

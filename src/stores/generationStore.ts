@@ -57,8 +57,10 @@ export const useGenerationStore = create<GenerationStore>()(
 
             clearGenerationProgress: (campaignId: string) => {
                 set((store) => {
-                    const { [campaignId]: _, ...rest } = store.generations;
-                    return { generations: rest };
+                    const stateWithoutCurrent = Object.fromEntries(
+                        Object.entries(store.generations).filter(([key]) => key !== campaignId)
+                    );
+                    return { generations: stateWithoutCurrent };
                 });
             },
 

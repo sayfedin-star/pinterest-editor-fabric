@@ -12,7 +12,6 @@ import {
     Sparkles,
     PenTool,
     Layers,
-    FileSpreadsheet,
     ChevronRight,
     Zap
 } from 'lucide-react';

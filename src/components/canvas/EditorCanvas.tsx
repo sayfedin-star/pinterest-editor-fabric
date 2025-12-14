@@ -24,7 +24,9 @@ interface EditorCanvasProps {
     // to avoid breaking changes in the parent component.
     // If they are truly unused and can be removed, the interface and function signature
     // should be updated accordingly.
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     containerWidth: number;
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     containerHeight: number;
 }
 

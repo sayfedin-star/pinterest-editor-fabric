@@ -2,7 +2,7 @@
 
 import React, { useState, useRef } from 'react';
 import { useRouter } from 'next/navigation';
-import { ArrowLeft, Save, Eye, Plus, LogOut, User, Upload, CheckCircle, AlertCircle } from 'lucide-react';
+import { Save, Eye, Plus, LogOut, User, Upload, CheckCircle, AlertCircle } from 'lucide-react';
 import { useEditorStore } from '@/stores/editorStore';
 import { useStageRef } from '@/hooks/useStageRef';
 import { cn } from '@/lib/utils';

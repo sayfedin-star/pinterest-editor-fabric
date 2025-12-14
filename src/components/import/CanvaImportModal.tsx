@@ -4,7 +4,7 @@ import React, { useState, useCallback, useRef } from 'react';
 import { nanoid } from 'nanoid';
 import { X, Upload, Image, FileType, Check, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { Element } from '@/types/editor';
+import { Element as EditorElement } from '@/types/editor';
 import { useEditorStore } from '@/stores/editorStore';
 import { toast } from 'sonner';
 
@@ -124,10 +124,10 @@ export function CanvaImportModal({ isOpen, onClose, onImportComplete }: CanvaImp
     };
 
     // Parse SVG to extract individual elements
-    const parseSvgToElements = async (svgContent: string): Promise<Element[]> => {
+    const parseSvgToElements = async (svgContent: string): Promise<EditorElement[]> => {
         const parser = new DOMParser();
         const doc = parser.parseFromString(svgContent, 'image/svg+xml');
-        const elements: Element[] = [];
+        const elements: EditorElement[] = [];
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const textElements: any[] = []; // Track text elements separately for grouping
 
@@ -201,8 +201,6 @@ export function CanvaImportModal({ isOpen, onClose, onImportComplete }: CanvaImp
                     width: canvasWidth,
                     height: canvasHeight,
                     rotation: 0,
-                    scaleX,
-                    scaleY,
                     opacity: parseFloat(node.getAttribute('opacity') || '1'),
                     locked: lockBackground,
                     visible: true,

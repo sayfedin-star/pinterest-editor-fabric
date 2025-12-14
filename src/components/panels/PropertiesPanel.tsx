@@ -17,7 +17,7 @@ import {
     AlignHorizontalJustifyEnd
 } from 'lucide-react';
 import { useEditorStore } from '@/stores/editorStore';
-import { TextElement, ImageElement, CANVAS_WIDTH, CANVAS_HEIGHT } from '@/types/editor';
+import { TextElement, ImageElement, } from '@/types/editor';
 import { cn } from '@/lib/utils';
 import { CanvasSizeSection } from './CanvasSizeSection';
 import { DynamicFieldTooltip } from '@/components/ui/DynamicFieldTooltip';
