@@ -335,8 +335,28 @@ export async function renderTemplate(
     // Clear previous objects
     canvas.clear();
 
-    // Sort elements by zIndex
-    const sortedElements = [...elements].sort((a, b) => a.zIndex - b.zIndex);
+    // Sort elements by zIndex, with special handling for Background elements
+    // Background elements should ALWAYS render at the bottom, regardless of their zIndex
+    const sortedElements = [...elements].sort((a, b) => {
+        const aIsBackground = a.name?.toLowerCase().includes('background') ?? false;
+        const bIsBackground = b.name?.toLowerCase().includes('background') ?? false;
+
+        // Backgrounds always go first (bottom of stack)
+        if (aIsBackground && !bIsBackground) return -1;
+        if (!aIsBackground && bIsBackground) return 1;
+
+        // If both are backgrounds or both are not, sort by zIndex
+        return a.zIndex - b.zIndex;
+    });
+
+    // Debug: Log the sorted order
+    if (typeof window !== 'undefined') {
+        console.log('[Engine] Element render order:', sortedElements.map(e => ({
+            name: e.name,
+            zIndex: e.zIndex,
+            type: e.type
+        })));
+    }
 
     // 2. Create all fabric objects in parallel (for speed)
     // BUT we'll add them to canvas in order AFTER all are created (for correct z-index)
