@@ -1,15 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-// Allowed hostnames for proxying images (security: prevent SSRF)
-const ALLOWED_HOSTS = [
-    's3.tebi.io',
-    'tebi.io',
-    // Add your specific bucket subdomain if needed
-];
-
 /**
  * GET /api/proxy-image?url=...
- * Proxy images from S3 to bypass CORS restrictions
+ * Proxy images from external URLs to bypass CORS restrictions
  */
 export async function GET(request: NextRequest) {
     const url = request.nextUrl.searchParams.get('url');
@@ -22,7 +15,7 @@ export async function GET(request: NextRequest) {
     }
 
     try {
-        // Strict URL validation to prevent SSRF attacks
+        // Basic URL validation
         let parsedUrl: URL;
         try {
             parsedUrl = new URL(url);
@@ -33,14 +26,10 @@ export async function GET(request: NextRequest) {
             );
         }
 
-        // Check if hostname is in allowed list
-        const isAllowed = ALLOWED_HOSTS.some(host =>
-            parsedUrl.hostname === host || parsedUrl.hostname.endsWith(`.${host}`)
-        );
-
-        if (!isAllowed) {
+        // Only allow http/https protocols
+        if (!['http:', 'https:'].includes(parsedUrl.protocol)) {
             return NextResponse.json(
-                { error: 'URL host not allowed' },
+                { error: 'Only HTTP/HTTPS URLs allowed' },
                 { status: 400 }
             );
         }

@@ -1,27 +1,35 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { cookies } from 'next/headers';
 
 // Debug logging - only in development
 const DEBUG = process.env.NODE_ENV === 'development';
 const log = (...args: unknown[]) => DEBUG && console.log(...args);
 
-// Initialize Supabase client with user context
-// SECURITY: Uses Anon key + Forwarded Auth Header to enforce RLS
-function getAuthenticatedSupabase(request: NextRequest) {
+// Initialize Supabase client with cookie-based auth
+// This reads the auth cookies set by the browser client
+async function getAuthenticatedSupabase() {
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
     const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-    const authHeader = request.headers.get('Authorization');
 
     if (!supabaseUrl || !supabaseAnonKey) {
         console.error('[generated-pins] Missing Supabase configuration');
         return null;
     }
 
+    // Get cookies from the request
+    const cookieStore = await cookies();
+    const allCookies = cookieStore.getAll();
+
+    // Find the Supabase auth token from cookies
+    const authCookie = allCookies.find(c => c.name.includes('auth-token') || c.name.includes('sb-'));
+
+    // Create client with the auth token if available
     return createClient(supabaseUrl, supabaseAnonKey, {
         global: {
-            headers: {
-                Authorization: authHeader || '',
-            },
+            headers: authCookie ? {
+                Cookie: allCookies.map(c => `${c.name}=${c.value}`).join('; '),
+            } : {},
         },
     });
 }
@@ -33,7 +41,7 @@ export async function POST(request: NextRequest) {
     log('[generated-pins] POST request started');
 
     try {
-        const supabase = getAuthenticatedSupabase(request);
+        const supabase = await getAuthenticatedSupabase();
         if (!supabase) {
             return NextResponse.json(
                 { error: 'Server configuration error' },
@@ -137,7 +145,7 @@ export async function GET(request: NextRequest) {
     log('[generated-pins] GET request started');
 
     try {
-        const supabase = getAuthenticatedSupabase(request);
+        const supabase = await getAuthenticatedSupabase();
         if (!supabase) {
             return NextResponse.json(
                 { error: 'Server configuration error' },
@@ -196,7 +204,7 @@ export async function DELETE(request: NextRequest) {
     log('[generated-pins] DELETE request started');
 
     try {
-        const supabase = getAuthenticatedSupabase(request);
+        const supabase = await getAuthenticatedSupabase();
         if (!supabase) {
             return NextResponse.json(
                 { error: 'Server configuration error' },
