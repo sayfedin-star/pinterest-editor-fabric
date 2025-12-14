@@ -12,10 +12,10 @@ export interface FieldMapping {
     [templateField: string]: string;
 }
 
+// --- Helper Functions ---
+
 function createErrorPlaceholder(width: number = 200, height: number = 200): fabric.Group {
-    const rect = new fabric.Rect({
-        width: width, height: height, fill: '#fee2e2', stroke: '#dc2626', strokeWidth: 3,
-    });
+    const rect = new fabric.Rect({ width, height, fill: '#fee2e2', stroke: '#dc2626', strokeWidth: 3 });
     const text = new fabric.Text('⚠ Image Failed', {
         fontSize: Math.min(width, height) * 0.08, fontFamily: 'Arial', fill: '#dc2626',
         originX: 'center', originY: 'center', left: width / 2, top: height / 2,
@@ -25,8 +25,6 @@ function createErrorPlaceholder(width: number = 200, height: number = 200): fabr
 
 async function loadImageToCanvas(url: string, options: Partial<fabric.ImageProps> = {}): Promise<fabric.FabricObject> {
     const isBrowser = typeof window !== 'undefined' && typeof document !== 'undefined';
-    const isNodeEnv = !isBrowser;
-
     if (!url) return createErrorPlaceholder(options.width as number, options.height as number);
 
     const tryLoad = async (urlToTry: string) => {
@@ -35,26 +33,24 @@ async function loadImageToCanvas(url: string, options: Partial<fabric.ImageProps
         return img;
     };
 
-    if (isNodeEnv) {
+    // Node/Server Logic
+    if (!isBrowser) {
         try {
             const response = await fetch(url);
             const arrayBuffer = await response.arrayBuffer();
             const base64 = Buffer.from(arrayBuffer).toString('base64');
             const dataUrl = `data:${response.headers.get('content-type') || 'image/png'};base64,${base64}`;
             return await tryLoad(dataUrl);
-        } catch (e) { console.error(e); throw e; }
+        } catch { return createErrorPlaceholder(options.width as number, options.height as number); }
     }
 
-    // Browser Fallback Logic
+    // Browser Proxy Logic
     const knownCorsBlockedDomains = ['s3.tebi.io', 'tebi.io', 'amazonaws.com'];
     const needsProxy = knownCorsBlockedDomains.some(d => url.includes(d));
 
     if (needsProxy) {
         try { return await tryLoad(`/api/proxy-image?url=${encodeURIComponent(url)}`); }
-        catch {
-            try { return await tryLoad(url); }
-            catch { return createErrorPlaceholder(options.width as number, options.height as number); }
-        }
+        catch { /* Retry direct below */ }
     }
 
     try { return await tryLoad(url); }
@@ -91,19 +87,19 @@ function getDynamicImageUrl(element: ImageElement, rowData: Record<string, strin
     return src;
 }
 
+/**
+ * ✅ ATOMIC RENDERER
+ * Loads everything in memory first, then updates canvas in ONE synchronous step.
+ */
 export async function renderTemplate(
     canvas: fabric.StaticCanvas | fabric.Canvas,
     elements: Element[],
     config: RenderConfig,
     rowData: Record<string, string> = {},
-    fieldMapping: FieldMapping = {},
-    isStale?: () => boolean  // ✅ NEW: Optional callback to check if render is stale
+    fieldMapping: FieldMapping = {}
 ): Promise<void> {
-    canvas.setDimensions({ width: config.width, height: config.height });
-    // ✅ FIX: Clear BEFORE setting backgroundColor (clear() may reset it)
-    canvas.clear();
-    if (config.backgroundColor) canvas.backgroundColor = config.backgroundColor;
 
+    // 1. ASYNC PREPARE PHASE (Do not touch canvas yet)
     const sortedElements = [...elements].sort((a, b) => {
         const aBg = a.name?.toLowerCase().includes('background');
         const bBg = b.name?.toLowerCase().includes('background');
@@ -112,7 +108,7 @@ export async function renderTemplate(
         return a.zIndex - b.zIndex;
     });
 
-    const promises = sortedElements.map(async (el, index) => {
+    const fabricObjectPromises = sortedElements.map(async (el, index) => {
         if (!el.visible) return { index, obj: null };
         let fabricObject: fabric.FabricObject | null = null;
 
@@ -120,9 +116,6 @@ export async function renderTemplate(
             left: el.x, top: el.y, angle: el.rotation || 0, opacity: el.opacity ?? 1,
             selectable: config.interactive && !el.locked,
             evented: config.interactive && !el.locked,
-            // ✅ FIX: Set origin to top-left to match coordinate system
-            originX: 'left' as const,
-            originY: 'top' as const,
         };
 
         if (el.type === 'text') {
@@ -152,7 +145,6 @@ export async function renderTemplate(
                 textbox.stroke = textEl.stroke; textbox.strokeWidth = textEl.strokeWidth || 1;
             }
 
-            // ✅ FIX BUG #10: Correct Group positioning and logic flow
             if (textEl.backgroundEnabled) {
                 const bgRect = new fabric.Rect({
                     width: textEl.width, height: textEl.height,
@@ -183,17 +175,10 @@ export async function renderTemplate(
                 }
                 fabricObject = img;
             } else {
-                // ✅ FIX: Show placeholder for empty images
+                // Placeholder for empty image
                 fabricObject = new fabric.Rect({
-                    ...commonOptions,
-                    width: imageEl.width || 200,
-                    height: imageEl.height || 200,
-                    fill: '#f3f4f6', // Light gray
-                    stroke: '#d1d5db', // Border
-                    strokeWidth: 2,
-                    strokeDashArray: [8, 4], // Dashed border
-                    rx: imageEl.cornerRadius || 0,
-                    ry: imageEl.cornerRadius || 0,
+                    ...commonOptions, width: imageEl.width || 200, height: imageEl.height || 200,
+                    fill: '#f3f4f6', stroke: '#d1d5db', strokeWidth: 2, strokeDashArray: [8, 4]
                 });
             }
         }
@@ -221,30 +206,27 @@ export async function renderTemplate(
         return { index, obj: fabricObject };
     });
 
-    const results = await Promise.all(promises);
+    // Wait for all assets
+    const results = await Promise.all(fabricObjectPromises);
 
-    // ✅ FIX: Check if render is stale AFTER async operations complete
-    if (isStale?.()) {
-        return; // Abort - newer render has started
-    }
+    // 2. COMMIT PHASE (Sync - Atomic Canvas Update)
+    canvas.clear();
+    canvas.setDimensions({ width: config.width, height: config.height });
+    if (config.backgroundColor) canvas.backgroundColor = config.backgroundColor;
 
     results.sort((a, b) => a.index - b.index).forEach(({ obj }) => {
         if (obj) canvas.add(obj);
     });
+
     canvas.renderAll();
 }
 
-export interface ExportOptions {
-    format?: 'png' | 'jpeg';
-    quality?: number;
-    multiplier?: number;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function exportToDataURL(canvas: fabric.StaticCanvas | fabric.Canvas, options: any = {}) {
+    return canvas.toDataURL(options);
 }
-
-export function exportToDataURL(canvas: fabric.StaticCanvas | fabric.Canvas, options: Partial<fabric.TDataUrlOptions> = {}) {
-    return canvas.toDataURL(options as fabric.TDataUrlOptions);
-}
-
-export async function exportToBlob(canvas: fabric.StaticCanvas | fabric.Canvas, options: Partial<fabric.TDataUrlOptions> = {}) {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export async function exportToBlob(canvas: fabric.StaticCanvas | fabric.Canvas, options: any = {}) {
     const dataUrl = exportToDataURL(canvas, options);
     const response = await fetch(dataUrl);
     return response.blob();
