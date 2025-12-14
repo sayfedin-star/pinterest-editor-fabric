@@ -29,6 +29,8 @@ export function EditorCanvas({ containerWidth, containerHeight }: EditorCanvasPr
     // This prevents the canvas from being destroyed/recreated on every update
     const elementsRef = useRef<Element[]>([]);
     const editingTextRef = useRef<string>("");
+    const editingIdRef = useRef<string | null>(null);
+    const selectedIdsRef = useRef<string[]>([]);
 
     const isUpdatingFromFabric = useRef(false);
     const [isCanvasReady, setIsCanvasReady] = useState(false);
@@ -71,6 +73,8 @@ export function EditorCanvas({ containerWidth, containerHeight }: EditorCanvasPr
     // Keep refs in sync with store/state
     useEffect(() => { elementsRef.current = elements; }, [elements]);
     useEffect(() => { editingTextRef.current = editingText; }, [editingText]);
+    useEffect(() => { editingIdRef.current = editingId; }, [editingId]);
+    useEffect(() => { selectedIdsRef.current = selectedIds; }, [selectedIds]);
 
     const canvasWidth = canvasSize.width;
     const canvasHeight = canvasSize.height;
@@ -163,14 +167,17 @@ export function EditorCanvas({ containerWidth, containerHeight }: EditorCanvasPr
             if (evt.button === 2) {
                 evt.preventDefault();
                 setContextMenu({ x: evt.clientX, y: evt.clientY, isOpen: true });
-            } else if (contextMenu.isOpen) {
-                setContextMenu(prev => ({ ...prev, isOpen: false }));
+            } else {
+                // ✅ FIX: Use functional update to check current state, not stale closure
+                setContextMenu(prev => prev.isOpen ? { ...prev, isOpen: false } : prev);
             }
-            if (editingId) {
+            // ✅ FIX: Use ref instead of stale editingId closure
+            const currentEditingId = editingIdRef.current;
+            if (currentEditingId) {
                 // Clicked outside - save using ref data
-                const el = elementsRef.current.find(e => e.id === editingId);
+                const el = elementsRef.current.find(e => e.id === currentEditingId);
                 if (el && el.type === 'text') {
-                    updateElement(editingId, { text: editingTextRef.current });
+                    updateElement(currentEditingId, { text: editingTextRef.current });
                     pushHistory();
                 }
                 setEditingId(null);
@@ -212,6 +219,7 @@ export function EditorCanvas({ containerWidth, containerHeight }: EditorCanvasPr
 
     // ============================================
     // Rendering Loop - With Debounce & Cancellation
+    // ✅ FIX: Removed selectedIds from dependencies - selection changes should NOT trigger full re-render
     // ============================================
     useEffect(() => {
         if (!fabricCanvasRef.current || !isCanvasReady || isUpdatingFromFabric.current) return;
@@ -240,19 +248,52 @@ export function EditorCanvas({ containerWidth, containerHeight }: EditorCanvasPr
                 return; // Became stale during render
             }
 
-            // Restore Selection Logic
-            if (selectedIds.length > 0) {
+            // ✅ Restore selection using ref (not dependency) after full re-render
+            const currentSelectedIds = selectedIdsRef.current;
+            if (currentSelectedIds.length > 0) {
                 const objs = fabricCanvasRef.current.getObjects();
-                const active = objs.find(o => getElementId(o) === selectedIds[0]);
+                const active = objs.find(o => getElementId(o) === currentSelectedIds[0]);
                 if (active) {
                     fabricCanvasRef.current.setActiveObject(active);
-                    fabricCanvasRef.current.requestRenderAll();
                 }
             }
+
+            fabricCanvasRef.current.requestRenderAll();
         }, 16); // ~60fps debounce (one frame)
 
         return () => clearTimeout(timeoutId);
-    }, [elements, backgroundColor, canvasWidth, canvasHeight, isCanvasReady, previewMode, selectedIds]);
+    }, [elements, backgroundColor, canvasWidth, canvasHeight, isCanvasReady, previewMode]); // ✅ FIX: NO selectedIds here!
+
+    // ============================================
+    // Selection Sync - Separate from render to avoid full re-render on click
+    // ============================================
+    useEffect(() => {
+        if (!fabricCanvasRef.current || !isCanvasReady) return;
+
+        const canvas = fabricCanvasRef.current;
+
+        if (selectedIds.length === 0) {
+            // Clear selection without triggering events
+            canvas.discardActiveObject();
+            canvas.requestRenderAll();
+            return;
+        }
+
+        // Find and select the object
+        const objs = canvas.getObjects();
+        const targetObj = objs.find(o => getElementId(o) === selectedIds[0]);
+
+        if (targetObj) {
+            const currentActive = canvas.getActiveObject();
+            // Only update if different (prevent loop)
+            if (currentActive !== targetObj) {
+                isUpdatingFromFabric.current = true;
+                canvas.setActiveObject(targetObj);
+                canvas.requestRenderAll();
+                setTimeout(() => { isUpdatingFromFabric.current = false; }, 50);
+            }
+        }
+    }, [selectedIds, isCanvasReady]);
 
     // Sync Zoom Effect (Separate from init)
     useEffect(() => {

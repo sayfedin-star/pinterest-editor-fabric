@@ -99,8 +99,9 @@ export async function renderTemplate(
     fieldMapping: FieldMapping = {}
 ): Promise<void> {
     canvas.setDimensions({ width: config.width, height: config.height });
-    if (config.backgroundColor) canvas.backgroundColor = config.backgroundColor;
+    // ✅ FIX: Clear BEFORE setting backgroundColor (clear() may reset it)
     canvas.clear();
+    if (config.backgroundColor) canvas.backgroundColor = config.backgroundColor;
 
     const sortedElements = [...elements].sort((a, b) => {
         const aBg = a.name?.toLowerCase().includes('background');
