@@ -7,6 +7,7 @@ import { useShallow } from 'zustand/react/shallow';
 import { useFabricRefStore } from '@/hooks/useStageRef';
 import { ContextMenu } from './ContextMenu';
 import { renderTemplate } from '@/lib/fabric/engine';
+import { AlignmentGuides } from '@/lib/fabric/AlignmentGuides'; // ✅ NEW
 import { TextElement, DEFAULT_DUMMY_DATA, Element } from '@/types/editor';
 
 interface EditorCanvasProps {
@@ -24,6 +25,7 @@ function getElementId(obj: fabric.FabricObject): string | undefined {
 export function EditorCanvas({ containerWidth, containerHeight }: EditorCanvasProps) {
     const canvasElRef = useRef<HTMLCanvasElement>(null);
     const fabricCanvasRef = useRef<fabric.Canvas | null>(null);
+    const guidesRef = useRef<AlignmentGuides | null>(null); // ✅ NEW
 
     // Mutable refs to break dependency loops
     const elementsRef = useRef<Element[]>([]);
@@ -90,6 +92,9 @@ export function EditorCanvas({ containerWidth, containerHeight }: EditorCanvasPr
         fabricCanvasRef.current = canvas;
         setFabricRef(fabricCanvasRef);
         setIsCanvasReady(true);
+
+        // ✅ NEW: Initialize Smart Guides
+        guidesRef.current = new AlignmentGuides(canvas);
 
         // --- Event Listeners ---
 
@@ -211,7 +216,11 @@ export function EditorCanvas({ containerWidth, containerHeight }: EditorCanvasPr
     // Init
     useEffect(() => {
         initCanvas();
-        return () => { fabricCanvasRef.current?.dispose(); setIsCanvasReady(false); };
+        return () => {
+            guidesRef.current?.dispose(); // ✅ NEW
+            fabricCanvasRef.current?.dispose();
+            setIsCanvasReady(false);
+        };
     }, [initCanvas]);
 
     // Render Loop (Atomic & Debounced)
