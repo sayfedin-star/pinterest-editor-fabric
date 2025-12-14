@@ -160,7 +160,44 @@ async function loadImageToCanvas(
     }
 
     // EXTERNAL HTTP/HTTPS URLs: Use Smart Fallback
-    // STRATEGY 1: Try DIRECT load first (optimistic)
+
+    // CRITICAL: Detect domains that are KNOWN to lack CORS headers
+    // These must use proxy FIRST to prevent canvas taint!
+    const knownCorsBlockedDomains = [
+        's3.tebi.io',
+        'tebi.io',
+        's3.amazonaws.com', // Some S3 buckets
+    ];
+
+    let urlDomain = '';
+    try {
+        urlDomain = new URL(url).hostname;
+    } catch { /* ignore */ }
+
+    const needsProxyFirst = knownCorsBlockedDomains.some(domain => urlDomain.includes(domain));
+
+    if (needsProxyFirst) {
+        // PROACTIVE PROXY: Route CORS-blocked domains through proxy FIRST
+        // This prevents canvas taint from failed CORS attempts
+        console.log('[Engine] CORS-blocked domain detected, using proxy directly:', urlDomain);
+        try {
+            const proxyUrl = `/api/proxy-image?url=${encodeURIComponent(url)}`;
+            const img = await tryLoad(proxyUrl);
+            console.log('[Engine] Proxy load SUCCESS (proactive):', img.width, 'x', img.height);
+            return img;
+        } catch (proxyError) {
+            console.error('[Engine] Proxy load failed for CORS-blocked domain:', proxyError);
+            const placeholder = createErrorPlaceholder(
+                typeof options.width === 'number' ? options.width : 200,
+                typeof options.height === 'number' ? options.height : 200
+            );
+            if (options.left) placeholder.set({ left: options.left });
+            if (options.top) placeholder.set({ top: options.top });
+            return placeholder;
+        }
+    }
+
+    // STRATEGY 1: Try DIRECT load first (optimistic - for CDNs with CORS)
     try {
         console.log('[Engine] Attempt 1: Direct load', url.substring(0, 60) + '...');
         const img = await tryLoad(url);
@@ -246,6 +283,13 @@ function getDynamicImageUrl(
     };
 
     debug('Starting resolution for element');
+
+    // CRITICAL: Canva background images need proxy for CORS bypass
+    // This must run FIRST before any other checks (matches clientPinGenerator.ts logic)
+    if (element.isCanvaBackground && src) {
+        debug('Canva background detected - using proxy');
+        return `/api/proxy-image?url=${encodeURIComponent(src)}`;
+    }
 
     // Priority 1: Check for explicit dynamic mapping via isDynamic + dynamicSource
     if (element.isDynamic && element.dynamicSource) {

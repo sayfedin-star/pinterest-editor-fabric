@@ -113,7 +113,20 @@ export function destroyRenderContext(): void {
 }
 
 async function loadImage(src: string): Promise<HTMLImageElement> {
-    // Check cache first
+    // CRITICAL: Proactive proxy routing for CORS-blocked domains
+    // These must be proxied to prevent canvas taint errors
+    const knownCorsBlockedDomains = ['s3.tebi.io', 'tebi.io', 's3.amazonaws.com'];
+    let actualSrc = src;
+
+    try {
+        const urlDomain = new URL(src).hostname;
+        if (knownCorsBlockedDomains.some(domain => urlDomain.includes(domain))) {
+            actualSrc = `/api/proxy-image?url=${encodeURIComponent(src)}`;
+            log('[loadImage] CORS-blocked domain detected, using proxy:', urlDomain);
+        }
+    } catch { /* ignore invalid URLs */ }
+
+    // Check cache first (use original src as cache key)
     if (imageCache.has(src)) {
         // LRU: Refresh key position by deleting and re-adding (moves to end)
         const img = imageCache.get(src)!;
@@ -132,11 +145,11 @@ async function loadImage(src: string): Promise<HTMLImageElement> {
         const img = new Image();
         img.crossOrigin = 'anonymous';
         img.onload = () => {
-            imageCache.set(src, img);
+            imageCache.set(src, img); // Cache with original src as key
             resolve(img);
         };
-        img.onerror = () => reject(new Error(`Failed to load image: ${src}`));
-        img.src = src;
+        img.onerror = () => reject(new Error(`Failed to load image: ${actualSrc}`));
+        img.src = actualSrc; // Load from proxy if needed
     });
 }
 
@@ -294,8 +307,25 @@ export async function renderPin(
     });
     layer.add(bg);
 
-    // Sort elements by zIndex
-    const sortedElements = [...elements].sort((a, b) => a.zIndex - b.zIndex);
+    // Sort elements with Background-first logic (MUST MATCH FABRIC.JS ENGINE)
+    // Background elements should ALWAYS render at the bottom, regardless of their zIndex
+    const sortedElements = [...elements].sort((a, b) => {
+        const aIsBackground = a.name?.toLowerCase().includes('background') ?? false;
+        const bIsBackground = b.name?.toLowerCase().includes('background') ?? false;
+
+        // Backgrounds always go first (bottom of stack)
+        if (aIsBackground && !bIsBackground) return -1;
+        if (!aIsBackground && bIsBackground) return 1;
+
+        // If both are backgrounds or both are not, sort by zIndex
+        return a.zIndex - b.zIndex;
+    });
+
+    log('[renderPin] Element render order:', sortedElements.map(e => ({
+        name: e.name,
+        zIndex: e.zIndex,
+        type: e.type
+    })));
 
     // Render each element
     for (const element of sortedElements) {

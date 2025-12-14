@@ -58,6 +58,9 @@ interface EditorState {
         name: string;
         thumbnail_url?: string;
     }>;
+
+    // Hydration state - true after localStorage data is loaded
+    _hasHydrated: boolean;
 }
 
 // History snapshot includes elements and canvas configuration
@@ -178,6 +181,7 @@ export const useEditorStore = create(
             clipboard: null,
             styleClipboard: null,
             templates: [],
+            _hasHydrated: false,
 
             // Element operations
             addElement: (element) => {
@@ -1143,11 +1147,19 @@ export const useEditorStore = create(
                 // Excluded: history, historyIndex, selectedIds, zoom, guides, 
                 // clipboard, styleClipboard, isSaving, previewMode, activeTab, templates
             }) as unknown as EditorState & EditorActions,
-            onRehydrateStorage: () => (state) => {
+            onRehydrateStorage: () => (state, error) => {
+                if (error) {
+                    console.error('[EditorStore] Hydration error:', error);
+                }
                 if (state) {
+                    state._hasHydrated = true;
                     console.log('[EditorStore] Hydrated from localStorage');
                 }
             },
         }
     )
 );
+
+// Convenience hook for checking if the store has been hydrated from localStorage
+// Use this to delay rendering until state is ready to prevent flash of empty state
+export const useHydrated = () => useEditorStore((s) => s._hasHydrated);
