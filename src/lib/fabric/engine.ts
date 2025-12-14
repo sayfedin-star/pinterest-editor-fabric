@@ -425,18 +425,56 @@ export async function renderTemplate(
                 const imageEl = el as ImageElement;
                 const imageSrc = getDynamicImageUrl(imageEl, rowData, fieldMapping);
 
+                // Debug: Log image element details
+                const isBrowser = typeof window !== 'undefined';
+                if (isBrowser) {
+                    console.log(`[Engine] Rendering image element:`, {
+                        name: imageEl.name,
+                        x: imageEl.x,
+                        y: imageEl.y,
+                        width: imageEl.width,
+                        height: imageEl.height,
+                        zIndex: imageEl.zIndex,
+                        imageSrc: imageSrc?.substring(0, 60) + '...',
+                    });
+                }
+
                 if (imageSrc) {
                     const img = await loadImageToCanvas(imageSrc, commonOptions);
 
                     // Scale logic: Fabric images use scaleX/Y, editor uses width/height
+                    let scaleX = 1, scaleY = 1;
                     if (img.width && imageEl.width) {
-                        img.scaleX = imageEl.width / img.width;
+                        scaleX = imageEl.width / img.width;
+                        img.scaleX = scaleX;
                     }
                     if (img.height && imageEl.height) {
-                        img.scaleY = imageEl.height / img.height;
+                        scaleY = imageEl.height / img.height;
+                        img.scaleY = scaleY;
+                    }
+
+                    // Debug: Log final image properties
+                    if (isBrowser) {
+                        console.log(`[Engine] Image rendered:`, {
+                            name: imageEl.name,
+                            imgWidth: img.width,
+                            imgHeight: img.height,
+                            targetWidth: imageEl.width,
+                            targetHeight: imageEl.height,
+                            scaleX,
+                            scaleY,
+                            finalWidth: (img.width || 0) * scaleX,
+                            finalHeight: (img.height || 0) * scaleY,
+                            left: commonOptions.left,
+                            top: commonOptions.top,
+                        });
                     }
 
                     fabricObject = img;
+                } else {
+                    if (isBrowser) {
+                        console.warn(`[Engine] No image source for element:`, imageEl.name);
+                    }
                 }
                 break;
             }
