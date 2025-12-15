@@ -5,36 +5,19 @@ import { SnappingSettings } from '@/stores/snappingSettingsStore';
 import { SpatialHashGrid, GridElement } from './SpatialHashGrid';
 import { applyCanvaStyleControls } from '@/lib/fabric/FabricControlConfig';
 
-/**
- * Canvas configuration options
- */
-export interface CanvasConfig {
-    width: number;
-    height: number;
-    backgroundColor?: string;
-    zoom?: number;
-}
+// Import from new modules
+import {
+    CanvasConfig,
+    ElementChangeCallback,
+    SelectionChangeCallback,
+    PerformanceMetrics
+} from './types';
+import { createFabricObject, syncElementToFabric, syncFabricToElement } from './ObjectFactory';
+import { PerformanceMonitor } from './PerformanceMonitor';
+import { ViewportManager } from './ViewportManager';
 
-/**
- * Element state change callback
- */
-export type ElementChangeCallback = (elements: Element[]) => void;
-
-/**
- * Selection change callback
- */
-export type SelectionChangeCallback = (selectedIds: string[]) => void;
-
-/**
- * Performance metrics
- */
-interface PerformanceMetrics {
-    fps: number;
-    frames: number;
-    lastTime: number;
-    snapCalcTime: number;
-    lastSnapDuration: number;
-}
+// Re-export types for backward compatibility
+export type { CanvasConfig, ElementChangeCallback, SelectionChangeCallback };
 
 /**
  * CanvasManager - Imperative Core (Layer 1)
@@ -42,11 +25,10 @@ interface PerformanceMetrics {
  * Owns all Fabric.js lifecycle and is the ONLY thing that touches the canvas directly.
  * Never triggers React re-renders directly - reports state changes through callbacks.
  * 
- * Key Principles:
- * - Single source of truth for canvas state during interactions
- * - Batches operations and reports changes on completion
- * - Maintains internal state separate from React state
- * - Exposes high-level API that React can call safely
+ * Now delegates to specialized sub-modules:
+ * - ObjectFactory: fabric object creation/sync
+ * - PerformanceMonitor: FPS tracking
+ * - ViewportManager: zoom, size, background
  */
 export class CanvasManager {
     // Core Fabric.js instance
@@ -67,7 +49,11 @@ export class CanvasManager {
     private onElementsChangedCallback: ElementChangeCallback | null = null;
     private onSelectionChangedCallback: SelectionChangeCallback | null = null;
 
-    // Performance tracking
+    // Sub-modules
+    private performanceMonitor: PerformanceMonitor = new PerformanceMonitor();
+    private viewportManager: ViewportManager = new ViewportManager();
+
+    // Legacy metrics reference (for backward compatibility)
     private metrics: PerformanceMetrics = {
         fps: 60,
         frames: 0,
@@ -75,9 +61,7 @@ export class CanvasManager {
         snapCalcTime: 0,
         lastSnapDuration: 0
     };
-    private collisionCalcTime: number = 0; // Track collision detection timing
-
-    private metricsInterval: number | null = null;
+    private collisionCalcTime: number = 0;
 
     /**
      * Initialize the canvas manager with a canvas element
@@ -114,14 +98,17 @@ export class CanvasManager {
             configHeight: config.height,
         });
 
-        // Apply zoom if specified
-        if (config.zoom && config.zoom !== 1) {
-            this.setZoom(config.zoom);
-        }
-
         // Initialize alignment guides
         this.guides = new AlignmentGuides(this.canvas);
         this.guides.init();
+
+        // Initialize ViewportManager with canvas, config, and guides
+        this.viewportManager.initialize(this.canvas, config, this.guides);
+
+        // Apply zoom if specified (now via ViewportManager)
+        if (config.zoom && config.zoom !== 1) {
+            this.viewportManager.setZoom(config.zoom);
+        }
 
         // Apply Canva-style controls (purple circular handles, custom rotation)
         applyCanvaStyleControls(this.canvas);
@@ -136,8 +123,8 @@ export class CanvasManager {
         // Bind event handlers
         this.bindEvents();
 
-        // Start performance monitoring
-        this.startPerformanceMonitoring();
+        // Start performance monitoring (now via PerformanceMonitor)
+        this.performanceMonitor.start(this.canvas, () => this.elementMap.size);
 
         this.enabled = true;
         console.log('[CanvasManager] Initialization complete');
@@ -151,8 +138,11 @@ export class CanvasManager {
 
         this.enabled = false;
 
-        // Stop performance monitoring
-        this.stopPerformanceMonitoring();
+        // Stop performance monitoring (via PerformanceMonitor)
+        this.performanceMonitor.stop();
+
+        // Destroy viewport manager
+        this.viewportManager.destroy();
 
         // Dispose alignment guides
         if (this.guides) {
@@ -220,8 +210,8 @@ export class CanvasManager {
 
         console.log('[CanvasManager] Adding element:', element.id, element.type);
 
-        // Create Fabric object from element
-        const fabricObject = this.createFabricObject(element);
+        // Create Fabric object from element (via ObjectFactory)
+        const fabricObject = createFabricObject(element);
 
         if (!fabricObject) {
             console.error('[CanvasManager] Failed to create Fabric object for element:', element.id);
@@ -266,8 +256,8 @@ export class CanvasManager {
 
         console.log('[CanvasManager] Updating element:', id);
 
-        // Apply updates to Fabric object
-        this.syncElementToFabric(fabricObject, updates);
+        // Apply updates to Fabric object (via ObjectFactory)
+        syncElementToFabric(fabricObject, updates);
 
         // Update spatial grid if position/size changed
         if (this.spatialGrid && (updates.x !== undefined || updates.y !== undefined || updates.width !== undefined || updates.height !== undefined)) {
@@ -342,7 +332,7 @@ export class CanvasManager {
 
             if (existingObject) {
                 // Update existing object
-                this.syncElementToFabric(existingObject, element);
+                syncElementToFabric(existingObject, element);
             } else {
                 // Add new object
                 this.addElement(element);
@@ -357,42 +347,29 @@ export class CanvasManager {
     }
 
     /**
-     * Set canvas size
-     * Set the canvas size
+     * Set canvas size (delegates to ViewportManager)
      */
     setCanvasSize(width: number, height: number): void {
-        console.log(`[CanvasManager] setCanvasSize: ${width}x${height} | Current Zoom: ${this.config?.zoom}`);
+        console.log(`[CanvasManager] setCanvasSize: ${width}x${height}`);
+
+        // Update config
         if (this.config) {
             this.config.width = width;
             this.config.height = height;
         }
 
-        if (this.canvas && this.config) {
-            const zoom = this.config.zoom ?? 1;
-            const scaledWidth = width * zoom;
-            const scaledHeight = height * zoom;
-            console.log(`[CanvasManager] Applying Dimensions to Fabric: ${scaledWidth}x${scaledHeight}`);
+        // Update spatial grid
+        this.spatialGrid?.resize(width, height);
 
-            this.canvas.setWidth(scaledWidth);
-            this.canvas.setHeight(scaledHeight);
-
-            this.spatialGrid?.resize(width, height);
-        }
-
-        // Update alignment guides center if dependent on canvas size
-        if (this.guides) {
-            // Guides update dynamically on move, so no explicit update needed usually
-        }
+        // Delegate to ViewportManager
+        this.viewportManager.setCanvasSize(width, height);
     }
 
     /**
-     * Set the background color
+     * Set the background color (delegates to ViewportManager)
      */
     setBackgroundColor(color: string): void {
-        if (this.canvas) {
-            this.canvas.backgroundColor = color;
-            this.canvas.requestRenderAll();
-        }
+        this.viewportManager.setBackgroundColor(color);
     }
 
     /**
@@ -405,8 +382,8 @@ export class CanvasManager {
             return null;
         }
 
-        // Extract element data from Fabric object
-        return this.syncFabricToElement(fabricObject);
+        // Extract element data from Fabric object (via ObjectFactory)
+        return syncFabricToElement(fabricObject);
     }
 
     /**
@@ -424,31 +401,10 @@ export class CanvasManager {
     }
 
     /**
-     * Set zoom level
+     * Set zoom level (delegates to ViewportManager)
      */
     setZoom(zoom: number): void {
-        if (!this.canvas || !this.config) {
-            console.error('[CanvasManager] Cannot set zoom: canvas not initialized');
-            return;
-        }
-
-        console.log('[CanvasManager] Setting zoom:', zoom);
-
-        // Update zoom
-        this.canvas.setZoom(zoom);
-
-        // CRITICAL: Also update canvas dimensions to match new zoom
-        // Without this, elements disappear at different zoom levels
-        this.canvas.setDimensions({
-            width: this.config.width * zoom,
-            height: this.config.height * zoom
-        });
-
-        this.canvas.renderAll();
-
-        if (this.guides) {
-            this.guides.init(); // Re-initialize guides for new zoom
-        }
+        this.viewportManager.setZoom(zoom);
     }
 
     /**
@@ -529,7 +485,7 @@ export class CanvasManager {
         const updatedElements: Element[] = [];
 
         for (const obj of modifiedObjects) {
-            const element = this.syncFabricToElement(obj);
+            const element = syncFabricToElement(obj);
             if (element) {
                 updatedElements.push(element);
             }
@@ -602,223 +558,9 @@ export class CanvasManager {
     };
 
     /**
-     * Create Fabric object from element data
-     */
-    private createFabricObject(element: Element): fabric.FabricObject | null {
-        let obj: fabric.FabricObject | null = null;
-
-        switch (element.type) {
-            case 'text':
-                obj = new fabric.Textbox(element.text, {
-                    left: element.x,
-                    top: element.y,
-                    width: element.width,
-                    fontSize: element.fontSize,
-                    fontFamily: element.fontFamily,
-                    fill: element.fill,
-                    textAlign: element.align,
-                });
-                break;
-
-            case 'image':
-                // For Week 1 POC, use colored rectangle placeholder
-                obj = new fabric.Rect({
-                    left: element.x,
-                    top: element.y,
-                    width: element.width,
-                    height: element.height,
-                    fill: '#cccccc',
-                });
-                break;
-
-            case 'shape':
-                if (element.shapeType === 'rect') {
-                    obj = new fabric.Rect({
-                        left: element.x,
-                        top: element.y,
-                        width: element.width,
-                        height: element.height,
-                        fill: element.fill,
-                        stroke: element.stroke,
-                        strokeWidth: element.strokeWidth,
-                        rx: element.cornerRadius || 0,
-                        ry: element.cornerRadius || 0,
-                    });
-                } else if (element.shapeType === 'circle') {
-                    obj = new fabric.Circle({
-                        left: element.x,
-                        top: element.y,
-                        radius: element.width / 2,
-                        fill: element.fill,
-                        stroke: element.stroke,
-                        strokeWidth: element.strokeWidth,
-                    });
-                }
-                break;
-        }
-
-        if (obj) {
-            // Store element ID and metadata
-            (obj as any).id = element.id;
-            (obj as any).name = element.name;
-
-            // Apply common properties
-            obj.set({
-                angle: element.rotation,
-                opacity: element.opacity,
-                selectable: !element.locked,
-                evented: !element.locked,
-            });
-        }
-
-        return obj;
-    }
-
-    /**
-     * Sync element updates to Fabric object
-     */
-    private syncElementToFabric(fabricObject: fabric.FabricObject, updates: Partial<Element>): void {
-        const props: any = {};
-
-        if (updates.x !== undefined) props.left = updates.x;
-        if (updates.y !== undefined) props.top = updates.y;
-        if (updates.width !== undefined) props.width = updates.width;
-        if (updates.height !== undefined) props.height = updates.height;
-        if (updates.rotation !== undefined) props.angle = updates.rotation;
-        if (updates.opacity !== undefined) props.opacity = updates.opacity;
-        if (updates.locked !== undefined) {
-            props.selectable = !updates.locked;
-            props.evented = !updates.locked;
-        }
-
-        fabricObject.set(props);
-    }
-
-    /**
-     * Extract element data from Fabric object
-     */
-    private syncFabricToElement(fabricObject: fabric.FabricObject): Element | null {
-        const id = (fabricObject as any).id;
-        const name = (fabricObject as any).name || 'Untitled';
-
-        if (!id) {
-            console.warn('[CanvasManager] Fabric object missing ID');
-            return null;
-        }
-
-        // Base properties common to all elements
-        const base = {
-            id,
-            name,
-            x: fabricObject.left || 0,
-            y: fabricObject.top || 0,
-            width: fabricObject.width || 0,
-            height: fabricObject.height || 0,
-            rotation: fabricObject.angle || 0,
-            opacity: fabricObject.opacity || 1,
-            locked: !fabricObject.selectable,
-            visible: fabricObject.visible !== false,
-            zIndex: 0, // TODO: Calculate from canvas order
-        };
-
-        // Type-specific properties (simplified for POC)
-        if (fabricObject instanceof fabric.Textbox) {
-            return {
-                ...base,
-                type: 'text',
-                text: fabricObject.text || '',
-                fontFamily: fabricObject.fontFamily || 'Arial',
-                fontSize: fabricObject.fontSize || 16,
-                fontStyle: 'normal',
-                fill: fabricObject.fill as string || '#000000',
-                align: (fabricObject.textAlign as any) || 'left',
-                verticalAlign: 'top',
-                lineHeight: 1.2,
-                letterSpacing: 0,
-                textDecoration: '',
-                isDynamic: false,
-            };
-        } else if (fabricObject instanceof fabric.Rect) {
-            return {
-                ...base,
-                type: 'shape',
-                shapeType: 'rect',
-                fill: fabricObject.fill as string || '#000000',
-                stroke: fabricObject.stroke as string || '#000000',
-                strokeWidth: fabricObject.strokeWidth || 0,
-                cornerRadius: fabricObject.rx || 0,
-            };
-        } else if (fabricObject instanceof fabric.Circle) {
-            return {
-                ...base,
-                type: 'shape',
-                shapeType: 'circle',
-                fill: fabricObject.fill as string || '#000000',
-                stroke: fabricObject.stroke as string || '#000000',
-                strokeWidth: fabricObject.strokeWidth || 0,
-            };
-        }
-
-        return null;
-    }
-
-    /**
-     * Start performance monitoring
-     */
-    private startPerformanceMonitoring(): void {
-        console.log('[CanvasManager] Starting performance monitoring');
-
-        // Measure FPS during render
-        const measureFPS = () => {
-            this.metrics.frames++;
-            const now = performance.now();
-            const delta = now - this.metrics.lastTime;
-
-            if (delta >= 1000) {
-                this.metrics.fps = Math.round((this.metrics.frames * 1000) / delta);
-                this.metrics.frames = 0;
-                this.metrics.lastTime = now;
-
-                // Only log if FPS drops below threshold
-                if (this.metrics.fps < 55) {
-                    console.warn(`[CanvasManager] Low FPS: ${this.metrics.fps}`);
-                }
-            }
-        };
-
-        // Monitor during canvas renders
-        if (this.canvas) {
-            this.canvas.on('after:render', measureFPS);
-        }
-
-        // Log metrics every 5 seconds
-        this.metricsInterval = window.setInterval(() => {
-            console.log('[CanvasManager] Performance Metrics:', {
-                fps: this.metrics.fps,
-                lastSnapDuration: this.metrics.lastSnapDuration.toFixed(2) + 'ms',
-                elementCount: this.elementMap.size,
-            });
-        }, 5000);
-    }
-
-    /**
-     * Stop performance monitoring
-     */
-    private stopPerformanceMonitoring(): void {
-        if (this.metricsInterval) {
-            clearInterval(this.metricsInterval);
-            this.metricsInterval = null;
-        }
-
-        if (this.canvas) {
-            this.canvas.off('after:render');
-        }
-    }
-
-    /**
-     * Get current performance metrics
+     * Get current performance metrics (delegates to PerformanceMonitor)
      */
     getPerformanceMetrics(): PerformanceMetrics {
-        return { ...this.metrics };
+        return this.performanceMonitor.getMetrics();
     }
 }
