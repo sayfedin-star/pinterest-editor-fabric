@@ -15,14 +15,12 @@ import {
     Lock,
     Unlock
 } from 'lucide-react';
-import { useElementsStore } from '@/stores/elementsStore';
-import { useSelectionStore } from '@/stores/selectionStore';
 import { useEditorStore } from '@/stores/editorStore';
 import { cn } from '@/lib/utils';
 
 /**
  * ArrangePanel - Layer order, alignment, and position controls
- * Used as a tab in RightPanel when an element is selected
+ * Uses editorStore exclusively for proper canvas synchronization
  */
 export function ArrangePanel() {
     const [aspectRatioLock, setAspectRatioLock] = useState(true);
@@ -34,21 +32,18 @@ export function ArrangePanel() {
     const [localY, setLocalY] = useState('');
     const [localRotation, setLocalRotation] = useState('');
 
-    // Stores
-    const elements = useElementsStore((s) => s.elements);
-    const updateElement = useElementsStore((s) => s.updateElement);
-    const selectedIds = useSelectionStore((s) => s.selectedIds);
+    // All from editorStore for proper canvas sync
+    const elements = useEditorStore((s) => s.elements);
+    const selectedIds = useEditorStore((s) => s.selectedIds);
+    const updateElement = useEditorStore((s) => s.updateElement);
+    const moveElementForward = useEditorStore((s) => s.moveElementForward);
+    const moveElementBackward = useEditorStore((s) => s.moveElementBackward);
+    const moveElementToFront = useEditorStore((s) => s.moveElementToFront);
+    const moveElementToBack = useEditorStore((s) => s.moveElementToBack);
+    const alignElement = useEditorStore((s) => s.alignElement);
+    const pushHistory = useEditorStore((s) => s.pushHistory);
+
     const selectedId = selectedIds[0] || null;
-
-    const {
-        moveElementForward,
-        moveElementBackward,
-        moveElementToFront,
-        moveElementToBack,
-        alignElement,
-        pushHistory
-    } = useEditorStore();
-
     const selectedElement = selectedId ? elements.find((el) => el.id === selectedId) : null;
 
     // Sync local values when selection changes

@@ -5,15 +5,24 @@ import { useEditorStore } from '@/stores/editorStore';
 import { TextElement, ImageElement } from '@/types/editor';
 import { CanvasSizeSection } from './CanvasSizeSection';
 import {
-    LayerOrderSection,
-    AlignmentSection,
-    PositionSection,
     AppearanceSection,
     TextPropertiesSection,
     ImagePropertiesSection,
     EffectsSection
 } from './properties';
 
+/**
+ * PropertiesPanel - Element-specific properties
+ * 
+ * Shows:
+ * - Canvas size (when no element selected)
+ * - Appearance (opacity)
+ * - Text properties (font, size, color, etc.)
+ * - Image properties
+ * - Effects (shadow, stroke, etc.)
+ * 
+ * NOTE: Layer order, alignment, and position controls are in the Arrange tab
+ */
 export function PropertiesPanel() {
     const elements = useEditorStore((s) => s.elements);
     const selectedIds = useEditorStore((s) => s.selectedIds);
@@ -35,6 +44,7 @@ export function PropertiesPanel() {
                         </svg>
                     </div>
                     <p className="text-sm">Select an element to edit its properties</p>
+                    <p className="text-xs mt-1 text-gray-400">Use the Arrange tab for positioning</p>
                 </div>
             </div>
         );
@@ -45,16 +55,7 @@ export function PropertiesPanel() {
 
     return (
         <div className="space-y-6" data-testid="properties-panel">
-            {/* Layer Order */}
-            <LayerOrderSection element={selectedElement} />
-
-            {/* Alignment */}
-            <AlignmentSection element={selectedElement} selectedIds={selectedIds} />
-
-            {/* Position & Size */}
-            <PositionSection element={selectedElement} />
-
-            {/* Appearance */}
+            {/* Appearance (opacity) */}
             <AppearanceSection element={selectedElement} />
 
             {/* Text Properties */}
@@ -71,7 +72,13 @@ export function PropertiesPanel() {
             {isText && (
                 <EffectsSection element={selectedElement as TextElement} />
             )}
+
+            {/* Hint to use Arrange tab */}
+            <div className="text-center py-3 text-xs text-gray-400 border-t border-gray-100">
+                Use the <strong>Arrange</strong> tab for layer order, alignment, and position
+            </div>
         </div>
     );
 }
+
 
