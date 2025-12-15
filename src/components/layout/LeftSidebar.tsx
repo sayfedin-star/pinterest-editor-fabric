@@ -1,335 +1,245 @@
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState } from 'react';
 import {
+    MousePointer2,
+    FileText,
+    Table2,
+    StickyNote,
     Type,
-    Image,
-    Square,
-    LayoutGrid,
-    ChevronDown,
-    ChevronUp,
-    Grid3X3,
-    Keyboard,
-    RefreshCw,
-    Loader2,
-    Layout,
-    MoreVertical,
-    Trash2,
-    Copy,
-    Edit2
+    Shapes,
+    Pen,
+    Frame,
+    Smile,
+    MessageCircle,
+    Plus,
+    Upload,
+    FilePlus
 } from 'lucide-react';
-import { useTemplateStore } from '@/stores/templateStore';
-import { useEditorStore } from '@/stores/editorStore'; // Keep for loadTemplate, element creation
+import { useEditorStore } from '@/stores/editorStore';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
-import {
-    getTemplates,
-    getTemplate,
-    deleteTemplate,
-    duplicateTemplate,
-    TemplateListItem
-} from '@/lib/db/templates';
-import { deleteTemplateAssets } from '@/lib/canvasUtils';
-import { isSupabaseConfigured, getCurrentUserId } from '@/lib/supabase';
 import { TemplateGallery } from '@/components/gallery/TemplateGallery';
-import { TemplateListSkeleton } from '@/components/ui/Skeleton';
+import { CanvaImportModal } from '@/components/import/CanvaImportModal';
 
-// Section Header Component
-function SectionHeader({ title }: { title: string }) {
-    return (
-        <h3 className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider px-3 py-2">
-            {title}
-        </h3>
-    );
-}
+type ToolType = 'pointer' | 'templates' | 'table' | 'page' | 'text' | 'elements' | 'draw' | 'frame' | 'emoji' | 'comments' | 'more';
 
-// Element Button Component
-function ElementButton({
-    icon: Icon,
-    label,
-    onClick,
-    isActive = false
-}: {
+interface ToolButtonProps {
     icon: React.ElementType;
     label: string;
-    onClick: () => void;
+    shortcut?: string;
     isActive?: boolean;
-}) {
+    isHighlighted?: boolean;
+    onClick: () => void;
+}
+
+/**
+ * Individual tool button with tooltip
+ */
+function ToolButton({ icon: Icon, label, shortcut, isActive, isHighlighted, onClick }: ToolButtonProps) {
+    const [showTooltip, setShowTooltip] = useState(false);
+
     return (
-        <button
-            onClick={onClick}
-            className={cn(
-                "w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200",
-                "hover:scale-[1.02] active:scale-[0.98]",
-                isActive
-                    ? "bg-blue-50 text-blue-700 border-l-4 border-blue-500"
-                    : "text-gray-700 hover:bg-white hover:shadow-sm"
+        <div className="relative">
+            <button
+                onClick={onClick}
+                onMouseEnter={() => setShowTooltip(true)}
+                onMouseLeave={() => setShowTooltip(false)}
+                className={cn(
+                    "w-11 h-11 flex items-center justify-center rounded-lg transition-all duration-150",
+                    isActive && "bg-gray-800 text-white",
+                    isHighlighted && !isActive && "bg-blue-100 text-blue-600",
+                    !isActive && !isHighlighted && "text-gray-600 hover:bg-gray-100"
+                )}
+            >
+                <Icon className="w-5 h-5" strokeWidth={1.5} />
+            </button>
+
+            {/* Tooltip */}
+            {showTooltip && (
+                <div className="absolute left-full ml-2 top-1/2 -translate-y-1/2 z-50 pointer-events-none">
+                    <div className="bg-gray-800 text-white text-sm px-2.5 py-1.5 rounded-md whitespace-nowrap flex items-center gap-2">
+                        <span>{label}</span>
+                        {shortcut && (
+                            <span className="text-gray-400 text-xs bg-gray-700 px-1.5 py-0.5 rounded">
+                                {shortcut}
+                            </span>
+                        )}
+                    </div>
+                    {/* Arrow */}
+                    <div className="absolute -left-1 top-1/2 -translate-y-1/2 w-2 h-2 bg-gray-800 rotate-45" />
+                </div>
             )}
-            style={{ minHeight: '40px' }}
-        >
-            <Icon className="w-5 h-5 flex-shrink-0" strokeWidth={2} />
-            <span>{label}</span>
-        </button>
+        </div>
     );
 }
 
+/**
+ * Left Sidebar - Canva-style vertical toolbar
+ */
 export function LeftSidebar() {
-    // Template state from templateStore
-    const templateId = useTemplateStore((s) => s.templateId);
-    const storeTemplates = useTemplateStore((s) => s.templates);
-    const setTemplates = useTemplateStore((s) => s.setTemplates);
-    const resetTemplate = useTemplateStore((s) => s.resetTemplate);
-
-    // Keep editorStore for complex actions (loadTemplate, element creation)
-    const loadTemplate = useEditorStore((s) => s.loadTemplate);
-    const resetToNewTemplate = useEditorStore((s) => s.resetToNewTemplate);
-    const addText = useEditorStore((s) => s.addText);
-    const addImage = useEditorStore((s) => s.addImage);
-    const addShape = useEditorStore((s) => s.addShape);
-
-    const [menuOpen, setMenuOpen] = useState<string | null>(null);
-    const [isLoading, setIsLoading] = useState(false);
-    const [isLoadingTemplate, setIsLoadingTemplate] = useState<string | null>(null);
-    const [localTemplates, setLocalTemplates] = useState<TemplateListItem[]>([]);
+    const [activeTool, setActiveTool] = useState<ToolType>('pointer');
     const [isGalleryOpen, setIsGalleryOpen] = useState(false);
-    const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+    const [isCanvaImportOpen, setIsCanvaImportOpen] = useState(false);
 
-    // Fetch templates from database
-    const fetchTemplates = useCallback(async () => {
-        if (!isSupabaseConfigured()) {
-            setLocalTemplates([]);
-            return;
+    // Editor actions
+    const addText = useEditorStore((s) => s.addText);
+    const addShape = useEditorStore((s) => s.addShape);
+    const addImage = useEditorStore((s) => s.addImage);
+    const resetToNewTemplate = useEditorStore((s) => s.resetToNewTemplate);
+
+    // Tool handlers
+    const handleToolClick = (tool: ToolType) => {
+        setActiveTool(tool);
+
+        switch (tool) {
+            case 'text':
+                addText();
+                toast.success('Text element added');
+                break;
+            case 'elements':
+                addShape('rect');
+                toast.success('Shape element added');
+                break;
+            case 'templates':
+                setIsGalleryOpen(true);
+                break;
+            case 'more':
+                toast.info('More tools coming soon!');
+                break;
+            default:
+                break;
         }
-
-        setIsLoading(true);
-        try {
-            const templates = await getTemplates();
-            setLocalTemplates(templates);
-            setTemplates(templates.map(t => ({
-                id: t.id,
-                name: t.name,
-                thumbnail_url: t.thumbnail_url || undefined
-            })));
-        } catch (error) {
-            console.error('Error fetching templates:', error);
-            toast.error('Failed to load templates');
-        } finally {
-            setIsLoading(false);
-        }
-    }, [setTemplates]);
-
-    // Fetch templates on mount
-    useEffect(() => {
-        fetchTemplates();
-    }, [fetchTemplates]);
-
-    // Use database templates if available
-    const displayTemplates = localTemplates.length > 0 ? localTemplates :
-        (storeTemplates.length > 0 ? storeTemplates.map(t => ({
-            ...t,
-            category: null,
-            created_at: '',
-            updated_at: '',
-            thumbnail_url: t.thumbnail_url || null
-        })) : []);
-
-    // Handle template selection
-    const handleSelectTemplate = async (template: TemplateListItem) => {
-        if (template.id === templateId) return;
-
-        setIsLoadingTemplate(template.id);
-        try {
-            const fullTemplate = await getTemplate(template.id);
-
-            if (fullTemplate) {
-                loadTemplate({
-                    id: fullTemplate.id,
-                    name: fullTemplate.name,
-                    elements: fullTemplate.elements,
-                    background_color: fullTemplate.background_color,
-                    canvas_size: fullTemplate.canvas_size,
-                });
-                toast.success(`Loaded "${template.name}"`);
-            } else {
-                loadTemplate({
-                    id: template.id,
-                    name: template.name,
-                    elements: [],
-                    background_color: '#FFFFFF'
-                });
-            }
-        } catch (error) {
-            console.error('Error loading template:', error);
-            toast.error('Failed to load template');
-        } finally {
-            setIsLoadingTemplate(null);
-        }
-
-        setMenuOpen(null);
-        setIsSidebarOpen(false);
     };
 
-    // Handle template deletion
-    const handleDelete = async (templateItem: TemplateListItem, e: React.MouseEvent) => {
-        e.stopPropagation();
-
-        const confirmed = window.confirm(
-            `Delete "${templateItem.name}"? This action cannot be undone.`
-        );
-        if (!confirmed) return;
-
-        try {
-            const userId = await getCurrentUserId();
-            const success = await deleteTemplate(templateItem.id);
-
-            if (success) {
-                if (userId) {
-                    await deleteTemplateAssets(templateItem.id, userId);
-                }
-                await fetchTemplates();
-
-                if (templateItem.id === templateId) {
-                    resetToNewTemplate();
-                }
-
-                toast.success(`Deleted "${templateItem.name}"`);
-            } else {
-                throw new Error('Delete failed');
-            }
-        } catch (error) {
-            console.error('Error deleting template:', error);
-            toast.error('Failed to delete template');
-        }
-
-        setMenuOpen(null);
+    const handleNewTemplate = () => {
+        resetToNewTemplate();
+        toast.success('New template created');
     };
 
-    // Handle template duplication
-    const handleDuplicate = async (templateItem: TemplateListItem, e: React.MouseEvent) => {
-        e.stopPropagation();
-
-        try {
-            const duplicated = await duplicateTemplate(templateItem.id);
-
-            if (duplicated) {
-                await fetchTemplates();
-                toast.success(`Duplicated "${templateItem.name}"`);
-            } else {
-                throw new Error('Duplicate failed');
-            }
-        } catch (error) {
-            console.error('Error duplicating template:', error);
-            toast.error('Failed to duplicate template');
-        }
-
-        setMenuOpen(null);
-    };
-
-    const handleRename = (templateItem: TemplateListItem, e: React.MouseEvent) => {
-        e.stopPropagation();
-        toast.info('Rename feature coming soon');
-        setMenuOpen(null);
-    };
-
-    const handleKeyboardShortcuts = () => {
-        toast.info('Press ? to view keyboard shortcuts');
+    const handleImportCanva = () => {
+        setIsCanvaImportOpen(true);
     };
 
     return (
         <>
-            {/* Toggle Button for Mobile/Tablet */}
-            <button
-                onClick={() => setIsSidebarOpen(!isSidebarOpen)}
-                className="lg:hidden fixed top-16 left-2 z-50 p-2 bg-white rounded-lg shadow-lg border border-gray-200 hover:bg-gray-50 transition-colors"
-                aria-label="Toggle sidebar"
-            >
-                <svg className="w-5 h-5 text-gray-700" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
-                </svg>
-            </button>
-
-            {/* Overlay for Mobile */}
-            {isSidebarOpen && (
-                <div
-                    className="lg:hidden fixed inset-0 bg-black/50 z-40 transition-opacity"
-                    onClick={() => setIsSidebarOpen(false)}
-                />
-            )}
-
-            {/* Sidebar */}
             <aside
-                className={cn(
-                    "w-64 bg-gray-50 border-r border-gray-200 flex flex-col h-full transition-transform duration-300 ease-in-out",
-                    "lg:relative lg:translate-x-0 fixed z-40",
-                    isSidebarOpen ? "translate-x-0" : "-translate-x-full"
-                )}
-                data-testid="left-sidebar"
+                className="w-16 bg-white border-r border-gray-200 flex flex-col h-full"
+                aria-label="Editor tools"
             >
-                {/* ELEMENTS Section */}
-                <div className="p-2">
-                    <SectionHeader title="Elements" />
-                    <div className="space-y-1">
-                        <ElementButton
-                            icon={Type}
-                            label="Add Text"
-                            onClick={() => {
-                                addText();
-                                toast.success('Text element added');
-                                setIsSidebarOpen(false);
-                            }}
-                        />
-                        <ElementButton
-                            icon={Image}
-                            label="Add Image"
-                            onClick={() => {
-                                addImage();
-                                toast.success('Image placeholder added');
-                                setIsSidebarOpen(false);
-                            }}
-                        />
-                        <ElementButton
-                            icon={Square}
-                            label="Add Shape"
-                            onClick={() => {
-                                addShape('rect');
-                                toast.success('Shape added');
-                                setIsSidebarOpen(false);
-                            }}
-                        />
-                        <ElementButton
-                            icon={LayoutGrid}
-                            label="Add Frame"
-                            onClick={() => {
-                                toast.info('Frame feature coming soon');
-                            }}
-                        />
-                    </div>
+                {/* Tools Section - Scrollable */}
+                <div className="flex-1 overflow-y-auto py-2 px-2 space-y-1">
+                    <ToolButton
+                        icon={MousePointer2}
+                        label="Selection"
+                        shortcut="V"
+                        isHighlighted={activeTool === 'pointer'}
+                        onClick={() => handleToolClick('pointer')}
+                    />
+                    <ToolButton
+                        icon={FileText}
+                        label="Templates"
+                        onClick={() => handleToolClick('templates')}
+                    />
+                    <ToolButton
+                        icon={Table2}
+                        label="Table"
+                        onClick={() => handleToolClick('table')}
+                    />
+                    <ToolButton
+                        icon={StickyNote}
+                        label="Page"
+                        onClick={() => handleToolClick('page')}
+                    />
+                    <ToolButton
+                        icon={Type}
+                        label="Text"
+                        shortcut="T"
+                        isActive={activeTool === 'text'}
+                        onClick={() => handleToolClick('text')}
+                    />
+                    <ToolButton
+                        icon={Shapes}
+                        label="Elements"
+                        shortcut="E"
+                        isActive={activeTool === 'elements'}
+                        onClick={() => handleToolClick('elements')}
+                    />
+                    <ToolButton
+                        icon={Pen}
+                        label="Draw"
+                        onClick={() => handleToolClick('draw')}
+                    />
+                    <ToolButton
+                        icon={Frame}
+                        label="Frame"
+                        onClick={() => handleToolClick('frame')}
+                    />
+                    <ToolButton
+                        icon={Smile}
+                        label="Emoji"
+                        onClick={() => handleToolClick('emoji')}
+                    />
+                    <ToolButton
+                        icon={MessageCircle}
+                        label="Comments"
+                        onClick={() => handleToolClick('comments')}
+                    />
+                    <ToolButton
+                        icon={Plus}
+                        label="More"
+                        onClick={() => handleToolClick('more')}
+                    />
                 </div>
 
+                {/* Spacer */}
+                <div className="flex-grow" />
 
+                {/* Templates Section - Fixed at Bottom */}
+                <div className="p-2 border-t border-gray-200">
+                    {/* MY TEMPLATES Label */}
+                    <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider px-1 mb-2">
+                        My Templates
+                    </p>
 
-                {/* Bottom Action */}
-                <div className="p-3 border-t border-gray-200">
+                    {/* Import Canva Button */}
                     <button
-                        onClick={() => {
-                            resetToNewTemplate();
-                            toast.success('New template created');
-                            setIsSidebarOpen(false);
+                        onClick={handleImportCanva}
+                        className="w-full flex items-center justify-center gap-1.5 px-2 py-2 rounded-lg text-white text-xs font-medium mb-2 transition-all hover:opacity-90"
+                        style={{
+                            background: 'linear-gradient(135deg, #9333EA, #7C3AED)'
                         }}
-                        className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-blue-600 text-white hover:bg-blue-700 font-medium text-sm transition-all shadow-sm hover:shadow-md"
                     >
-                        <Layout className="w-4 h-4" />
-                        New Template
+                        <Upload className="w-3.5 h-3.5" />
+                        <span>Import Canva</span>
+                    </button>
+
+                    {/* New Template Button */}
+                    <button
+                        onClick={handleNewTemplate}
+                        className="relative w-full flex items-center justify-center gap-1.5 px-2 py-2 rounded-lg bg-blue-600 text-white text-xs font-medium hover:bg-blue-700 transition-colors"
+                    >
+                        {/* Notification Badge */}
+                        <div className="absolute -top-1 -left-1 w-4 h-4 bg-red-500 rounded-full flex items-center justify-center text-[9px] font-bold border-2 border-white">
+                            N
+                        </div>
+                        <FilePlus className="w-3.5 h-3.5" />
+                        <span>New Template</span>
                     </button>
                 </div>
-
-                {/* Template Gallery Modal */}
-                <TemplateGallery
-                    isOpen={isGalleryOpen}
-                    onClose={() => setIsGalleryOpen(false)}
-                />
             </aside>
+
+            {/* Template Gallery Modal */}
+            <TemplateGallery
+                isOpen={isGalleryOpen}
+                onClose={() => setIsGalleryOpen(false)}
+            />
+
+            {/* Canva Import Modal */}
+            <CanvaImportModal
+                isOpen={isCanvaImportOpen}
+                onClose={() => setIsCanvaImportOpen(false)}
+            />
         </>
     );
 }
-
