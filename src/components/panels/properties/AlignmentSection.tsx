@@ -9,6 +9,7 @@ import {
     AlignHorizontalJustifyCenter,
     AlignHorizontalJustifyEnd
 } from 'lucide-react';
+import { DistributeHorizontal, DistributeVertical } from '@/components/icons';
 import { useEditorStore } from '@/stores/editorStore';
 import { Element } from '@/types/editor';
 import { SectionHeader } from './shared';
@@ -144,26 +145,20 @@ export function AlignmentSection({ element, selectedIds, onAction }: AlignmentSe
                     <div className="flex gap-2">
                         <button
                             onClick={() => distributeSelectedElements('horizontal')}
+                            aria-label="Distribute elements horizontally"
                             title="Distribute Horizontally"
-                            className="flex-1 py-2 px-3 rounded border border-purple-300 bg-purple-50 hover:bg-purple-100 transition-colors flex items-center justify-center gap-2 text-sm text-purple-700"
+                            className="flex-1 py-2 px-3 rounded border border-purple-300 bg-purple-50 hover:bg-purple-100 transition-colors flex items-center justify-center gap-2 text-sm text-purple-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-purple-500"
                         >
-                            <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                                <rect x="2" y="8" width="4" height="8" rx="1" />
-                                <rect x="10" y="6" width="4" height="12" rx="1" />
-                                <rect x="18" y="8" width="4" height="8" rx="1" />
-                            </svg>
+                            <DistributeHorizontal className="w-4 h-4" aria-hidden="true" />
                             Horizontal
                         </button>
                         <button
                             onClick={() => distributeSelectedElements('vertical')}
+                            aria-label="Distribute elements vertically"
                             title="Distribute Vertically"
-                            className="flex-1 py-2 px-3 rounded border border-purple-300 bg-purple-50 hover:bg-purple-100 transition-colors flex items-center justify-center gap-2 text-sm text-purple-700"
+                            className="flex-1 py-2 px-3 rounded border border-purple-300 bg-purple-50 hover:bg-purple-100 transition-colors flex items-center justify-center gap-2 text-sm text-purple-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-purple-500"
                         >
-                            <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                                <rect x="8" y="2" width="8" height="4" rx="1" />
-                                <rect x="6" y="10" width="12" height="4" rx="1" />
-                                <rect x="8" y="18" width="8" height="4" rx="1" />
-                            </svg>
+                            <DistributeVertical className="w-4 h-4" aria-hidden="true" />
                             Vertical
                         </button>
                     </div>

@@ -1,6 +1,7 @@
 'use client';
 
 import React from 'react';
+import { AlignLeft, AlignCenter, AlignRight } from 'lucide-react';
 import { useEditorStore } from '@/stores/editorStore';
 import { TextElement } from '@/types/editor';
 import { cn } from '@/lib/utils';
@@ -35,36 +36,36 @@ export function TextPropertiesSection({ element }: TextPropertiesSectionProps) {
                 <div className="grid grid-cols-3 gap-2">
                     <button
                         onClick={() => handleChange({ align: 'left' })}
+                        aria-label="Align text left"
+                        aria-pressed={element.align === 'left'}
                         className={cn(
-                            "p-2 rounded border transition-colors",
+                            "p-2 rounded border transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500",
                             element.align === 'left' ? "bg-blue-50 border-blue-500" : "border-gray-300 hover:bg-gray-50"
                         )}
                     >
-                        <svg className="w-4 h-4 mx-auto" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                            <line x1="3" y1="6" x2="21" y2="6" /><line x1="3" y1="12" x2="15" y2="12" /><line x1="3" y1="18" x2="18" y2="18" />
-                        </svg>
+                        <AlignLeft className="w-4 h-4 mx-auto" aria-hidden="true" />
                     </button>
                     <button
                         onClick={() => handleChange({ align: 'center' })}
+                        aria-label="Align text center"
+                        aria-pressed={element.align === 'center'}
                         className={cn(
-                            "p-2 rounded border transition-colors",
+                            "p-2 rounded border transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500",
                             element.align === 'center' ? "bg-blue-50 border-blue-500" : "border-gray-300 hover:bg-gray-50"
                         )}
                     >
-                        <svg className="w-4 h-4 mx-auto" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                            <line x1="3" y1="6" x2="21" y2="6" /><line x1="6" y1="12" x2="18" y2="12" /><line x1="5" y1="18" x2="19" y2="18" />
-                        </svg>
+                        <AlignCenter className="w-4 h-4 mx-auto" aria-hidden="true" />
                     </button>
                     <button
                         onClick={() => handleChange({ align: 'right' })}
+                        aria-label="Align text right"
+                        aria-pressed={element.align === 'right'}
                         className={cn(
-                            "p-2 rounded border transition-colors",
+                            "p-2 rounded border transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500",
                             element.align === 'right' ? "bg-blue-50 border-blue-500" : "border-gray-300 hover:bg-gray-50"
                         )}
                     >
-                        <svg className="w-4 h-4 mx-auto" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                            <line x1="3" y1="6" x2="21" y2="6" /><line x1="9" y1="12" x2="21" y2="12" /><line x1="6" y1="18" x2="21" y2="18" />
-                        </svg>
+                        <AlignRight className="w-4 h-4 mx-auto" aria-hidden="true" />
                     </button>
                 </div>
 

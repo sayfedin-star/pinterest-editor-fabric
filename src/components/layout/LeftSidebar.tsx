@@ -4,7 +4,6 @@ import React, { useState } from 'react';
 import {
     MousePointer2,
     Type,
-    Image,
     Square,
     Upload,
     FilePlus,
@@ -15,50 +14,51 @@ import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import { TemplateGallery } from '@/components/gallery/TemplateGallery';
 import { CanvaImportModal } from '@/components/import/CanvaImportModal';
+import { RichTooltip } from '@/components/ui/RichTooltip';
 
-type ToolType = 'pointer' | 'text' | 'image' | 'shape' | 'templates';
+type ToolType = 'pointer' | 'text' | 'shape' | 'templates';
 
 interface ToolButtonProps {
     icon: React.ElementType;
     label: string;
+    description?: string;
     shortcut?: string;
     isActive?: boolean;
     onClick: () => void;
 }
 
 /**
- * Individual tool button with tooltip
+ * Individual tool button with rich tooltip
  */
-function ToolButton({ icon: Icon, label, shortcut, isActive, onClick }: ToolButtonProps) {
+function ToolButton({ icon: Icon, label, description, shortcut, isActive, onClick }: ToolButtonProps) {
     return (
-        <button
-            onClick={onClick}
-            className={cn(
-                "group relative w-12 h-12 flex items-center justify-center rounded-xl transition-all duration-200",
-                isActive
-                    ? "bg-blue-600 text-white shadow-lg shadow-blue-600/30"
-                    : "text-gray-600 hover:bg-white hover:shadow-md hover:text-gray-900"
-            )}
+        <RichTooltip
+            label={label}
+            description={description}
+            shortcut={shortcut}
+            side="right"
+            sideOffset={12}
         >
-            <Icon className="w-5 h-5" strokeWidth={1.5} />
-
-            {/* Tooltip */}
-            <div className="absolute left-full ml-3 px-3 py-1.5 bg-gray-900 text-white text-sm rounded-lg opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 whitespace-nowrap z-50 shadow-xl">
-                <span>{label}</span>
-                {shortcut && (
-                    <span className="ml-2 text-gray-400 text-xs bg-gray-800 px-1.5 py-0.5 rounded">
-                        {shortcut}
-                    </span>
+            <button
+                onClick={onClick}
+                aria-label={shortcut ? `${label}, keyboard shortcut ${shortcut}` : label}
+                aria-pressed={isActive}
+                className={cn(
+                    "group relative w-12 h-12 flex items-center justify-center rounded-xl transition-all duration-200",
+                    "focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2",
+                    isActive
+                        ? "bg-blue-600 text-white shadow-lg shadow-blue-600/30"
+                        : "text-gray-600 hover:bg-white hover:shadow-md hover:text-gray-900"
                 )}
-                {/* Arrow */}
-                <div className="absolute -left-1 top-1/2 -translate-y-1/2 w-2 h-2 bg-gray-900 rotate-45" />
-            </div>
-        </button>
+            >
+                <Icon className="w-5 h-5" strokeWidth={1.5} aria-hidden="true" />
+            </button>
+        </RichTooltip>
     );
 }
 
 /**
- * Left Sidebar - Clean vertical toolbar
+ * Left Sidebar - Clean vertical toolbar with accessible icons
  */
 export function LeftSidebar() {
     const [activeTool, setActiveTool] = useState<ToolType>('pointer');
@@ -111,6 +111,7 @@ export function LeftSidebar() {
                     <ToolButton
                         icon={MousePointer2}
                         label="Select"
+                        description="Select and move elements on canvas"
                         shortcut="V"
                         isActive={activeTool === 'pointer'}
                         onClick={() => handleToolClick('pointer')}
@@ -118,6 +119,7 @@ export function LeftSidebar() {
                     <ToolButton
                         icon={Type}
                         label="Text"
+                        description="Add a new text element"
                         shortcut="T"
                         isActive={activeTool === 'text'}
                         onClick={() => handleToolClick('text')}
@@ -125,6 +127,7 @@ export function LeftSidebar() {
                     <ToolButton
                         icon={Square}
                         label="Shape"
+                        description="Add a rectangle shape"
                         shortcut="R"
                         isActive={activeTool === 'shape'}
                         onClick={() => handleToolClick('shape')}
@@ -132,6 +135,7 @@ export function LeftSidebar() {
                     <ToolButton
                         icon={LayoutGrid}
                         label="Templates"
+                        description="Browse template gallery"
                         isActive={activeTool === 'templates'}
                         onClick={() => handleToolClick('templates')}
                     />
@@ -140,29 +144,43 @@ export function LeftSidebar() {
                 {/* Bottom Section - Templates */}
                 <div className="p-3 space-y-2">
                     {/* Import Canva Button */}
-                    <button
-                        onClick={handleImportCanva}
-                        className="w-full flex flex-col items-center justify-center gap-1 py-3 rounded-xl text-white text-xs font-semibold transition-all duration-200 hover:scale-105 hover:shadow-xl active:scale-95 shadow-lg"
-                        style={{
-                            background: 'linear-gradient(145deg, #A855F7 0%, #7C3AED 100%)'
-                        }}
+                    <RichTooltip
+                        label="Import from Canva"
+                        description="Import SVG designs exported from Canva"
+                        side="right"
                     >
-                        <Upload className="w-5 h-5" />
-                        <span>Import</span>
-                    </button>
+                        <button
+                            onClick={handleImportCanva}
+                            aria-label="Import design from Canva"
+                            className="w-full flex flex-col items-center justify-center gap-1 py-3 rounded-xl text-white text-xs font-semibold transition-all duration-200 hover:scale-105 hover:shadow-xl active:scale-95 shadow-lg focus:outline-none focus-visible:ring-2 focus-visible:ring-purple-500 focus-visible:ring-offset-2"
+                            style={{
+                                background: 'linear-gradient(145deg, #A855F7 0%, #7C3AED 100%)'
+                            }}
+                        >
+                            <Upload className="w-5 h-5" aria-hidden="true" />
+                            <span>Import</span>
+                        </button>
+                    </RichTooltip>
 
                     {/* New Template Button */}
-                    <button
-                        onClick={handleNewTemplate}
-                        className="relative w-full flex flex-col items-center justify-center gap-1 py-3 rounded-xl bg-gradient-to-br from-blue-500 to-blue-600 text-white text-xs font-semibold hover:from-blue-600 hover:to-blue-700 hover:scale-105 hover:shadow-xl active:scale-95 transition-all duration-200 shadow-lg"
+                    <RichTooltip
+                        label="New Template"
+                        description="Create a blank template"
+                        side="right"
                     >
-                        {/* Notification Badge */}
-                        <div className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 rounded-full flex items-center justify-center text-[8px] font-bold border-2 border-white shadow animate-pulse">
-                            !
-                        </div>
-                        <FilePlus className="w-5 h-5" />
-                        <span>New</span>
-                    </button>
+                        <button
+                            onClick={handleNewTemplate}
+                            aria-label="Create new blank template"
+                            className="relative w-full flex flex-col items-center justify-center gap-1 py-3 rounded-xl bg-gradient-to-br from-blue-500 to-blue-600 text-white text-xs font-semibold hover:from-blue-600 hover:to-blue-700 hover:scale-105 hover:shadow-xl active:scale-95 transition-all duration-200 shadow-lg focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"
+                        >
+                            {/* Notification Badge */}
+                            <div className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 rounded-full flex items-center justify-center text-[8px] font-bold border-2 border-white shadow animate-pulse">
+                                !
+                            </div>
+                            <FilePlus className="w-5 h-5" aria-hidden="true" />
+                            <span>New</span>
+                        </button>
+                    </RichTooltip>
                 </div>
             </aside>
 
