@@ -155,6 +155,33 @@ export function CanvasArea() {
         return () => window.removeEventListener('resize', updateDimensions);
     }, [calculateFitZoom, setZoom]);
 
+    // Center the canvas on initial load
+    useEffect(() => {
+        if (scrollRef.current && dimensions.width > 0 && dimensions.height > 0) {
+            // Small delay to ensure canvas is rendered
+            const timer = setTimeout(() => {
+                if (scrollRef.current) {
+                    const CANVAS_PADDING = 100;
+                    const canvasWidth = canvasSize.width * zoom;
+                    const canvasHeight = canvasSize.height * zoom;
+                    const totalWidth = canvasWidth + CANVAS_PADDING * 2;
+                    const totalHeight = canvasHeight + CANVAS_PADDING * 2;
+                    const viewportWidth = dimensions.width - 24; // minus rulers
+                    const viewportHeight = dimensions.height - 48; // minus rulers
+
+                    // Center horizontally and vertically
+                    const scrollLeft = Math.max(0, (totalWidth - viewportWidth) / 2);
+                    const scrollTop = Math.max(0, (totalHeight - viewportHeight) / 2);
+
+                    scrollRef.current.scrollLeft = scrollLeft;
+                    scrollRef.current.scrollTop = scrollTop;
+                }
+            }, 100);
+
+            return () => clearTimeout(timer);
+        }
+    }, [dimensions, canvasSize, zoom]);
+
     // Note: We intentionally don't auto-recalculate zoom when canvas size changes
     // This preserves the user's manual zoom setting. The user can use "Fit to Screen" 
     // button if they want to reset zoom after changing canvas size.
@@ -186,7 +213,7 @@ export function CanvasArea() {
             </div>
 
             {/* Main Canvas Container */}
-            <div className="flex-1 relative overflow-hidden">
+            <div className="flex-1 relative">
                 {/* Empty Canvas State - show when no elements */}
                 {elements.length === 0 && (
                     <EmptyCanvasState
@@ -214,8 +241,12 @@ export function CanvasArea() {
                 {/* Canvas Scroll Container with Pan Mode */}
                 <div
                     ref={scrollRef}
-                    className="absolute top-6 left-6 right-0 bottom-0 overflow-auto bg-gray-200"
-                    style={{ cursor: getCursorStyle() }}
+                    className="absolute inset-0 overflow-auto bg-gray-200"
+                    style={{
+                        cursor: getCursorStyle(),
+                        top: '24px',
+                        left: '24px'
+                    }}
                     onMouseDown={handlePanMouseDown}
                     onMouseMove={handlePanMouseMove}
                     onMouseUp={handlePanMouseUp}

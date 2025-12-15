@@ -13,7 +13,7 @@ interface DimensionBadgeProps {
 
 /**
  * Live dimension display badge shown during element resize
- * Shows "w: X h: Y" format on dark background like Canva
+ * Canva-style design with dark background and purple labels
  */
 export function DimensionBadge({ width, height, x, y, visible, zoom }: DimensionBadgeProps) {
     if (!visible) return null;
@@ -22,19 +22,24 @@ export function DimensionBadge({ width, height, x, y, visible, zoom }: Dimension
     const style: React.CSSProperties = {
         position: 'absolute',
         left: `${x * zoom}px`,
-        top: `${(y - 30) * zoom}px`,
+        top: `${(y - 35) * zoom}px`,
         transform: 'translateX(-50%)',
-        zIndex: 1000,
+        zIndex: 1002,
         pointerEvents: 'none',
+        animation: 'fadeIn 100ms ease-out',
     };
 
     return (
-        <div style={style} className="animate-fade-in">
-            <div className="bg-gray-900 text-white text-xs font-mono px-3 py-1.5 rounded-md shadow-lg flex items-center gap-2">
-                <span className="text-purple-300">w:</span>
-                <span className="font-semibold">{Math.round(width)}</span>
-                <span className="text-purple-300">h:</span>
-                <span className="font-semibold">{Math.round(height)}</span>
+        <div style={style}>
+            <div className="bg-gray-800/90 backdrop-blur-sm text-white text-[13px] font-mono px-3 py-1.5 rounded-md shadow-[0_2px_8px_rgba(0,0,0,0.2)] flex items-center gap-3">
+                <span className="flex items-center gap-1">
+                    <span className="text-purple-400 font-semibold">w:</span>
+                    <span className="font-medium">{Math.round(width)}</span>
+                </span>
+                <span className="flex items-center gap-1">
+                    <span className="text-purple-400 font-semibold">h:</span>
+                    <span className="font-medium">{Math.round(height)}</span>
+                </span>
             </div>
         </div>
     );

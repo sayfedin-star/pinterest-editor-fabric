@@ -198,6 +198,17 @@ input[type="color"]::-webkit-color-swatch {
   }
 }
 
+/* Fade in animation */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
 /* Fade in up animation */
 @keyframes fade-in-up {
   from {
@@ -230,6 +241,23 @@ input[type="color"]::-webkit-color-swatch {
 
 .animate-scale-in {
   animation: scale-in 0.2s ease-out forwards;
+}
+
+/* Slide in from right animation (for toasts) */
+@keyframes slide-in-right {
+  from {
+    opacity: 0;
+    transform: translateX(100%);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+.animate-slide-in-right {
+  animation: slide-in-right 0.3s ease-out forwards;
 }
 
 /* Button hover lift */

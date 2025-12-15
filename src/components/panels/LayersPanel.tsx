@@ -84,14 +84,14 @@ export function LayersPanel() {
                                             ref={provided.innerRef}
                                             {...provided.draggableProps}
                                             className={cn(
-                                                "flex items-center gap-2 px-3 py-2 rounded-lg cursor-pointer transition-all",
-                                                "hover:bg-gray-50 border-2",
+                                                "flex items-center gap-2.5 px-3 py-2.5 rounded-lg cursor-pointer transition-all duration-150",
+                                                "hover:bg-gray-50",
                                                 selectedId === element.id
-                                                    ? "bg-blue-50 border-blue-300"
+                                                    ? "bg-blue-50/80 border-l-[3px] border-l-blue-500 shadow-sm"
                                                     : isCanvaBackground(element)
-                                                        ? "bg-gradient-to-r from-purple-50 to-cyan-50 border-purple-200"
-                                                        : "bg-white border-transparent",
-                                                snapshot.isDragging && "shadow-lg border-blue-400"
+                                                        ? "bg-gradient-to-r from-purple-50 to-cyan-50 border-l-[3px] border-l-purple-300"
+                                                        : "bg-white border-l-[3px] border-l-transparent",
+                                                snapshot.isDragging && "shadow-lg scale-[1.02] bg-blue-50"
                                             )}
                                             onClick={() => selectElement(element.id)}
                                         >
@@ -138,8 +138,8 @@ export function LayersPanel() {
                                                     onBlur={() => pushHistory()}
                                                     onClick={(e) => e.stopPropagation()}
                                                     className={cn(
-                                                        "flex-1 text-sm bg-transparent border-none focus:outline-none min-w-0",
-                                                        "focus:bg-white focus:ring-1 focus:ring-blue-300 focus:px-1 focus:rounded"
+                                                        "flex-1 text-sm font-medium text-gray-700 bg-transparent border-none focus:outline-none min-w-0",
+                                                        "focus:bg-white focus:ring-2 focus:ring-blue-200 focus:px-2 focus:py-0.5 focus:rounded transition-all duration-150"
                                                     )}
                                                 />
                                             )}
@@ -157,7 +157,7 @@ export function LayersPanel() {
                                                     updateElement(element.id, { visible: !element.visible });
                                                     pushHistory();
                                                 }}
-                                                className="p-1 hover:bg-gray-200 rounded transition-colors flex-shrink-0"
+                                                className="p-1.5 hover:bg-gray-100 rounded-md transition-all duration-150 flex-shrink-0"
                                                 title={element.visible ? "Hide layer" : "Show layer"}
                                             >
                                                 {element.visible ? (
@@ -174,7 +174,7 @@ export function LayersPanel() {
                                                     updateElement(element.id, { locked: !element.locked });
                                                     pushHistory();
                                                 }}
-                                                className="p-1 hover:bg-gray-200 rounded transition-colors flex-shrink-0"
+                                                className="p-1.5 hover:bg-gray-100 rounded-md transition-all duration-150 flex-shrink-0"
                                                 title={element.locked ? "Unlock layer" : "Lock layer"}
                                             >
                                                 {element.locked ? (
@@ -190,7 +190,7 @@ export function LayersPanel() {
                                                     e.stopPropagation();
                                                     duplicateElement(element.id);
                                                 }}
-                                                className="p-1 hover:bg-gray-200 rounded transition-colors flex-shrink-0"
+                                                className="p-1.5 hover:bg-gray-100 rounded-md transition-all duration-150 flex-shrink-0"
                                                 title="Duplicate layer"
                                             >
                                                 <Copy className="w-4 h-4 text-gray-400" />
@@ -208,7 +208,7 @@ export function LayersPanel() {
                                                         deleteElement(element.id);
                                                     }
                                                 }}
-                                                className="p-1 hover:bg-red-100 rounded transition-colors flex-shrink-0 group/delete"
+                                                className="p-1.5 hover:bg-red-50 rounded-md transition-all duration-150 flex-shrink-0 group/delete"
                                                 title="Delete layer"
                                             >
                                                 <Trash2 className="w-4 h-4 text-gray-400 group-hover/delete:text-red-500" />

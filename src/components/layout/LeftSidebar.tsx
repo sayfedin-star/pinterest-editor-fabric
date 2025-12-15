@@ -88,6 +88,7 @@ export function LeftSidebar() {
     const [isGalleryOpen, setIsGalleryOpen] = useState(false);
     const [isQuickActionsExpanded, setIsQuickActionsExpanded] = useState(true);
     const [isTemplatesExpanded, setIsTemplatesExpanded] = useState(true);
+    const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
     // Fetch templates from database
     const fetchTemplates = useCallback(async () => {
@@ -161,6 +162,7 @@ export function LeftSidebar() {
         }
 
         setMenuOpen(null);
+        setIsSidebarOpen(false);
     };
 
     // Handle template deletion
@@ -230,239 +232,272 @@ export function LeftSidebar() {
     };
 
     return (
-        <aside className="w-64 bg-gray-50 border-r border-gray-200 flex flex-col h-full">
-            {/* ELEMENTS Section */}
-            <div className="p-2">
-                <SectionHeader title="Elements" />
-                <div className="space-y-1">
-                    <ElementButton
-                        icon={Type}
-                        label="Add Text"
-                        onClick={() => {
-                            addText();
-                            toast.success('Text element added');
-                        }}
-                    />
-                    <ElementButton
-                        icon={Image}
-                        label="Add Image"
-                        onClick={() => {
-                            addImage();
-                            toast.success('Image placeholder added');
-                        }}
-                    />
-                    <ElementButton
-                        icon={Square}
-                        label="Add Shape"
-                        onClick={() => {
-                            addShape('rect');
-                            toast.success('Shape added');
-                        }}
-                    />
-                    <ElementButton
-                        icon={LayoutGrid}
-                        label="Add Frame"
-                        onClick={() => {
-                            toast.info('Frame feature coming soon');
-                        }}
-                    />
-                </div>
-            </div>
+        <>
+            {/* Toggle Button for Mobile/Tablet */}
+            <button
+                onClick={() => setIsSidebarOpen(!isSidebarOpen)}
+                className="lg:hidden fixed top-16 left-2 z-50 p-2 bg-white rounded-lg shadow-lg border border-gray-200 hover:bg-gray-50 transition-colors"
+                aria-label="Toggle sidebar"
+            >
+                <svg className="w-5 h-5 text-gray-700" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+                </svg>
+            </button>
 
-            {/* Separator */}
-            <div className="mx-3 border-t border-gray-200" />
+            {/* Overlay for Mobile */}
+            {isSidebarOpen && (
+                <div
+                    className="lg:hidden fixed inset-0 bg-black/50 z-40 transition-opacity"
+                    onClick={() => setIsSidebarOpen(false)}
+                />
+            )}
 
-            {/* QUICK ACTIONS Section */}
-            <div className="p-2">
-                <button
-                    onClick={() => setIsQuickActionsExpanded(!isQuickActionsExpanded)}
-                    className="w-full flex items-center justify-between px-3 py-2 hover:bg-gray-100 rounded-lg transition-colors"
-                >
-                    <span className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider">
-                        Quick Actions
-                    </span>
-                    {isQuickActionsExpanded ? (
-                        <ChevronUp className="w-4 h-4 text-gray-400" />
-                    ) : (
-                        <ChevronDown className="w-4 h-4 text-gray-400" />
-                    )}
-                </button>
-
-                {isQuickActionsExpanded && (
-                    <div className="space-y-1 mt-1">
+            {/* Sidebar */}
+            <aside
+                className={cn(
+                    "w-64 bg-gray-50 border-r border-gray-200 flex flex-col h-full transition-transform duration-300 ease-in-out",
+                    "lg:relative lg:translate-x-0 fixed z-40",
+                    isSidebarOpen ? "translate-x-0" : "-translate-x-full"
+                )}
+            >
+                {/* ELEMENTS Section */}
+                <div className="p-2">
+                    <SectionHeader title="Elements" />
+                    <div className="space-y-1">
                         <ElementButton
-                            icon={Grid3X3}
-                            label="Template Gallery"
-                            onClick={() => setIsGalleryOpen(true)}
-                        />
-                        <button
-                            onClick={() => toast.info('Import Canva from header "Import Canva" button')}
-                            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 hover:scale-[1.02]"
-                            style={{
-                                background: 'linear-gradient(135deg, rgba(139,61,255,0.1), rgba(0,196,204,0.1))',
-                                color: '#7C3AED',
-                                minHeight: '40px'
+                            icon={Type}
+                            label="Add Text"
+                            onClick={() => {
+                                addText();
+                                toast.success('Text element added');
+                                setIsSidebarOpen(false);
                             }}
-                        >
-                            <svg className="w-5 h-5" viewBox="0 0 24 24" fill="currentColor">
-                                <path d="M4.5 3A1.5 1.5 0 003 4.5v15A1.5 1.5 0 004.5 21h15a1.5 1.5 0 001.5-1.5v-15A1.5 1.5 0 0019.5 3h-15zM12 7.5a4.5 4.5 0 100 9 4.5 4.5 0 000-9z" />
-                            </svg>
-                            <span>Import from Canva</span>
-                        </button>
+                        />
                         <ElementButton
-                            icon={Keyboard}
-                            label="Keyboard Shortcuts"
-                            onClick={handleKeyboardShortcuts}
+                            icon={Image}
+                            label="Add Image"
+                            onClick={() => {
+                                addImage();
+                                toast.success('Image placeholder added');
+                                setIsSidebarOpen(false);
+                            }}
+                        />
+                        <ElementButton
+                            icon={Square}
+                            label="Add Shape"
+                            onClick={() => {
+                                addShape('rect');
+                                toast.success('Shape added');
+                                setIsSidebarOpen(false);
+                            }}
+                        />
+                        <ElementButton
+                            icon={LayoutGrid}
+                            label="Add Frame"
+                            onClick={() => {
+                                toast.info('Frame feature coming soon');
+                            }}
                         />
                     </div>
-                )}
-            </div>
+                </div>
 
-            {/* Separator */}
-            <div className="mx-3 border-t border-gray-200" />
+                {/* Separator */}
+                <div className="mx-3 border-t border-gray-200" />
 
-            {/* MY TEMPLATES Section */}
-            <div className="flex-1 flex flex-col min-h-0 p-2">
-                <button
-                    onClick={() => setIsTemplatesExpanded(!isTemplatesExpanded)}
-                    className="w-full flex items-center justify-between px-3 py-2 hover:bg-gray-100 rounded-lg transition-colors"
-                >
-                    <span className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider">
-                        My Templates
-                    </span>
-                    <div className="flex items-center gap-1">
-                        <button
-                            onClick={(e) => {
-                                e.stopPropagation();
-                                fetchTemplates();
-                            }}
-                            disabled={isLoading}
-                            className="p-1 rounded hover:bg-gray-200 text-gray-400 hover:text-gray-600 transition-colors"
-                            title="Refresh"
-                        >
-                            <RefreshCw className={cn("w-3.5 h-3.5", isLoading && "animate-spin")} />
-                        </button>
-                        {isTemplatesExpanded ? (
+                {/* QUICK ACTIONS Section */}
+                <div className="p-2">
+                    <button
+                        onClick={() => setIsQuickActionsExpanded(!isQuickActionsExpanded)}
+                        className="w-full flex items-center justify-between px-3 py-2 hover:bg-gray-100 rounded-lg transition-colors"
+                    >
+                        <span className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider">
+                            Quick Actions
+                        </span>
+                        {isQuickActionsExpanded ? (
                             <ChevronUp className="w-4 h-4 text-gray-400" />
                         ) : (
                             <ChevronDown className="w-4 h-4 text-gray-400" />
                         )}
-                    </div>
-                </button>
+                    </button>
 
-                {isTemplatesExpanded && (
-                    <div className="flex-1 overflow-y-auto mt-1 space-y-1">
-                        {isLoading && displayTemplates.length === 0 ? (
-                            <div className="flex items-center justify-center py-6">
-                                <Loader2 className="w-5 h-5 animate-spin text-gray-400" />
-                            </div>
-                        ) : displayTemplates.length === 0 ? (
-                            <div className="text-center py-6 text-gray-400 text-xs">
-                                No templates yet
-                            </div>
-                        ) : (
-                            displayTemplates.map((template) => (
-                                <div
-                                    key={template.id}
-                                    onClick={() => handleSelectTemplate(template)}
-                                    className={cn(
-                                        "relative flex items-center gap-2 p-2 rounded-lg cursor-pointer transition-all group",
-                                        "hover:bg-white hover:shadow-sm hover:scale-[1.02]",
-                                        templateId === template.id
-                                            ? "bg-blue-50 border-l-4 border-blue-500"
-                                            : "border-l-4 border-transparent",
-                                        isLoadingTemplate === template.id && "opacity-50 pointer-events-none"
-                                    )}
-                                >
-                                    {/* Thumbnail */}
-                                    <div className="w-8 h-12 rounded bg-gradient-to-br from-pink-400 to-red-500 flex-shrink-0 overflow-hidden">
-                                        {template.thumbnail_url && (
-                                            <img
-                                                src={template.thumbnail_url}
-                                                alt={template.name}
-                                                className="w-full h-full object-cover"
-                                            />
+                    {isQuickActionsExpanded && (
+                        <div className="space-y-1 mt-1">
+                            <ElementButton
+                                icon={Grid3X3}
+                                label="Template Gallery"
+                                onClick={() => setIsGalleryOpen(true)}
+                            />
+                            <button
+                                onClick={() => toast.info('Import Canva from header "Import Canva" button')}
+                                className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 hover:scale-[1.02]"
+                                style={{
+                                    background: 'linear-gradient(135deg, rgba(139,61,255,0.1), rgba(0,196,204,0.1))',
+                                    color: '#7C3AED',
+                                    minHeight: '40px'
+                                }}
+                            >
+                                <svg className="w-5 h-5" viewBox="0 0 24 24" fill="currentColor">
+                                    <path d="M4.5 3A1.5 1.5 0 003 4.5v15A1.5 1.5 0 004.5 21h15a1.5 1.5 0 001.5-1.5v-15A1.5 1.5 0 0019.5 3h-15zM12 7.5a4.5 4.5 0 100 9 4.5 4.5 0 000-9z" />
+                                </svg>
+                                <span>Import from Canva</span>
+                            </button>
+                            <ElementButton
+                                icon={Keyboard}
+                                label="Keyboard Shortcuts"
+                                onClick={handleKeyboardShortcuts}
+                            />
+                        </div>
+                    )}
+                </div>
+
+                {/* Separator */}
+                <div className="mx-3 border-t border-gray-200" />
+
+                {/* MY TEMPLATES Section */}
+                <div className="flex-1 flex flex-col min-h-0 p-2">
+                    <button
+                        onClick={() => setIsTemplatesExpanded(!isTemplatesExpanded)}
+                        className="w-full flex items-center justify-between px-3 py-2 hover:bg-gray-100 rounded-lg transition-colors"
+                    >
+                        <span className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider">
+                            My Templates
+                        </span>
+                        <div className="flex items-center gap-1">
+                            <button
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    fetchTemplates();
+                                }}
+                                disabled={isLoading}
+                                className="p-1 rounded hover:bg-gray-200 text-gray-400 hover:text-gray-600 transition-colors"
+                                title="Refresh"
+                            >
+                                <RefreshCw className={cn("w-3.5 h-3.5", isLoading && "animate-spin")} />
+                            </button>
+                            {isTemplatesExpanded ? (
+                                <ChevronUp className="w-4 h-4 text-gray-400" />
+                            ) : (
+                                <ChevronDown className="w-4 h-4 text-gray-400" />
+                            )}
+                        </div>
+                    </button>
+
+                    {isTemplatesExpanded && (
+                        <div className="flex-1 overflow-y-auto mt-1 space-y-1">
+                            {isLoading && displayTemplates.length === 0 ? (
+                                <div className="flex items-center justify-center py-6">
+                                    <Loader2 className="w-5 h-5 animate-spin text-gray-400" />
+                                </div>
+                            ) : displayTemplates.length === 0 ? (
+                                <div className="text-center py-6 text-gray-400 text-xs">
+                                    No templates yet
+                                </div>
+                            ) : (
+                                displayTemplates.map((template) => (
+                                    <div
+                                        key={template.id}
+                                        onClick={() => handleSelectTemplate(template)}
+                                        className={cn(
+                                            "relative flex items-center gap-2 p-2 rounded-lg cursor-pointer transition-all group",
+                                            "hover:bg-white hover:shadow-sm hover:scale-[1.02]",
+                                            templateId === template.id
+                                                ? "bg-blue-50 border-l-4 border-blue-500"
+                                                : "border-l-4 border-transparent",
+                                            isLoadingTemplate === template.id && "opacity-50 pointer-events-none"
+                                        )}
+                                    >
+                                        {/* Thumbnail */}
+                                        <div className="w-8 h-12 rounded bg-gradient-to-br from-pink-400 to-red-500 flex-shrink-0 overflow-hidden">
+                                            {template.thumbnail_url && (
+                                                <img
+                                                    src={template.thumbnail_url}
+                                                    alt={template.name}
+                                                    className="w-full h-full object-cover"
+                                                />
+                                            )}
+                                        </div>
+
+                                        {/* Name */}
+                                        <div className="flex-1 min-w-0">
+                                            <p className="text-xs font-medium text-gray-700 truncate">
+                                                {template.name}
+                                            </p>
+                                        </div>
+
+                                        {/* Loading indicator */}
+                                        {isLoadingTemplate === template.id && (
+                                            <Loader2 className="w-3 h-3 animate-spin text-blue-500" />
+                                        )}
+
+                                        {/* Menu Button */}
+                                        <button
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                setMenuOpen(menuOpen === template.id ? null : template.id);
+                                            }}
+                                            className="p-1 rounded hover:bg-gray-100 opacity-0 group-hover:opacity-100 transition-opacity"
+                                        >
+                                            <MoreVertical className="w-3 h-3 text-gray-500" />
+                                        </button>
+
+                                        {/* Dropdown Menu */}
+                                        {menuOpen === template.id && (
+                                            <div
+                                                className="absolute right-0 top-full mt-1 w-32 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-10"
+                                                onClick={(e) => e.stopPropagation()}
+                                            >
+                                                <button
+                                                    className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-gray-700 hover:bg-gray-50"
+                                                    onClick={(e) => handleRename(template, e)}
+                                                >
+                                                    <Edit2 className="w-3 h-3" />
+                                                    Rename
+                                                </button>
+                                                <button
+                                                    className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-gray-700 hover:bg-gray-50"
+                                                    onClick={(e) => handleDuplicate(template, e)}
+                                                >
+                                                    <Copy className="w-3 h-3" />
+                                                    Duplicate
+                                                </button>
+                                                <button
+                                                    className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-red-600 hover:bg-red-50"
+                                                    onClick={(e) => handleDelete(template, e)}
+                                                >
+                                                    <Trash2 className="w-3 h-3" />
+                                                    Delete
+                                                </button>
+                                            </div>
                                         )}
                                     </div>
+                                ))
+                            )}
+                        </div>
+                    )}
+                </div>
 
-                                    {/* Name */}
-                                    <div className="flex-1 min-w-0">
-                                        <p className="text-xs font-medium text-gray-700 truncate">
-                                            {template.name}
-                                        </p>
-                                    </div>
+                {/* Bottom Action */}
+                <div className="p-3 border-t border-gray-200">
+                    <button
+                        onClick={() => {
+                            resetToNewTemplate();
+                            toast.success('New template created');
+                            setIsSidebarOpen(false);
+                        }}
+                        className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-blue-600 text-white hover:bg-blue-700 font-medium text-sm transition-all shadow-sm hover:shadow-md"
+                    >
+                        <Layout className="w-4 h-4" />
+                        New Template
+                    </button>
+                </div>
 
-                                    {/* Loading indicator */}
-                                    {isLoadingTemplate === template.id && (
-                                        <Loader2 className="w-3 h-3 animate-spin text-blue-500" />
-                                    )}
-
-                                    {/* Menu Button */}
-                                    <button
-                                        onClick={(e) => {
-                                            e.stopPropagation();
-                                            setMenuOpen(menuOpen === template.id ? null : template.id);
-                                        }}
-                                        className="p-1 rounded hover:bg-gray-100 opacity-0 group-hover:opacity-100 transition-opacity"
-                                    >
-                                        <MoreVertical className="w-3 h-3 text-gray-500" />
-                                    </button>
-
-                                    {/* Dropdown Menu */}
-                                    {menuOpen === template.id && (
-                                        <div
-                                            className="absolute right-0 top-full mt-1 w-32 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-10"
-                                            onClick={(e) => e.stopPropagation()}
-                                        >
-                                            <button
-                                                className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-gray-700 hover:bg-gray-50"
-                                                onClick={(e) => handleRename(template, e)}
-                                            >
-                                                <Edit2 className="w-3 h-3" />
-                                                Rename
-                                            </button>
-                                            <button
-                                                className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-gray-700 hover:bg-gray-50"
-                                                onClick={(e) => handleDuplicate(template, e)}
-                                            >
-                                                <Copy className="w-3 h-3" />
-                                                Duplicate
-                                            </button>
-                                            <button
-                                                className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-red-600 hover:bg-red-50"
-                                                onClick={(e) => handleDelete(template, e)}
-                                            >
-                                                <Trash2 className="w-3 h-3" />
-                                                Delete
-                                            </button>
-                                        </div>
-                                    )}
-                                </div>
-                            ))
-                        )}
-                    </div>
-                )}
-            </div>
-
-            {/* Bottom Action */}
-            <div className="p-3 border-t border-gray-200">
-                <button
-                    onClick={() => {
-                        resetToNewTemplate();
-                        toast.success('New template created');
-                    }}
-                    className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-blue-600 text-white hover:bg-blue-700 font-medium text-sm transition-all shadow-sm hover:shadow-md"
-                >
-                    <Layout className="w-4 h-4" />
-                    New Template
-                </button>
-            </div>
-
-            {/* Template Gallery Modal */}
-            <TemplateGallery
-                isOpen={isGalleryOpen}
-                onClose={() => setIsGalleryOpen(false)}
-            />
-        </aside>
+                {/* Template Gallery Modal */}
+                <TemplateGallery
+                    isOpen={isGalleryOpen}
+                    onClose={() => setIsGalleryOpen(false)}
+                />
+            </aside>
+        </>
     );
 }
+

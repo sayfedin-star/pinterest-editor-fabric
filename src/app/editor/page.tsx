@@ -11,6 +11,7 @@ import { FontLibraryPanel } from '@/components/panels/FontLibraryPanel';
 import { KeyboardShortcutsModal, useKeyboardShortcutsModal } from '@/components/ui/KeyboardShortcutsModal';
 import { DesktopOnlyMessage, useIsMobile } from '@/components/ui/DesktopOnlyMessage';
 import { CanvasErrorBoundary } from '@/components/ui/ErrorBoundary';
+import { ToastContainer } from '@/components/ui/ToastContainer';
 import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts';
 import { useAuth } from '@/lib/auth/AuthContext';
 import { Loader2 } from 'lucide-react';
@@ -92,6 +93,9 @@ export default function EditorPage() {
 
             {/* Keyboard Shortcuts Modal */}
             <KeyboardShortcutsModal isOpen={isShortcutsOpen} onClose={closeShortcuts} />
+
+            {/* Toast Notifications */}
+            <ToastContainer />
         </div>
     );
 }

@@ -2,7 +2,7 @@
 
 import React, { useState, useRef } from 'react';
 import { useRouter } from 'next/navigation';
-import { Save, Eye, Plus, LogOut, User, Upload, CheckCircle, AlertCircle } from 'lucide-react';
+import { Save, Upload, User, LogOut } from 'lucide-react';
 import { useEditorStore } from '@/stores/editorStore';
 import { useStageRef } from '@/hooks/useStageRef';
 import { cn } from '@/lib/utils';
@@ -26,37 +26,27 @@ export function Header() {
     const canvasSize = useEditorStore((s) => s.canvasSize);
     const isNewTemplate = useEditorStore((s) => s.isNewTemplate);
     const loadTemplate = useEditorStore((s) => s.loadTemplate);
-    const resetToNewTemplate = useEditorStore((s) => s.resetToNewTemplate);
 
-    // Access stage for thumbnail generation
     const stageRef = useStageRef();
     const stage = stageRef?.current;
 
-    // Auth context
     const router = useRouter();
     const { currentUser, signOut } = useAuth();
     const userId = currentUser?.id;
 
-    // Canva import modal state
     const [isCanvaImportOpen, setIsCanvaImportOpen] = useState(false);
-
-    // Template name validation state
     const [nameError, setNameError] = useState(false);
-    const [isNameFocused, setIsNameFocused] = useState(false);
     const nameInputRef = useRef<HTMLInputElement>(null);
 
     const handleSave = async () => {
-        // Validate template name
         if (!templateName.trim() || templateName === 'Untitled Template') {
             setNameError(true);
             nameInputRef.current?.focus();
             toast.error('Please name your template before saving');
-            // Remove error state after animation
             setTimeout(() => setNameError(false), 600);
             return;
         }
 
-        // Validate template has elements
         if (elements.length === 0) {
             toast.error('Add at least one element before saving');
             return;
@@ -72,17 +62,14 @@ export function Header() {
         try {
             let thumbnailUrl: string | undefined;
 
-            // Generate and upload thumbnail if stage is available
             if (stage) {
                 try {
-                    // Generate thumbnail from canvas
                     const thumbnailDataUrl = generateThumbnail(stage, {
                         maxWidth: 300,
                         maxHeight: 450,
                     });
 
                     if (thumbnailDataUrl) {
-                        // Upload to S3
                         const uploadedUrl = await uploadThumbnail(
                             templateId,
                             userId,
@@ -94,11 +81,9 @@ export function Header() {
                     }
                 } catch (thumbnailError) {
                     console.warn('Failed to generate/upload thumbnail:', thumbnailError);
-                    // Continue without thumbnail
                 }
             }
 
-            // Save to database if Supabase is configured
             if (isSupabaseConfigured()) {
                 const savedTemplate = await saveTemplateToDb({
                     id: isNewTemplate ? undefined : templateId,
@@ -110,7 +95,6 @@ export function Header() {
                 });
 
                 if (savedTemplate) {
-                    // Update store with saved template info
                     loadTemplate({
                         id: savedTemplate.id,
                         name: savedTemplate.name,
@@ -123,7 +107,6 @@ export function Header() {
                     throw new Error('Failed to save to database');
                 }
             } else {
-                // Fallback: Log data for demo/offline mode
                 const templateData = {
                     id: templateId,
                     name: templateName,
@@ -145,155 +128,111 @@ export function Header() {
         }
     };
 
-    const handleNewTemplate = () => {
-        // Ask for confirmation if there are unsaved changes
-        if (elements.length > 0) {
-            const confirmed = window.confirm(
-                'Create a new template? Any unsaved changes will be lost.'
-            );
-            if (!confirmed) return;
-        }
-
-        resetToNewTemplate();
-        toast.success('New template created');
-    };
-
     const handleLogout = async () => {
         await signOut();
         toast.success('Logged out successfully');
         router.push('/login');
     };
 
-    const handlePreview = () => {
-        toast.info('Preview feature coming soon!');
-    };
-
     return (
         <>
-            <header className="h-16 bg-white border-b border-gray-200 flex items-center justify-between px-4 z-50 flex-shrink-0">
-                {/* Left Section */}
-                <div className="flex items-center gap-4">
-                    {/* Logo */}
-                    <a
-                        href="/dashboard"
-                        className="flex items-center justify-center w-10 h-10 rounded-lg bg-gradient-to-br from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 transition-all"
-                        title="Back to Dashboard"
-                    >
-                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
-                            <path d="M8 12L11 15L16 10" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+            <header className="h-14 bg-white border-b border-gray-200 flex items-center gap-6 px-6 z-50 flex-shrink-0">
+                {/* Logo */}
+                <a
+                    href="/dashboard"
+                    className="flex items-center gap-2 text-lg font-bold text-gray-900 hover:text-blue-600 transition-colors"
+                    title="Back to Dashboard"
+                >
+                    <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-600 to-blue-700 flex items-center justify-center">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" className="text-white">
+                            <path d="M8 12L11 15L16 10" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
                         </svg>
-                    </a>
-
-                    {/* Template Name - Enhanced styling */}
-                    <div className="relative">
-                        <input
-                            ref={nameInputRef}
-                            type="text"
-                            value={templateName}
-                            onChange={(e) => {
-                                setTemplateName(e.target.value);
-                                if (nameError) setNameError(false);
-                            }}
-                            onFocus={() => setIsNameFocused(true)}
-                            onBlur={() => setIsNameFocused(false)}
-                            maxLength={50}
-                            className={cn(
-                                "text-lg font-semibold text-gray-900 rounded-lg px-3 py-1.5 min-w-[200px] max-w-[300px] outline-none transition-all duration-200",
-                                nameError && "animate-[shake_0.5s_ease-in-out] border-red-500 bg-red-50",
-                                !nameError && templateName && templateName !== 'Untitled Template'
-                                    ? "border-2 border-blue-500 bg-white pr-10"
-                                    : "border-2 border-dashed border-gray-400 bg-[#FFF9E6]"
-                            )}
-                            placeholder="Click to name your template..."
-                        />
-                        {/* Status icon */}
-                        {templateName && templateName !== 'Untitled Template' && !nameError && (
-                            <CheckCircle className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-green-500" />
-                        )}
-                        {nameError && (
-                            <AlertCircle className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-red-500" />
-                        )}
                     </div>
+                    <span className="hidden md:inline">Editor</span>
+                </a>
 
-                    {/* New Template Button */}
-                    <button
-                        onClick={handleNewTemplate}
-                        className="flex items-center gap-1 px-3 py-1.5 text-sm text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors"
-                        title="New Template"
-                    >
-                        <Plus className="w-4 h-4" />
-                        New
-                    </button>
-
-                    {/* Import from Canva Button */}
-                    <button
-                        onClick={() => setIsCanvaImportOpen(true)}
-                        className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-lg transition-all hover:opacity-90"
-                        style={{
-                            background: 'linear-gradient(135deg, #8B3DFF, #00C4CC)',
-                            color: 'white'
+                {/* Template Name */}
+                <div className="flex-1 max-w-md">
+                    <input
+                        ref={nameInputRef}
+                        type="text"
+                        value={templateName}
+                        onChange={(e) => {
+                            setTemplateName(e.target.value);
+                            if (nameError) setNameError(false);
                         }}
-                        title="Import your Canva design and add dynamic fields"
-                    >
-                        <Upload className="w-4 h-4" />
-                        Import Canva
-                    </button>
+                        maxLength={50}
+                        className={cn(
+                            "w-full text-base font-semibold px-3 py-2 rounded-lg outline-none transition-all duration-200",
+                            nameError && "animate-[shake_0.5s_ease-in-out] border-2 border-red-500 bg-red-50",
+                            !nameError && templateName && templateName !== 'Untitled Template'
+                                ? "border-2 border-transparent bg-white hover:border-gray-200 focus:border-blue-500"
+                                : "border-2 border-dashed border-gray-300 bg-gray-50 hover:bg-white"
+                        )}
+                        placeholder="Untitled Template"
+                    />
                 </div>
 
-                {/* Center Section - Preview Toggle */}
-                <div className="flex items-center gap-3">
-                    <label className="flex items-center gap-2 cursor-pointer select-none">
-                        <div className="relative">
-                            <input
-                                type="checkbox"
-                                checked={previewMode}
-                                onChange={(e) => setPreviewMode(e.target.checked)}
-                                className="sr-only peer"
-                            />
-                            <div className="w-11 h-6 bg-gray-200 peer-focus:ring-4 peer-focus:ring-blue-100 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
-                        </div>
-                        <span className="text-sm font-medium text-gray-700">Preview with data</span>
-                    </label>
-                </div>
+                {/* Import Canva Button */}
+                <button
+                    onClick={() => setIsCanvaImportOpen(true)}
+                    className="flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg transition-all hover:opacity-90 shadow-sm"
+                    style={{
+                        background: 'linear-gradient(135deg, #8B3DFF, #00C4CC)',
+                        color: 'white'
+                    }}
+                    title="Import your Canva design"
+                >
+                    <Upload className="w-4 h-4" />
+                    <span className="hidden md:inline">Import Canva</span>
+                </button>
 
-                {/* Right Section */}
-                <div className="flex items-center gap-3">
+                {/* Preview Toggle */}
+                <label className="hidden lg:flex items-center gap-2 cursor-pointer select-none">
+                    <input
+                        type="checkbox"
+                        checked={previewMode}
+                        onChange={(e) => setPreviewMode(e.target.checked)}
+                        className="sr-only peer"
+                    />
+                    <div className="w-10 h-6 bg-gray-200 peer-checked:bg-blue-600 rounded-full relative transition-colors">
+                        <div className="absolute top-1 left-1 w-4 h-4 bg-white rounded-full transition-transform peer-checked:translate-x-4"></div>
+                    </div>
+                    <span className="text-sm text-gray-700">Preview</span>
+                </label>
+
+                {/* Spacer */}
+                <div className="flex-1" />
+
+                {/* Action Buttons */}
+                <div className="flex items-center gap-2">
                     <button
                         onClick={handleSave}
                         disabled={isSaving}
                         className={cn(
-                            "flex items-center gap-2 px-6 py-2 rounded-lg font-medium text-sm transition-all",
-                            "bg-blue-600 text-white hover:bg-blue-700",
+                            "flex items-center gap-2 px-5 py-2 rounded-lg font-medium text-sm transition-all shadow-sm",
+                            "bg-blue-600 text-white hover:bg-blue-700 active:scale-95",
                             isSaving && "opacity-50 cursor-not-allowed"
                         )}
                     >
                         <Save className="w-4 h-4" />
-                        {isSaving ? 'Saving...' : 'Save Template'}
+                        {isSaving ? 'Saving...' : 'Save'}
                     </button>
 
-                    <button
-                        onClick={handlePreview}
-                        className="flex items-center gap-2 px-4 py-2 rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-50 font-medium text-sm transition-all"
-                    >
-                        <Eye className="w-4 h-4" />
-                        Preview
-                    </button>
-
-                    {/* User Info & Logout */}
-                    <div className="flex items-center gap-3 pl-3 border-l border-gray-200">
-                        <div className="flex items-center gap-2 text-sm text-gray-600">
+                    {/* User Menu */}
+                    <div className="flex items-center gap-2 pl-2 ml-2 border-l border-gray-200">
+                        <div className="hidden md:flex items-center gap-2 text-sm text-gray-600">
                             <User className="w-4 h-4" />
-                            <span className="max-w-[150px] truncate">
-                                {currentUser?.email || 'Guest'}
+                            <span className="max-w-[120px] truncate">
+                                {currentUser?.email?.split('@')[0] || 'Guest'}
                             </span>
                         </div>
                         <button
                             onClick={handleLogout}
-                            className="flex items-center gap-1 px-3 py-1.5 text-sm text-gray-600 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                            className="p-2 text-gray-600 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
                             title="Logout"
                         >
                             <LogOut className="w-4 h-4" />
-                            Logout
                         </button>
                     </div>
                 </div>
@@ -304,11 +243,9 @@ export function Header() {
                 isOpen={isCanvaImportOpen}
                 onClose={() => setIsCanvaImportOpen(false)}
                 onImportComplete={() => {
-                    // Modal closes and editor now has the background
                     toast.success('Now add dynamic text and image fields on top of your design!');
                 }}
             />
         </>
     );
 }
-

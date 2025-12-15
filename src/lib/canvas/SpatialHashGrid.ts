@@ -177,6 +177,17 @@ export class SpatialHashGrid {
     }
 
     /**
+     * Resize the grid (wrapper for rebuild)
+     */
+    resize(width: number, height: number): void {
+        this.rebuild({
+            canvasWidth: width,
+            canvasHeight: height,
+            cellSize: this.cellSize
+        });
+    }
+
+    /**
      * Rebuild the entire grid (use when canvas size changes)
      */
     rebuild(config: GridConfig): void {

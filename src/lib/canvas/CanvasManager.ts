@@ -106,6 +106,14 @@ export class CanvasManager {
             skipOffscreen: true,
         });
 
+        console.log('[CanvasManager] Canvas created with dimensions:', {
+            width: this.canvas.width,
+            height: this.canvas.height,
+            zoom: this.canvas.getZoom(),
+            configWidth: config.width,
+            configHeight: config.height,
+        });
+
         // Apply zoom if specified
         if (config.zoom && config.zoom !== 1) {
             this.setZoom(config.zoom);
@@ -179,6 +187,26 @@ export class CanvasManager {
      */
     isInitialized(): boolean {
         return this.canvas !== null && this.enabled;
+    }
+
+    /**
+     * Subscribe to canvas events
+     */
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    public on(eventName: any, handler: (e: any) => void): void {
+        if (this.canvas) {
+            this.canvas.on(eventName, handler);
+        }
+    }
+
+    /**
+     * Unsubscribe from canvas events
+     */
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    public off(eventName: any, handler: (e: any) => void): void {
+        if (this.canvas) {
+            this.canvas.off(eventName, handler);
+        }
     }
 
     /**
@@ -330,45 +358,41 @@ export class CanvasManager {
 
     /**
      * Set canvas size
+     * Set the canvas size
      */
     setCanvasSize(width: number, height: number): void {
-        if (!this.canvas || !this.config) {
-            console.error('[CanvasManager] Cannot set canvas size: canvas not initialized');
-            return;
+        console.log(`[CanvasManager] setCanvasSize: ${width}x${height} | Current Zoom: ${this.config?.zoom}`);
+        if (this.config) {
+            this.config.width = width;
+            this.config.height = height;
         }
 
-        console.log('[CanvasManager] Setting canvas size:', width, 'x', height);
+        if (this.canvas && this.config) {
+            const zoom = this.config.zoom ?? 1;
+            const scaledWidth = width * zoom;
+            const scaledHeight = height * zoom;
+            console.log(`[CanvasManager] Applying Dimensions to Fabric: ${scaledWidth}x${scaledHeight}`);
 
-        this.config.width = width;
-        this.config.height = height;
+            this.canvas.setWidth(scaledWidth);
+            this.canvas.setHeight(scaledHeight);
 
-        // Update Fabric canvas dimensions (accounting for zoom)
-        const zoom = this.canvas.getZoom();
-        this.canvas.setWidth(width * zoom);
-        this.canvas.setHeight(height * zoom);
+            this.spatialGrid?.resize(width, height);
+        }
 
-        this.canvas.renderAll();
-
-        // Re-initialize guides for new dimensions
+        // Update alignment guides center if dependent on canvas size
         if (this.guides) {
-            this.guides.init();
+            // Guides update dynamically on move, so no explicit update needed usually
         }
     }
 
     /**
-     * Set background color
+     * Set the background color
      */
     setBackgroundColor(color: string): void {
-        if (!this.canvas || !this.config) {
-            console.error('[CanvasManager] Cannot set background color: canvas not initialized');
-            return;
+        if (this.canvas) {
+            this.canvas.backgroundColor = color;
+            this.canvas.requestRenderAll();
         }
-
-        console.log('[CanvasManager] Setting background color:', color);
-
-        this.config.backgroundColor = color;
-        this.canvas.backgroundColor = color;
-        this.canvas.renderAll();
     }
 
     /**

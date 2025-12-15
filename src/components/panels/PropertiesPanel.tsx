@@ -94,12 +94,12 @@ export function PropertiesPanel() {
         <div className="space-y-6">
             {/* Layer Order Section */}
             <div>
-                <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Layer Order</h3>
-                <div className="flex gap-1">
+                <h3 className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider mb-3">LAYER ORDER</h3>
+                <div className="flex gap-2">
                     <button
                         onClick={() => handleLayerOrder('front')}
                         title="Bring to Front"
-                        className="p-2 rounded border border-gray-300 hover:bg-gray-50 transition-colors"
+                        className="flex-1 p-2.5 rounded-md border border-gray-200 hover:bg-gray-50 hover:border-gray-300 transition-all duration-150 flex items-center justify-center"
                     >
                         <ChevronsUp className="w-4 h-4" />
                     </button>
@@ -129,47 +129,47 @@ export function PropertiesPanel() {
 
             {/* Align to Page Section */}
             <div>
-                <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Align to Page</h3>
-                <div className="grid grid-cols-6 gap-1">
+                <h3 className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider mb-3">ALIGN TO PAGE</h3>
+                <div className="grid grid-cols-6 gap-1.5">
                     <button
                         onClick={() => handleAlign('left')}
                         title="Align Left"
-                        className="p-2 rounded border border-gray-300 hover:bg-gray-50 transition-colors flex items-center justify-center"
+                        className="p-2.5 rounded-md border border-gray-200 hover:bg-gray-50 hover:border-gray-300 transition-all duration-150 flex items-center justify-center"
                     >
                         <AlignHorizontalJustifyStart className="w-4 h-4" />
                     </button>
                     <button
                         onClick={() => handleAlign('center')}
                         title="Align Center"
-                        className="p-2 rounded border border-gray-300 hover:bg-gray-50 transition-colors flex items-center justify-center"
+                        className="p-2.5 rounded-md border border-gray-200 hover:bg-gray-50 hover:border-gray-300 transition-all duration-150 flex items-center justify-center"
                     >
                         <AlignHorizontalJustifyCenter className="w-4 h-4" />
                     </button>
                     <button
                         onClick={() => handleAlign('right')}
                         title="Align Right"
-                        className="p-2 rounded border border-gray-300 hover:bg-gray-50 transition-colors flex items-center justify-center"
+                        className="p-2.5 rounded-md border border-gray-200 hover:bg-gray-50 hover:border-gray-300 transition-all duration-150 flex items-center justify-center"
                     >
                         <AlignHorizontalJustifyEnd className="w-4 h-4" />
                     </button>
                     <button
                         onClick={() => handleAlign('top')}
                         title="Align Top"
-                        className="p-2 rounded border border-gray-300 hover:bg-gray-50 transition-colors flex items-center justify-center"
+                        className="p-2.5 rounded-md border border-gray-200 hover:bg-gray-50 hover:border-gray-300 transition-all duration-150 flex items-center justify-center"
                     >
                         <AlignVerticalJustifyStart className="w-4 h-4" />
                     </button>
                     <button
                         onClick={() => handleAlign('middle')}
                         title="Align Middle"
-                        className="p-2 rounded border border-gray-300 hover:bg-gray-50 transition-colors flex items-center justify-center"
+                        className="p-2.5 rounded-md border border-gray-200 hover:bg-gray-50 hover:border-gray-300 transition-all duration-150 flex items-center justify-center"
                     >
                         <AlignVerticalJustifyCenter className="w-4 h-4" />
                     </button>
                     <button
                         onClick={() => handleAlign('bottom')}
                         title="Align Bottom"
-                        className="p-2 rounded border border-gray-300 hover:bg-gray-50 transition-colors flex items-center justify-center"
+                        className="p-2.5 rounded-md border border-gray-200 hover:bg-gray-50 hover:border-gray-300 transition-all duration-150 flex items-center justify-center"
                     >
                         <AlignVerticalJustifyEnd className="w-4 h-4" />
                     </button>
@@ -179,7 +179,7 @@ export function PropertiesPanel() {
             {/* Align to Selection (multi-select only) */}
             {multipleSelected && (
                 <div>
-                    <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">
+                    <h3 className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider mb-3">
                         Align Selection ({selectedIds.length} items)
                     </h3>
                     <div className="grid grid-cols-6 gap-1">
@@ -264,7 +264,7 @@ export function PropertiesPanel() {
 
             {/* Position Section */}
             <div>
-                <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Position</h3>
+                <h3 className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider mb-3">POSITION</h3>
                 <div className="grid grid-cols-2 gap-3">
                     <PropertyInput
                         label="X"
@@ -304,7 +304,7 @@ export function PropertiesPanel() {
 
             {/* Appearance Section */}
             <div>
-                <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Appearance</h3>
+                <h3 className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider mb-3">APPEARANCE</h3>
 
                 <div className="space-y-3">
                     <div className="flex items-center gap-3">
@@ -329,7 +329,7 @@ export function PropertiesPanel() {
             {/* Dynamic Field Section - only for text/image elements */}
             {(selectedElement.type === 'text' || selectedElement.type === 'image') && (
                 <div>
-                    <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Dynamic Data</h3>
+                    <h3 className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider mb-3">DYNAMIC DATA</h3>
 
                     <div className="space-y-3">
                         <DynamicFieldTooltip>
@@ -411,12 +411,12 @@ function PropertyInput({
 }) {
     return (
         <div className="flex items-center gap-2">
-            <label className="text-xs font-medium text-gray-500 w-4">{label}</label>
+            <label className="text-[11px] font-semibold text-gray-500 w-5">{label}</label>
             <input
                 type="number"
                 value={value}
                 onChange={(e) => onChange(parseInt(e.target.value) || 0)}
-                className="flex-1 h-8 px-2 border border-gray-300 rounded text-sm bg-gray-50 focus:bg-white focus:border-blue-500 focus:ring-1 focus:ring-blue-100 outline-none transition-all"
+                className="flex-1 h-9 px-3 border border-gray-200 rounded-lg text-sm bg-white focus:bg-white focus:border-blue-400 focus:ring-2 focus:ring-blue-100 outline-none transition-all duration-150"
             />
         </div>
     );
@@ -433,14 +433,14 @@ function TextPropertiesSection({ element }: { element: TextElement }) {
 
     return (
         <div>
-            <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Text</h3>
+            <h3 className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider mb-3">TEXT</h3>
 
             <div className="space-y-3">
                 <textarea
                     value={element.text}
                     onChange={(e) => handleChange({ text: e.target.value })}
                     rows={3}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm resize-none focus:border-blue-500 focus:ring-1 focus:ring-blue-100 outline-none"
+                    className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm resize-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100 outline-none transition-all duration-150"
                     placeholder="Enter text..."
                 />
 
@@ -539,7 +539,7 @@ function ImagePropertiesSection({ element }: { element: ImageElement }) {
 
     return (
         <div>
-            <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Image</h3>
+            <h3 className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider mb-3">IMAGE</h3>
 
             <div className="space-y-3">
                 <div>
@@ -549,7 +549,7 @@ function ImagePropertiesSection({ element }: { element: ImageElement }) {
                         value={element.imageUrl || ''}
                         onChange={(e) => handleChange({ imageUrl: e.target.value })}
                         placeholder="https://..."
-                        className="w-full h-9 px-3 border border-gray-300 rounded-lg text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-100 outline-none"
+                        className="w-full h-9 px-3 border border-gray-200 rounded-lg text-sm focus:border-blue-400 focus:ring-2 focus:ring-blue-100 outline-none transition-all duration-150"
                     />
                 </div>
 
@@ -629,7 +629,7 @@ function EffectsSection({ element }: { element: TextElement }) {
     return (
         <div className="space-y-6">
             <div>
-                <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Style</h3>
+                <h3 className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider mb-3">STYLE</h3>
                 <div className="grid grid-cols-4 gap-2">
                     <StyleButton
                         label="None"
@@ -759,7 +759,7 @@ function EffectsSection({ element }: { element: TextElement }) {
             )}
 
             <div>
-                <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Shape</h3>
+                <h3 className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider mb-3">SHAPE</h3>
                 <div className="grid grid-cols-4 gap-2">
                     <StyleButton
                         label="None"

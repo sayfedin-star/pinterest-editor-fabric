@@ -248,34 +248,37 @@ export function Toolbar({ onOpenFontLibrary }: ToolbarProps) {
 
             <Separator />
 
-            {/* Zoom Controls */}
-            <IconButton onClick={handleZoomOut} icon={ZoomOut} label="Zoom Out" withText />
+            {/* Zoom Controls - Grouped */}
+            <div className="flex items-center gap-1 px-1.5 py-1 bg-gray-50/50 rounded-lg border border-gray-200">
+                <IconButton onClick={handleZoomOut} icon={ZoomOut} label="Zoom Out" />
 
-            <select
-                value={zoom}
-                onChange={(e) => setZoom(parseFloat(e.target.value))}
-                className="h-8 w-16 px-1 border border-gray-300 rounded text-xs"
-            >
-                {ZOOM_LEVELS.map((level) => (
-                    <option key={level} value={level}>{Math.round(level * 100)}%</option>
-                ))}
-            </select>
+                <select
+                    value={zoom}
+                    onChange={(e) => setZoom(parseFloat(e.target.value))}
+                    className="h-7 w-[70px] px-2 border border-gray-200 rounded-md text-xs font-medium bg-white hover:border-gray-300 focus:border-blue-400 focus:ring-2 focus:ring-blue-100 outline-none transition-all duration-150"
+                >
+                    {ZOOM_LEVELS.map((level) => (
+                        <option key={level} value={level}>{Math.round(level * 100)}%</option>
+                    ))}
+                </select>
 
-            <IconButton onClick={handleZoomIn} icon={ZoomIn} label="Zoom In" withText />
+                <IconButton onClick={handleZoomIn} icon={ZoomIn} label="Zoom In" />
 
-            <button
-                onClick={() => {
-                    // Get viewport dimensions from a ref or estimate
-                    const viewportWidth = window.innerWidth - 600; // Subtract sidebars
-                    const viewportHeight = window.innerHeight - 200; // Subtract header/toolbar
-                    zoomToFit(viewportWidth, viewportHeight);
-                }}
-                title="Zoom to Fit"
-                className="h-8 px-2 border border-gray-300 rounded text-xs hover:bg-gray-50 flex items-center gap-1"
-            >
-                <Maximize2 className="w-4 h-4" />
-                <span className="hidden sm:inline">Fit</span>
-            </button>
+                <div className="w-px h-5 bg-gray-300 mx-0.5" />
+
+                <button
+                    onClick={() => {
+                        const viewportWidth = window.innerWidth - 600;
+                        const viewportHeight = window.innerHeight - 200;
+                        zoomToFit(viewportWidth, viewportHeight);
+                    }}
+                    title="Zoom to Fit (Cmd+0)"
+                    className="h-7 px-2 rounded-md text-xs font-medium hover:bg-gray-100 active:scale-95 transition-all duration-150 flex items-center gap-1.5"
+                >
+                    <Maximize2 className="w-3.5 h-3.5" />
+                    <span className="hidden sm:inline">Fit</span>
+                </button>
+            </div>
 
             <Separator />
 
@@ -307,12 +310,12 @@ function IconButton({
             disabled={disabled}
             title={label}
             className={cn(
-                "flex items-center justify-center gap-1 h-8 rounded border text-xs transition-colors",
-                withText ? "px-2" : "w-8",
+                "flex items-center justify-center gap-1.5 h-7 rounded-md border text-xs transition-all duration-150 font-medium",
+                withText ? "px-2.5" : "w-7",
                 active
                     ? "bg-blue-50 border-blue-400 text-blue-600"
-                    : "border-gray-300 hover:bg-gray-50 hover:border-gray-400",
-                disabled && "opacity-40 cursor-not-allowed hover:bg-white hover:border-gray-300"
+                    : "border-gray-200 bg-white hover:bg-gray-50 hover:border-gray-300 active:scale-95",
+                disabled && "opacity-40 cursor-not-allowed hover:bg-white hover:border-gray-200 transform-none"
             )}
         >
             <Icon className="w-4 h-4" />
