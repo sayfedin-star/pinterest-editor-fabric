@@ -57,6 +57,7 @@ export function DynamicFieldTooltip({
             }, AUTO_DISMISS_MS);
             return () => clearTimeout(timer);
         }
+        return undefined;
     }, [isVisible, isDismissed]);
 
     // Show tooltip on hover if not dismissed

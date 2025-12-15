@@ -40,6 +40,7 @@ export function FontPicker({ currentFont, onFontChange }: FontPickerProps) {
 
             return () => clearTimeout(timer);
         }
+        return undefined;
     }, [isOpen, search]);
 
     // Load current font on mount

@@ -55,6 +55,7 @@ export function EditorCanvasV2({ containerWidth, containerHeight }: EditorCanvas
 
     // Element toolbar state
     const [toolbarVisible, setToolbarVisible] = useState(false);
+    const [toolbarPosition, setToolbarPosition] = useState({ x: 0, y: 0, width: 0 });
     const [isResizing, setIsResizing] = useState(false);
 
     // Bind resizing events
@@ -313,7 +314,45 @@ export function EditorCanvasV2({ containerWidth, containerHeight }: EditorCanvas
      */
     useEffect(() => {
         setToolbarVisible(selectedIds.length > 0 && !!selectedElement);
+        // Also set initial toolbar position when selection changes
+        if (selectedElement && canvasManagerRef.current) {
+            setToolbarPosition({
+                x: selectedElement.x,
+                y: selectedElement.y,
+                width: selectedElement.width
+            });
+        }
     }, [selectedIds, selectedElement]);
+
+    /**
+     * Track live toolbar position during drag/scale/rotate
+     */
+    useEffect(() => {
+        if (!isCanvasReady || !canvasManagerRef.current) return;
+        const manager = canvasManagerRef.current;
+
+        const updateToolbarPosition = (e: any) => {
+            const obj = e.target;
+            if (!obj) return;
+            const rect = obj.getBoundingRect(true, true);
+            const currentZoom = zoom || 1;
+            setToolbarPosition({
+                x: rect.left / currentZoom,
+                y: rect.top / currentZoom,
+                width: rect.width / currentZoom
+            });
+        };
+
+        manager.on('object:moving', updateToolbarPosition);
+        manager.on('object:scaling', updateToolbarPosition);
+        manager.on('object:rotating', updateToolbarPosition);
+
+        return () => {
+            manager.off('object:moving', updateToolbarPosition);
+            manager.off('object:scaling', updateToolbarPosition);
+            manager.off('object:rotating', updateToolbarPosition);
+        };
+    }, [isCanvasReady, zoom]);
 
     /**
      * Handle Context Menu
@@ -406,9 +445,9 @@ export function EditorCanvasV2({ containerWidth, containerHeight }: EditorCanvas
                 {/* Element Toolbar */}
                 {toolbarVisible && selectedElement && (
                     <ElementToolbar
-                        x={selectedElement.x}
-                        y={selectedElement.y}
-                        width={selectedElement.width}
+                        x={toolbarPosition.x}
+                        y={toolbarPosition.y}
+                        width={toolbarPosition.width}
                         visible={true}
                         zoom={zoom}
                         isLocked={!!selectedElement.locked}
@@ -435,11 +474,11 @@ export function EditorCanvasV2({ containerWidth, containerHeight }: EditorCanvas
 
                 {/* Dimension Badge for Resizing */}
                 <DimensionBadge
-                    width={selectedElement?.width || 0}
-                    height={selectedElement?.height || 0}
-                    x={activeObjectRef.current?.left || 0}
-                    y={activeObjectRef.current?.top || 0}
-                    visible={isResizing}
+                    width={dimensionBadge.width}
+                    height={dimensionBadge.height}
+                    x={dimensionBadge.x}
+                    y={dimensionBadge.y}
+                    visible={dimensionBadge.visible}
                     zoom={zoom}
                 />
 

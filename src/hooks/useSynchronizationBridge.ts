@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { CanvasManager } from '@/lib/canvas/CanvasManager';
 import { useEditorStore } from '@/stores/editorStore';
+import { useSelectionStore } from '@/stores/selectionStore';
 import { Element } from '@/types/editor';
 
 /**
@@ -58,6 +59,9 @@ export function useSynchronizationBridge(canvasManager: CanvasManager | null) {
 
         const handleSelectionChanged = (selectedIds: string[]) => {
             console.log('[SynchronizationBridge] Selection changed:', selectedIds);
+            // Update selectionStore FIRST (source of truth for UI components)
+            useSelectionStore.getState().setSelectedIds(selectedIds);
+            // Also update editorStore for legacy consumers
             useEditorStore.setState({ selectedIds });
         };
 

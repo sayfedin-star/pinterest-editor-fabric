@@ -180,6 +180,7 @@ export function CanvasArea() {
 
             return () => clearTimeout(timer);
         }
+        return undefined;
     }, [dimensions, canvasSize, zoom]);
 
     // Note: We intentionally don't auto-recalculate zoom when canvas size changes
