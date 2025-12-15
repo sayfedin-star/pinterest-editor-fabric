@@ -2,26 +2,32 @@
  * Store Exports
  * 
  * Central export point for all stores.
- * The editorStore is being split into specialized stores for better separation of concerns.
  * 
- * Store Architecture (7 specialized stores):
+ * Architecture Decision (2025-12-15):
+ * - editorStore serves as FACADE over specialized stores
+ * - Specialized stores are the SOURCE OF TRUTH
+ * - editorStore delegates to specialized stores internally
+ * - Components can use either interface (legacy support)
+ * 
+ * Store Architecture (6 specialized stores):
  * - selectionStore: Element selection management
  * - canvasStore: Canvas size, background, zoom
  * - templateStore: Template metadata and gallery
- * - historyStore: Undo/redo with state snapshots
- * - layersStore: Layer ordering operations
+ * - layersStore: Layer ordering operations (pure functions)
  * - elementsStore: Element CRUD operations
- * - alignmentStore: Element alignment and distribution
+ * - alignmentStore: Element alignment and distribution (pure functions)
+ * 
+ * Note: historyStore was REMOVED (2025-12-15)
+ * History management stays in editorStore as it coordinates multiple stores
  */
 
-// Legacy store (still used as primary, new stores used for testing/reference)
+// Facade store (delegates to specialized stores internally)
 export { useEditorStore, useHydrated } from './editorStore';
 
-// Specialized stores (extracted from editorStore)
+// Specialized stores (source of truth)
 export { useSelectionStore } from './selectionStore';
 export { useCanvasStore } from './canvasStore';
 export { useTemplateStore } from './templateStore';
-export { useHistoryStore } from './historyStore';
 export { useLayersStore } from './layersStore';
 export { useElementsStore } from './elementsStore';
 export { useAlignmentStore } from './alignmentStore';
@@ -35,7 +41,6 @@ export { useGenerationStore } from './generationStore';
 export type { SelectionState, SelectionActions } from './selectionStore';
 export type { CanvasState, CanvasActions } from './canvasStore';
 export type { TemplateState, TemplateActions, TemplateListItem } from './templateStore';
-export type { HistoryState, HistoryActions, HistorySnapshot } from './historyStore';
 export type { LayersState, LayersActions } from './layersStore';
 export type { ElementsState, ElementsActions } from './elementsStore';
 export type { AlignmentState, AlignmentActions, Alignment, DistributeDirection } from './alignmentStore';

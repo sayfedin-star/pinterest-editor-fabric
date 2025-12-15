@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { useCanvasStore } from '@/stores/canvasStore';
 import { useElementsStore } from '@/stores/elementsStore';
-import { useHistoryStore } from '@/stores/historyStore';
+import { useEditorStore } from '@/stores/editorStore';
 import { cn } from '@/lib/utils';
 
 export function CanvasSizeSection() {
@@ -17,8 +17,8 @@ export function CanvasSizeSection() {
     const elements = useElementsStore((s) => s.elements);
     const clearElements = useElementsStore((s) => s.clearElements);
 
-    // History from historyStore
-    const pushSnapshot = useHistoryStore((s) => s.pushSnapshot);
+    // History from editorStore (single source of truth)
+    const pushHistory = useEditorStore((s) => s.pushHistory);
 
     const [width, setWidth] = useState(canvasSize.width.toString());
     const [height, setHeight] = useState(canvasSize.height.toString());
@@ -86,11 +86,7 @@ export function CanvasSizeSection() {
         setZoom(fitZoom);
 
         // Push history snapshot
-        pushSnapshot({
-            elements: [], // Elements were just cleared
-            canvasSize: { width: newWidth, height: newHeight },
-            backgroundColor,
-        });
+        pushHistory();
         setShowConfirmDialog(false);
     };
 

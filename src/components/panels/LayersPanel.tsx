@@ -22,9 +22,8 @@ import {
 } from 'lucide-react';
 import { useElementsStore } from '@/stores/elementsStore';
 import { useSelectionStore } from '@/stores/selectionStore';
-import { useHistoryStore } from '@/stores/historyStore';
 import { useCanvasStore } from '@/stores/canvasStore';
-import { useEditorStore } from '@/stores/editorStore'; // Keep for reorderElements
+import { useEditorStore } from '@/stores/editorStore'; // For reorderElements and pushHistory
 import { ImageElement, TextElement } from '@/types/editor';
 import { cn } from '@/lib/utils';
 
@@ -40,8 +39,8 @@ export function LayersPanel() {
     const selectElement = useSelectionStore((s) => s.selectElement);
     const selectedId = selectedIds[0] || null;
 
-    // History from historyStore
-    const pushSnapshot = useHistoryStore((s) => s.pushSnapshot);
+    // History from editorStore (single source of truth for history)
+    const pushHistory = useEditorStore((s) => s.pushHistory);
     const backgroundColor = useCanvasStore((s) => s.backgroundColor);
     const canvasSize = useCanvasStore((s) => s.canvasSize);
 
@@ -53,11 +52,7 @@ export function LayersPanel() {
 
     // Helper to save current state to history
     const saveHistory = () => {
-        pushSnapshot({
-            elements,
-            canvasSize,
-            backgroundColor,
-        });
+        pushHistory();
     };
 
     // Check if we have any content
