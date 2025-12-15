@@ -32,6 +32,7 @@ import {
 import { deleteTemplateAssets } from '@/lib/canvasUtils';
 import { isSupabaseConfigured, getCurrentUserId } from '@/lib/supabase';
 import { TemplateGallery } from '@/components/gallery/TemplateGallery';
+import { TemplateListSkeleton } from '@/components/ui/Skeleton';
 
 // Section Header Component
 function SectionHeader({ title }: { title: string }) {
@@ -391,9 +392,7 @@ export function LeftSidebar() {
                     {isTemplatesExpanded && (
                         <div className="flex-1 overflow-y-auto mt-1 space-y-1">
                             {isLoading && displayTemplates.length === 0 ? (
-                                <div className="flex items-center justify-center py-6">
-                                    <Loader2 className="w-5 h-5 animate-spin text-gray-400" />
-                                </div>
+                                <TemplateListSkeleton />
                             ) : displayTemplates.length === 0 ? (
                                 <div className="text-center py-6 text-gray-400 text-xs">
                                     No templates yet
