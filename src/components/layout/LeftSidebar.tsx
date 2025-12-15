@@ -124,7 +124,7 @@ export function LeftSidebar() {
     return (
         <>
             <aside
-                className="w-16 bg-white border-r border-gray-200 flex flex-col h-full"
+                className="w-40 bg-gray-50 border-r border-gray-200 flex flex-col h-full"
                 aria-label="Editor tools"
             >
                 {/* Tools Section - Scrollable */}
@@ -196,34 +196,34 @@ export function LeftSidebar() {
                 <div className="flex-grow" />
 
                 {/* Templates Section - Fixed at Bottom */}
-                <div className="p-2 border-t border-gray-200">
+                <div className="p-3 border-t border-gray-200 bg-white">
                     {/* MY TEMPLATES Label */}
-                    <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider px-1 mb-2">
+                    <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-3">
                         My Templates
                     </p>
 
                     {/* Import Canva Button */}
                     <button
                         onClick={handleImportCanva}
-                        className="w-full flex items-center justify-center gap-1.5 px-2 py-2 rounded-lg text-white text-xs font-medium mb-2 transition-all hover:opacity-90"
+                        className="w-full flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl text-white text-sm font-medium mb-2 transition-all hover:scale-[1.02] hover:shadow-lg active:scale-[0.98] shadow-md"
                         style={{
-                            background: 'linear-gradient(135deg, #9333EA, #7C3AED)'
+                            background: 'linear-gradient(135deg, #9333EA 0%, #7C3AED 100%)'
                         }}
                     >
-                        <Upload className="w-3.5 h-3.5" />
+                        <Upload className="w-4 h-4" />
                         <span>Import Canva</span>
                     </button>
 
                     {/* New Template Button */}
                     <button
                         onClick={handleNewTemplate}
-                        className="relative w-full flex items-center justify-center gap-1.5 px-2 py-2 rounded-lg bg-blue-600 text-white text-xs font-medium hover:bg-blue-700 transition-colors"
+                        className="relative w-full flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 hover:scale-[1.02] hover:shadow-lg active:scale-[0.98] transition-all shadow-md"
                     >
                         {/* Notification Badge */}
-                        <div className="absolute -top-1 -left-1 w-4 h-4 bg-red-500 rounded-full flex items-center justify-center text-[9px] font-bold border-2 border-white">
+                        <div className="absolute -top-1.5 -left-1.5 w-5 h-5 bg-red-500 rounded-full flex items-center justify-center text-[10px] font-bold border-2 border-white shadow-sm">
                             N
                         </div>
-                        <FilePlus className="w-3.5 h-3.5" />
+                        <FilePlus className="w-4 h-4" />
                         <span>New Template</span>
                     </button>
                 </div>
