@@ -64,7 +64,7 @@ export class AlignmentGuides {
         this.init();
     }
 
-    private init() {
+    init() {
         this.canvas.on('object:moving', this.onObjectMoving);
         this.canvas.on('object:scaling', this.onScaling);
         this.canvas.on('object:modified', this.onModified);
@@ -72,7 +72,7 @@ export class AlignmentGuides {
         this.canvas.on('mouse:up', this.clearLines);
     }
 
-    public dispose() {
+    dispose() {
         this.canvas.off('object:moving', this.onObjectMoving);
         this.canvas.off('object:scaling', this.onScaling);
         this.canvas.off('object:modified', this.onModified);

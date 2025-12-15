@@ -5,12 +5,19 @@ import dynamic from 'next/dynamic';
 import { useEditorStore } from '@/stores/editorStore';
 import { Hand } from 'lucide-react';
 import { EmptyCanvasState } from '@/components/canvas/EmptyCanvasState';
+import { USE_NEW_CANVAS } from '@/lib/config/features';
 
-// Dynamic import of canvas component to avoid SSR issues with Konva
-const EditorCanvas = dynamic(
-    () => import('@/components/canvas/EditorCanvas').then(mod => ({ default: mod.EditorCanvas })),
-    { ssr: false, loading: () => <CanvasLoading /> }
-);
+// Dynamic import of canvas component to avoid SSR issues with Fabric.js
+// Use EditorCanvas.v2 if feature flag is enabled
+const EditorCanvas = USE_NEW_CANVAS
+    ? dynamic(
+        () => import('@/components/canvas/EditorCanvas.v2').then(mod => ({ default: mod.EditorCanvasV2 })),
+        { ssr: false, loading: () => <CanvasLoading /> }
+    )
+    : dynamic(
+        () => import('@/components/canvas/EditorCanvas').then(mod => ({ default: mod.EditorCanvas })),
+        { ssr: false, loading: () => <CanvasLoading /> }
+    );
 
 function CanvasLoading() {
     return (

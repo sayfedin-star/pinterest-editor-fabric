@@ -66,8 +66,9 @@ export function calculateSpacing(box1: BoundingBox, box2: BoundingBox): Collisio
             { dir: 'bottom' as const, amount: box2.top + box2.height - box1.top },
         ].filter(p => p.amount > 0);
 
-        const minPenetration = penetrations.reduce((min, p) =>
-            p.amount < min.amount ? p : min, { dir: 'none' as const, amount: Infinity });
+        const minPenetration = penetrations.length > 0
+            ? penetrations.reduce((min, p) => p.amount < min.amount ? p : min)
+            : { dir: 'none' as const, amount: Infinity };
 
         return {
             collides: true,
