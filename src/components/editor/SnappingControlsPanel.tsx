@@ -141,22 +141,6 @@ export function SnappingControlsPanel() {
                 />
             </div>
 
-            {/* Presets */}
-            <div className="px-3 py-3 border-b border-gray-100">
-                <span className="text-xs font-medium text-gray-500 uppercase tracking-wider">Quick Presets</span>
-                <div className="grid grid-cols-2 gap-2 mt-2">
-                    {(['beginner', 'precision', 'freeform', 'professional'] as const).map((preset) => (
-                        <button
-                            key={preset}
-                            onClick={() => store.applyPreset(preset)}
-                            className="px-3 py-1.5 text-xs font-medium rounded-lg border border-gray-200 
-                                     hover:border-pink-300 hover:bg-pink-50 transition-colors capitalize"
-                        >
-                            {preset}
-                        </button>
-                    ))}
-                </div>
-            </div>
 
             {/* Object Snapping */}
             <Section title="Object Snapping" icon={<Square size={16} />}>
@@ -320,56 +304,6 @@ export function SnappingControlsPanel() {
                             onChange={(e) => store.setGuideColor(e.target.value)}
                             className="w-8 h-6 rounded border border-gray-200 cursor-pointer"
                         />
-                    </div>
-                </div>
-            </Section>
-
-            {/* Collision & Spacing (NEW) */}
-            <Section title="Collision & Spacing" icon={<Square size={16} />} defaultOpen={true}>
-                <Toggle
-                    label="Prevent Overlap"
-                    checked={store.preventOverlap}
-                    onChange={store.setPreventOverlap}
-                />
-                <Toggle
-                    label="Auto-Push Elements"
-                    checked={store.autoPushElements}
-                    onChange={store.setAutoPushElements}
-                    disabled={!store.preventOverlap}
-                    indent
-                />
-                <Toggle
-                    label="Collision Indicators"
-                    checked={store.collisionIndicators}
-                    onChange={store.setCollisionIndicators}
-                    disabled={!store.preventOverlap}
-                    indent
-                />
-                <Slider
-                    label="Minimum Spacing"
-                    value={store.minimumSpacing}
-                    min={0}
-                    max={50}
-                    onChange={store.setMinimumSpacing}
-                    disabled={!store.preventOverlap}
-                />
-                <div className="px-3 py-2">
-                    <span className="text-sm text-gray-700">Collision Mode</span>
-                    <div className="flex gap-1 mt-1">
-                        {(['block', 'push', 'freeform'] as const).map((mode) => (
-                            <button
-                                key={mode}
-                                onClick={() => store.setCollisionMode(mode)}
-                                disabled={!store.preventOverlap}
-                                className={`flex-1 px-2 py-1 text-xs rounded-md transition-colors capitalize
-                                    ${store.collisionMode === mode
-                                        ? 'bg-pink-500 text-white'
-                                        : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}
-                                    ${!store.preventOverlap ? 'opacity-50 cursor-not-allowed' : ''}`}
-                            >
-                                {mode}
-                            </button>
-                        ))}
                     </div>
                 </div>
             </Section>

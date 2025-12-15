@@ -3,6 +3,7 @@ import { Element } from '@/types/editor';
 import { AlignmentGuides } from '../fabric/AlignmentGuides';
 import { SnappingSettings } from '@/stores/snappingSettingsStore';
 import { SpatialHashGrid, GridElement } from './SpatialHashGrid';
+import { applyCanvaStyleControls } from '@/lib/fabric/FabricControlConfig';
 
 /**
  * Canvas configuration options
@@ -113,6 +114,9 @@ export class CanvasManager {
         // Initialize alignment guides
         this.guides = new AlignmentGuides(this.canvas);
         this.guides.init();
+
+        // Apply Canva-style controls (purple circular handles, custom rotation)
+        applyCanvaStyleControls(this.canvas);
 
         // Initialize spatial hash grid for collision optimization
         this.spatialGrid = new SpatialHashGrid({
@@ -317,6 +321,9 @@ export class CanvasManager {
             }
         }
 
+        // Re-apply Canva-style controls to all objects after replacement
+        applyCanvaStyleControls(this.canvas);
+
         this.canvas.renderAll();
         console.log('[CanvasManager] Element replacement complete');
     }
@@ -464,6 +471,10 @@ export class CanvasManager {
         this.canvas.on('selection:created', this.handleSelectionChanged);
         this.canvas.on('selection:updated', this.handleSelectionChanged);
         this.canvas.on('selection:cleared', this.handleSelectionChanged);
+
+        // Text editing events
+        this.canvas.on('mouse:dblclick', this.handleDoubleClick as any);
+        this.canvas.on('text:editing:exited', this.handleTextEditingExit as any);
     }
 
     /**
@@ -515,6 +526,55 @@ export class CanvasManager {
         const selectedIds = this.getSelection();
         console.log('[CanvasManager] Selection changed:', selectedIds);
         this.onSelectionChangedCallback(selectedIds);
+    };
+
+    /**
+     * Handle double-click to enable text editing
+     */
+    private handleDoubleClick = (event: any): void => {
+        if (!this.canvas) return;
+
+        const target = event.target;
+
+        // Only enable editing for text objects  
+        if (target && (target.type === 'textbox' || target.type === 'i-text')) {
+            const textObject = target as fabric.Textbox;
+
+            // Enter editing mode
+            textObject.enterEditing();
+            textObject.selectAll();
+
+            console.log('[CanvasManager] Text editing started:', (target as any).id);
+        }
+    };
+
+    /**
+     * Handle text editing exit to update store
+     */
+    private handleTextEditingExit = (event: any): void => {
+        if (!this.canvas || !this.onElementsChangedCallback) return;
+
+        const target = event.target;
+        if (target && (target.type === 'textbox' || target.type === 'i-text')) {
+            const textObject = target as fabric.Textbox;
+            const elementId = (target as any).id;
+
+            console.log('[CanvasManager] Text editing exited:', elementId, 'New text:', textObject.text);
+
+            // Get all elements from canvas
+            const allObjects = this.canvas.getObjects();
+            const elements: Element[] = [];
+
+            for (const obj of allObjects) {
+                const objId = (obj as any).id;
+                if (objId) {
+                    const el = this.getElementState(objId);
+                    if (el) elements.push(el);
+                }
+            }
+
+            this.onElementsChangedCallback(elements);
+        }
     };
 
     /**

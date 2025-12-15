@@ -1,6 +1,5 @@
 import * as fabric from 'fabric';
 import { useSnappingSettingsStore, SnappingSettings } from '@/stores/snappingSettingsStore';
-import { detectOverlap, calculateSpacing, getProximityColor, BoundingBox } from './CollisionDetection';
 
 // Types for graduated magnetism
 type MagneticZone = 'far' | 'near' | 'lock' | 'none';
@@ -529,92 +528,6 @@ export class AlignmentGuides {
         if (this.settings.distanceIndicators) {
             const updatedRect = activeObject.getBoundingRect();
             this.computeDistanceBadges(updatedRect, canvasObjects, activeObject, canvasWidth, canvasHeight);
-        }
-
-        // --- Collision Detection (Universal for ALL elements) ---
-        if (this.settings.preventOverlap && this.settings.collisionMode !== 'freeform') {
-            const activeBox: BoundingBox = {
-                left: activeObject.left || 0,
-                top: activeObject.top || 0,
-                width: activeRect.width,
-                height: activeRect.height,
-            };
-
-            for (const obj of canvasObjects) {
-                if (obj === activeObject || !obj.visible) continue;
-                // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                if ((obj as any).name?.includes('guide')) continue;
-
-                const objRect = obj.getBoundingRect();
-                const targetBox: BoundingBox = {
-                    left: objRect.left,
-                    top: objRect.top,
-                    width: objRect.width,
-                    height: objRect.height,
-                };
-
-                const collision = calculateSpacing(activeBox, targetBox);
-                const minSpacing = this.settings.minimumSpacing;
-
-                // Check if collision or within minimum spacing
-                if (collision.collides || collision.distance < minSpacing) {
-                    const pushAmount = collision.collides
-                        ? Math.abs(collision.distance) + minSpacing
-                        : minSpacing - collision.distance;
-
-                    if (this.settings.collisionMode === 'block') {
-                        // Block mode: Push active object back
-                        switch (collision.direction) {
-                            case 'right':
-                                activeObject.set({ left: targetBox.left - activeBox.width - minSpacing });
-                                break;
-                            case 'left':
-                                activeObject.set({ left: targetBox.left + targetBox.width + minSpacing });
-                                break;
-                            case 'bottom':
-                                activeObject.set({ top: targetBox.top - activeBox.height - minSpacing });
-                                break;
-                            case 'top':
-                                activeObject.set({ top: targetBox.top + targetBox.height + minSpacing });
-                                break;
-                        }
-                        activeObject.setCoords();
-                    } else if (this.settings.collisionMode === 'push' && this.settings.autoPushElements) {
-                        // Push mode: Move the other element away
-                        switch (collision.direction) {
-                            case 'right':
-                                obj.set({ left: (obj.left || 0) + pushAmount });
-                                break;
-                            case 'left':
-                                obj.set({ left: (obj.left || 0) - pushAmount });
-                                break;
-                            case 'bottom':
-                                obj.set({ top: (obj.top || 0) + pushAmount });
-                                break;
-                            case 'top':
-                                obj.set({ top: (obj.top || 0) - pushAmount });
-                                break;
-                        }
-                        obj.setCoords();
-                    }
-
-                    // Add collision indicator badge
-                    if (this.settings.collisionIndicators) {
-                        const zoneName = collision.collides ? 'collision' :
-                            collision.distance < minSpacing * 0.5 ? 'danger' : 'warning';
-                        const badgeX = (activeBox.left + activeBox.width / 2 + targetBox.left + targetBox.width / 2) / 2;
-                        const badgeY = (activeBox.top + activeBox.height / 2 + targetBox.top + targetBox.height / 2) / 2;
-
-                        this.distanceBadges.push({
-                            x: badgeX,
-                            y: badgeY,
-                            text: collision.collides ? '!' : Math.round(collision.distance).toString(),
-                            axis: Math.abs(collision.direction === 'left' || collision.direction === 'right' ? 1 : 0) ? 'x' : 'y',
-                            zone: collision.collides ? 'lock' : collision.distance < minSpacing * 0.5 ? 'near' : 'far',
-                        });
-                    }
-                }
-            }
         }
 
         // --- Prevent Off-Canvas ---
