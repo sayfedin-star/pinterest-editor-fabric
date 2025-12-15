@@ -1,6 +1,6 @@
 # Pinterest Template Editor
 
-A professional-grade **bulk Pinterest pin generator** built with Next.js 16, Konva canvas, and Supabase. Create templates with dynamic text and image placeholders, then generate hundreds of unique pins from CSV data.
+A professional-grade **bulk Pinterest pin generator** built with Next.js 16, Fabric.js canvas, and Supabase. Create templates with dynamic text and image placeholders, then generate hundreds of unique pins from CSV data.
 
 ## ✨ Features
 
@@ -8,7 +8,9 @@ A professional-grade **bulk Pinterest pin generator** built with Next.js 16, Kon
 - **Dynamic Fields** - Use `{{field_name}}` placeholders bound to CSV columns
 - **Bulk Generation** - Generate unlimited pins from a single template + CSV
 - **Canva Import** - Import Canva designs as background layers
-- **Multi-select & Alignment** - Professional design tools with snap-to-grid
+- **Multi-select & Alignment** - Professional design tools with magnetic snapping
+- **Auto-Save** - Automatic saving with 30s debounce to prevent data loss
+- **Undo/Redo** - Full history management with keyboard shortcuts
 - **Cloud Storage** - Templates and generated pins stored in S3-compatible Tebi
 
 ## 🏗️ Architecture
@@ -18,22 +20,33 @@ A professional-grade **bulk Pinterest pin generator** built with Next.js 16, Kon
 │                      Next.js 16 App                         │
 ├─────────────────────────────────────────────────────────────┤
 │  UI Layer                                                   │
-│  ├── EditorCanvas.tsx (Konva Stage with zoom/pan)          │
-│  ├── PropertiesPanel.tsx (Context-aware element editing)   │
-│  └── LayersPanel.tsx (Drag-drop z-ordering)                │
+│  ├── EditorCanvas.tsx (Fabric.js canvas with zoom/pan)      │
+│  ├── PropertiesPanel (Modular property sections)            │
+│  ├── LayersPanel.tsx (Drag-drop z-ordering)                 │
+│  └── Toolbar.tsx (Element creation, formatting)             │
 ├─────────────────────────────────────────────────────────────┤
-│  State Management                                           │
-│  └── editorStore.ts (Zustand - undo/redo, multi-select)    │
+│  Canvas Management (Modular)                                │
+│  ├── CanvasManager.ts (567 lines - Orchestrator)            │
+│  ├── ObjectFactory.ts (Fabric object creation/sync)         │
+│  ├── ViewportManager.ts (Zoom, size, background)            │
+│  └── PerformanceMonitor.ts (FPS tracking)                   │
+├─────────────────────────────────────────────────────────────┤
+│  State Management (Zustand - Facade Pattern)                │
+│  ├── editorStore.ts (Facade → delegates to stores below)    │
+│  ├── elementsStore.ts (Element CRUD)                        │
+│  ├── selectionStore.ts (Selection state)                    │
+│  ├── canvasStore.ts (Canvas settings)                       │
+│  └── templateStore.ts (Template metadata)                   │
 ├─────────────────────────────────────────────────────────────┤
 │  API Routes                                                 │
-│  ├── /api/upload-pin (Upload generated pins to S3)         │
-│  ├── /api/upload-thumbnail (Template thumbnails)           │
-│  ├── /api/proxy-image (CORS proxy for S3 images)           │
-│  └── /api/campaigns/[id]/* (Campaign management)           │
+│  ├── /api/upload-pin (Upload generated pins to S3)          │
+│  ├── /api/upload-thumbnail (Template thumbnails)            │
+│  ├── /api/proxy-image (CORS proxy for S3 images)            │
+│  └── /api/campaigns/[id]/* (Campaign management)            │
 ├─────────────────────────────────────────────────────────────┤
 │  External Services                                          │
-│  ├── Supabase (PostgreSQL + Auth)                          │
-│  └── Tebi S3 (Image storage)                               │
+│  ├── Supabase (PostgreSQL + Auth)                           │
+│  └── Tebi S3 (Image storage)                                │
 └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -48,6 +61,9 @@ cp .env.example .env.local
 
 # Run development server
 npm run dev
+
+# Run E2E tests (optional)
+npm run e2e
 ```
 
 Open [http://localhost:3000](http://localhost:3000) to access the editor.
@@ -75,31 +91,53 @@ src/
 ├── app/                     # Next.js App Router
 │   ├── api/                 # API routes
 │   ├── editor/              # Template editor page
-│   ├── campaigns/           # Campaign management
+│   ├── dashboard/           # Dashboard & campaigns
 │   └── settings/            # User settings
 ├── components/
-│   ├── canvas/              # Konva canvas components
+│   ├── canvas/              # Fabric.js canvas components
 │   ├── panels/              # Right sidebar panels
+│   │   └── properties/      # Modular property sections
+│   ├── layout/              # Header, Sidebar, Toolbar
 │   └── ui/                  # Shared UI components
-├── stores/
-│   └── editorStore.ts       # Zustand state management
+├── stores/                  # Zustand state stores
+│   ├── editorStore.ts       # Facade store (main entry)
+│   ├── elementsStore.ts     # Element CRUD
+│   ├── selectionStore.ts    # Selection state
+│   ├── canvasStore.ts       # Canvas settings
+│   └── templateStore.ts     # Template metadata
 ├── lib/
-│   ├── supabase.ts          # Supabase client
-│   ├── s3.ts                # Tebi S3 client
+│   ├── canvas/              # Canvas management modules
+│   │   ├── CanvasManager.ts # Main orchestrator
+│   │   ├── ObjectFactory.ts # Fabric object creation
+│   │   ├── ViewportManager.ts
+│   │   └── PerformanceMonitor.ts
+│   ├── fabric/              # Fabric.js utilities
+│   ├── db/                  # Database operations
 │   └── utils/               # CSV parsing, field detection
-└── types/
-    └── editor.ts            # TypeScript types
+├── hooks/                   # Custom React hooks
+│   └── useAutoSave.ts       # Auto-save functionality
+├── types/
+│   └── editor.ts            # TypeScript types
+└── e2e/                     # Playwright E2E tests
+```
+
+## 🧪 Testing
+
+```bash
+# Run unit tests
+npm test
+
+# Run E2E tests (headless)
+npm run e2e
+
+# Run E2E tests with UI
+npm run e2e:ui
 ```
 
 ## 🔌 API Reference
 
 ### `POST /api/upload-pin`
 Upload generated pin image to S3.
-
-**Body (FormData):**
-- `file` - PNG image file
-- `campaign_id` - Campaign identifier
-- `row_index` - Row number from CSV
 
 **Body (JSON):**
 ```json
@@ -119,10 +157,21 @@ Proxy S3 images to bypass CORS restrictions.
 ## 🎨 Using Dynamic Fields
 
 1. Add a text or image element
-2. Name it `Text 1`, `Image 2`, etc. (auto-detects pattern)
-3. Dynamic field is extracted: `text1`, `image2`
+2. Enable "Dynamic" toggle in properties panel
+3. Enter field name (e.g., `title`, `image_url`)
 4. Reference in text with `{{field_name}}`
 5. Match field names to CSV column headers
+
+## ⌨️ Keyboard Shortcuts
+
+| Shortcut | Action |
+|----------|--------|
+| `Ctrl+Z` | Undo |
+| `Ctrl+Shift+Z` | Redo |
+| `Ctrl+D` | Duplicate element |
+| `Delete` | Delete selected |
+| `Arrow keys` | Move element (1px) |
+| `Shift+Arrow` | Move element (10px) |
 
 ## 📦 Deployment
 
@@ -143,12 +192,14 @@ npm start
 | Technology | Purpose |
 |------------|---------|
 | Next.js 16 | React framework with App Router |
+| React 19 | UI library with React Compiler |
 | Zustand | Lightweight state management |
-| Konva | 2D canvas rendering engine |
+| Fabric.js 6 | 2D canvas rendering engine |
 | Supabase | PostgreSQL database + Auth |
 | Tebi S3 | S3-compatible object storage |
-| Tailwind CSS | Utility-first styling |
+| Tailwind CSS 4 | Utility-first styling |
 | Radix UI | Accessible UI primitives |
+| Playwright | E2E testing framework |
 
 ## 📄 License
 
