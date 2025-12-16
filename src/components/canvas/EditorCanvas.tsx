@@ -130,18 +130,18 @@ export function EditorCanvasV2({ containerWidth, containerHeight }: EditorCanvas
     // Selection from selectionStore
     const selectedIds = useSelectionStore((s) => s.selectedIds);
 
-    // DEBUG: Trace dimensions
-    useEffect(() => {
-        console.log('[EditorCanvas] Render Props:', {
-            containerWidth,
-            containerHeight,
-            canvasSize,
-            zoom,
-            calculatedCanvasWidth: canvasSize.width * zoom,
-            calculatedCanvasHeight: canvasSize.height * zoom,
-            isCanvasReady
-        });
-    }, [containerWidth, containerHeight, canvasSize, zoom, isCanvasReady]);
+    // DEBUG: Trace dimensions (commented out to reduce console spam)
+    // useEffect(() => {
+    //     console.log('[EditorCanvas] Render Props:', {
+    //         containerWidth,
+    //         containerHeight,
+    //         canvasSize,
+    //         zoom,
+    //         calculatedCanvasWidth: canvasSize.width * zoom,
+    //         calculatedCanvasHeight: canvasSize.height * zoom,
+    //         isCanvasReady
+    //     });
+    // }, [containerWidth, containerHeight, canvasSize, zoom, isCanvasReady]);
 
     const selectedElement = elements.find(el => el.id === selectedIds[0]);
 
@@ -419,14 +419,15 @@ export function EditorCanvasV2({ containerWidth, containerHeight }: EditorCanvas
     const canvasWidth = canvasSize.width * zoom;
     const canvasHeight = canvasSize.height * zoom;
 
-    console.log('[EditorCanvas] Render dimensions:', {
-        canvasSize,
-        zoom,
-        canvasWidth,
-        canvasHeight,
-        totalWidth: canvasWidth + CANVAS_PADDING * 2,
-        totalHeight: canvasHeight + CANVAS_PADDING * 2
-    });
+    // Render dimensions (logging disabled to reduce console spam)
+    // console.log('[EditorCanvas] Render dimensions:', {
+    //     canvasSize,
+    //     zoom,
+    //     canvasWidth,
+    //     canvasHeight,
+    //     totalWidth: canvasWidth + CANVAS_PADDING * 2,
+    //     totalHeight: canvasHeight + CANVAS_PADDING * 2
+    // });
 
     return (
         <div

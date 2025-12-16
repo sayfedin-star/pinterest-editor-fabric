@@ -4,6 +4,9 @@ import { useEditorStore } from '@/stores/editorStore';
 import { useSelectionStore } from '@/stores/selectionStore';
 import { Element } from '@/types/editor';
 
+// Set to true for debugging sync issues
+const DEBUG_SYNC = false;
+
 /**
  * SynchronizationBridge - Mediator (Layer 2)
  * 
@@ -19,15 +22,14 @@ export function useSynchronizationBridge(canvasManager: CanvasManager | null) {
     // Direction 1: Canvas  React State
     useEffect(() => {
         if (!canvasManager) return;
-        console.log('[SynchronizationBridge] Setting up Canvas  React sync');
+        if (DEBUG_SYNC) console.log('[SynchronizationBridge] Setting up Canvas → React sync');
 
         const handleElementsChanged = (updatedElements: Element[]) => {
             if (isUpdatingRef.current.fromCanvas) {
-                console.log('[SynchronizationBridge] Loop prevented');
                 return;
             }
 
-            console.log('[SynchronizationBridge] Canvas  React: Elements changed', updatedElements.length);
+            if (DEBUG_SYNC) console.log('[SynchronizationBridge] Canvas → React:', updatedElements.length, 'elements');
             isUpdatingRef.current.fromCanvas = true;
 
             try {
@@ -40,7 +42,6 @@ export function useSynchronizationBridge(canvasManager: CanvasManager | null) {
                         rotation: element.rotation,
                     });
                 }
-                console.log('[SynchronizationBridge] React state updated successfully');
             } catch (error) {
                 console.error('[SynchronizationBridge] Error updating React state:', error);
             } finally {
@@ -49,52 +50,44 @@ export function useSynchronizationBridge(canvasManager: CanvasManager | null) {
         };
 
         canvasManager.onElementsChanged(handleElementsChanged);
-        return () => console.log('[SynchronizationBridge] Cleaning up Canvas  React sync');
+        return () => { };
     }, [canvasManager, updateElement]);
 
     // Direction 2: Selection Sync
     useEffect(() => {
         if (!canvasManager) return;
-        console.log('[SynchronizationBridge] Setting up selection sync');
 
         const handleSelectionChanged = (selectedIds: string[]) => {
-            console.log('[SynchronizationBridge] Selection changed:', selectedIds);
-            // Update selectionStore FIRST (source of truth for UI components)
+            if (DEBUG_SYNC) console.log('[SynchronizationBridge] Selection:', selectedIds);
             useSelectionStore.getState().setSelectedIds(selectedIds);
-            // Also update editorStore for legacy consumers
             useEditorStore.setState({ selectedIds });
         };
 
         canvasManager.onSelectionChanged(handleSelectionChanged);
-        return () => console.log('[SynchronizationBridge] Cleaning up selection sync');
+        return () => { };
     }, [canvasManager]);
 
     // Direction 3: React  Canvas Sync
     useEffect(() => {
         if (!canvasManager) return;
-        console.log('[SynchronizationBridge] Setting up React  Canvas sync');
 
         const unsubscribe = useEditorStore.subscribe(() => {
             if (isUpdatingRef.current.fromCanvas) return;
-            console.log('[SynchronizationBridge] React  Canvas: Store changed');
+            if (DEBUG_SYNC) console.log('[SynchronizationBridge] React → Canvas: Store changed');
         });
 
-        return () => {
-            unsubscribe();
-            console.log('[SynchronizationBridge] Cleaning up React  Canvas sync');
-        };
+        return () => unsubscribe();
     }, [canvasManager]);
 
     // Direction 4: Settings  Canvas Sync
     useEffect(() => {
         if (!canvasManager) return;
-        console.log('[SynchronizationBridge] Setting up Settings  Canvas sync');
 
         let previousSnappingEnabled = useEditorStore.getState().snappingEnabled;
 
         const unsubscribe = useEditorStore.subscribe((state) => {
             if (state.snappingEnabled !== previousSnappingEnabled) {
-                console.log('[SynchronizationBridge] Settings  Canvas: Snapping changed:', state.snappingEnabled);
+                if (DEBUG_SYNC) console.log('[SynchronizationBridge] Snapping:', state.snappingEnabled);
                 previousSnappingEnabled = state.snappingEnabled;
 
                 canvasManager.updateSnappingSettings({
@@ -105,11 +98,7 @@ export function useSynchronizationBridge(canvasManager: CanvasManager | null) {
             }
         });
 
-        return () => {
-            unsubscribe();
-            console.log('[SynchronizationBridge] Cleaning up Settings  Canvas sync');
-        };
+        return () => unsubscribe();
     }, [canvasManager]);
-
-    console.log('[SynchronizationBridge] Hook initialized (bidirectional sync active)');
 }
+
