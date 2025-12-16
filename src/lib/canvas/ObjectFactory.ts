@@ -65,6 +65,19 @@ export function createFabricObject(element: Element): fabric.FabricObject | null
                     stroke: shapeEl.stroke || '',
                     strokeWidth: shapeEl.strokeWidth || 0,
                 });
+            } else if (shapeEl.shapeType === 'path') {
+                // Handle path shapes (from SVG imports)
+                const pathFill = shapeEl.fill === 'none' ? null : (shapeEl.fill || '#000000');
+                const pathStroke = shapeEl.stroke === 'none' ? null : (shapeEl.stroke || null);
+                const finalFill = (!pathFill && !pathStroke) ? '#000000' : pathFill;
+
+                obj = new fabric.Path(shapeEl.pathData || '', {
+                    left: element.x,
+                    top: element.y,
+                    fill: finalFill,
+                    stroke: pathStroke,
+                    strokeWidth: shapeEl.strokeWidth || 0,
+                });
             }
             break;
         }
