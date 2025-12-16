@@ -2,9 +2,10 @@
 
 import React, { useState, useCallback, useRef } from 'react';
 import { nanoid } from 'nanoid';
+import * as fabric from 'fabric';
 import { X, Upload, Image, FileType, Check, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { Element as EditorElement } from '@/types/editor';
+import { Element as EditorElement, ShapeElement } from '@/types/editor';
 import { useEditorStore } from '@/stores/editorStore';
 import { toast } from 'sonner';
 
@@ -383,6 +384,106 @@ export function CanvaImportModal({ isOpen, onClose, onImportComplete }: CanvaImp
         return [...elements, ...groupedText];
     };
 
+    /**
+     * Parse SVG using Fabric.js native loading - handles all transforms correctly
+     */
+    const parseSvgWithFabric = async (svgContent: string): Promise<EditorElement[]> => {
+        return new Promise((resolve) => {
+            fabric.loadSVGFromString(svgContent).then(({ objects }) => {
+                const elements: EditorElement[] = [];
+
+                // Calculate scaling to fit canvas
+                const svgEl = new DOMParser().parseFromString(svgContent, 'image/svg+xml').documentElement;
+                const viewBox = svgEl.getAttribute('viewBox');
+                let scaleX = 1, scaleY = 1;
+
+                if (viewBox) {
+                    const [, , vbW, vbH] = viewBox.split(/[\s,]+/).map(parseFloat);
+                    scaleX = canvasWidth / vbW;
+                    scaleY = canvasHeight / vbH;
+                }
+
+                // Convert Fabric objects to EditorElements
+                objects.forEach((obj, index) => {
+                    if (!obj) return;
+
+                    const bounds = obj.getBoundingRect();
+
+                    // Scale positions to match canvas size
+                    const scaledLeft = (obj.left || 0) * scaleX;
+                    const scaledTop = (obj.top || 0) * scaleY;
+                    const scaledWidth = (bounds.width || 100) * scaleX;
+                    const scaledHeight = (bounds.height || 100) * scaleY;
+
+                    if (obj instanceof fabric.Path) {
+                        // For paths, we need to serialize and scale the path data
+                        const pathObj = obj as fabric.Path;
+
+                        // Create a scaled version of the path
+                        const scaledPath = new fabric.Path(pathObj.path as unknown as string, {
+                            scaleX: scaleX,
+                            scaleY: scaleY,
+                        });
+
+                        // Get the path string
+                        const pathData = scaledPath.path?.map(cmd => {
+                            if (Array.isArray(cmd)) return cmd.join(' ');
+                            return cmd;
+                        }).join(' ') || '';
+
+                        const element: ShapeElement = {
+                            id: nanoid(),
+                            name: `Path ${index + 1}`,
+                            type: 'shape',
+                            shapeType: 'path',
+                            x: scaledLeft,
+                            y: scaledTop,
+                            width: scaledWidth,
+                            height: scaledHeight,
+                            rotation: obj.angle || 0,
+                            opacity: obj.opacity ?? 1,
+                            locked: lockBackground,
+                            visible: true,
+                            zIndex: index,
+                            fill: (obj.fill as string) || '#000000',
+                            stroke: (obj.stroke as string) || '',
+                            strokeWidth: (obj.strokeWidth || 0) * Math.min(scaleX, scaleY),
+                            pathData: pathData,
+                        };
+                        elements.push(element);
+                    } else if (obj instanceof fabric.Rect) {
+                        const element: ShapeElement = {
+                            id: nanoid(),
+                            name: `Rect ${index + 1}`,
+                            type: 'shape',
+                            shapeType: 'rect',
+                            x: scaledLeft,
+                            y: scaledTop,
+                            width: scaledWidth,
+                            height: scaledHeight,
+                            rotation: obj.angle || 0,
+                            opacity: obj.opacity ?? 1,
+                            locked: lockBackground,
+                            visible: true,
+                            zIndex: index,
+                            fill: (obj.fill as string) || '#000000',
+                            stroke: (obj.stroke as string) || '',
+                            strokeWidth: (obj.strokeWidth || 0) * Math.min(scaleX, scaleY),
+                            cornerRadius: 0,
+                        };
+                        elements.push(element);
+                    }
+                });
+
+                console.log(`Fabric SVG Import: Created ${elements.length} elements`);
+                resolve(elements);
+            }).catch((err) => {
+                console.error('Fabric SVG parse error:', err);
+                resolve([]);
+            });
+        });
+    };
+
     // Merge similar paths by color and style
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const mergeSimilarPaths = (elements: any[]): any[] => {
@@ -449,10 +550,12 @@ export function CanvaImportModal({ isOpen, onClose, onImportComplete }: CanvaImp
             setCanvasSize(canvasWidth, canvasHeight);
             setStoreTemplateName(templateName);
 
-            // If SVG file, parse and import
+            // If SVG file, parse and import using Fabric.js native loading
             if (uploadedFile.type === 'svg') {
                 const svgText = await uploadedFile.file.text();
-                let elements = await parseSvgToElements(svgText);
+
+                // Use Fabric.js native SVG loading for correct positioning
+                let elements = await parseSvgWithFabric(svgText);
 
                 // If optimized mode, merge similar paths
                 if (importMode === 'merged' && elements.length > 0) {
