@@ -405,55 +405,30 @@ export function CanvaImportModal({ isOpen, onClose, onImportComplete }: CanvaImp
                 // Calculate scaling factors
                 const scaleX = canvasWidth / svgWidth;
                 const scaleY = canvasHeight / svgHeight;
-                const scale = Math.min(scaleX, scaleY); // Maintain aspect ratio
 
-                console.log(`SVG dimensions: ${svgWidth}x${svgHeight}, Canvas: ${canvasWidth}x${canvasHeight}, Scale: ${scale}`);
+                console.log(`SVG dimensions: ${svgWidth}x${svgHeight}, Canvas: ${canvasWidth}x${canvasHeight}, Scale: ${scaleX}x${scaleY}`);
 
-                // Create a group from all objects to get proper positioning
-                const validObjects = objects.filter(obj => obj !== null) as fabric.FabricObject[];
-                const group = new fabric.Group(validObjects, {
-                    left: 0,
-                    top: 0,
-                });
-
-                // Scale the group
-                group.scaleX = scaleX;
-                group.scaleY = scaleY;
-
-                // Ungroup to get individual scaled objects
-                const ungroupedObjects = group.getObjects();
-
-                // Calculate absolute positions for each object
-                ungroupedObjects.forEach((obj, index) => {
+                // Process each object directly
+                objects.forEach((obj, index) => {
                     if (!obj) return;
 
-                    // Get the absolute position of the object within the scaled group
-                    const matrix = obj.calcTransformMatrix();
-                    const point = fabric.util.transformPoint(
-                        new fabric.Point(0, 0),
-                        matrix
-                    );
+                    // Get fill color - handle special cases
+                    let fillColor = (obj.fill as string) || '#000000';
+                    if (fillColor === 'rgb(0, 0, 0)' || fillColor === 'rgb(0,0,0)') {
+                        fillColor = '#000000';
+                    }
 
-                    // Apply group scaling to get final position
-                    const finalLeft = (obj.left || 0) * scaleX + (group.width! / 2) * (scaleX - 1) + canvasWidth / 2 - (svgWidth * scaleX) / 2;
-                    const finalTop = (obj.top || 0) * scaleY + (group.height! / 2) * (scaleY - 1) + canvasHeight / 2 - (svgHeight * scaleY) / 2;
-
-                    // Get scaled dimensions
-                    const bounds = obj.getBoundingRect();
-                    const scaledWidth = bounds.width * scaleX;
-                    const scaledHeight = bounds.height * scaleY;
-
-                    // Get the path data if it's a path
-                    let pathData = '';
                     if (obj instanceof fabric.Path) {
-                        // Create a copy with scaling applied and get the path string
+                        // For paths, scale the path data coordinates
                         const pathArray = obj.path;
+                        let pathData = '';
+
                         if (pathArray) {
                             pathData = pathArray.map(cmd => {
                                 if (Array.isArray(cmd)) {
-                                    // Scale the numeric values in the path command
                                     const command = String(cmd[0]);
                                     const scaledParts: string[] = [command];
+
                                     for (let i = 1; i < cmd.length; i++) {
                                         const value = cmd[i];
                                         if (typeof value === 'number') {
@@ -469,34 +444,51 @@ export function CanvaImportModal({ isOpen, onClose, onImportComplete }: CanvaImp
                                 return String(cmd);
                             }).join(' ');
                         }
-                    }
 
-                    // Get fill color - handle special cases
-                    let fillColor = (obj.fill as string) || '#000000';
-                    if (fillColor === 'rgb(0, 0, 0)' || fillColor === 'rgb(0,0,0)') {
-                        fillColor = '#000000';
+                        const element: ShapeElement = {
+                            id: nanoid(),
+                            name: `Path ${index + 1}`,
+                            type: 'shape',
+                            shapeType: 'path',
+                            // Don't set x/y - the path data has the coordinates
+                            x: 0,
+                            y: 0,
+                            width: canvasWidth,
+                            height: canvasHeight,
+                            rotation: obj.angle || 0,
+                            opacity: obj.opacity ?? 1,
+                            locked: lockBackground,
+                            visible: true,
+                            zIndex: index,
+                            fill: fillColor,
+                            stroke: (obj.stroke as string) || '',
+                            strokeWidth: (obj.strokeWidth || 0) * Math.min(scaleX, scaleY),
+                            pathData: pathData,
+                        };
+                        elements.push(element);
+                    } else if (obj instanceof fabric.Rect) {
+                        // For rectangles, scale position and dimensions
+                        const element: ShapeElement = {
+                            id: nanoid(),
+                            name: `Rect ${index + 1}`,
+                            type: 'shape',
+                            shapeType: 'rect',
+                            x: (obj.left || 0) * scaleX,
+                            y: (obj.top || 0) * scaleY,
+                            width: (obj.width || 100) * scaleX,
+                            height: (obj.height || 100) * scaleY,
+                            rotation: obj.angle || 0,
+                            opacity: obj.opacity ?? 1,
+                            locked: lockBackground,
+                            visible: true,
+                            zIndex: index,
+                            fill: fillColor,
+                            stroke: (obj.stroke as string) || '',
+                            strokeWidth: (obj.strokeWidth || 0) * Math.min(scaleX, scaleY),
+                            cornerRadius: 0,
+                        };
+                        elements.push(element);
                     }
-
-                    const element: ShapeElement = {
-                        id: nanoid(),
-                        name: `Element ${index + 1}`,
-                        type: 'shape',
-                        shapeType: obj instanceof fabric.Path ? 'path' : (obj instanceof fabric.Rect ? 'rect' : 'path'),
-                        x: finalLeft,
-                        y: finalTop,
-                        width: scaledWidth,
-                        height: scaledHeight,
-                        rotation: obj.angle || 0,
-                        opacity: obj.opacity ?? 1,
-                        locked: lockBackground,
-                        visible: true,
-                        zIndex: index,
-                        fill: fillColor,
-                        stroke: (obj.stroke as string) || '',
-                        strokeWidth: (obj.strokeWidth || 0) * scale,
-                        pathData: pathData,
-                    };
-                    elements.push(element);
                 });
 
                 console.log(`Fabric SVG Import: Created ${elements.length} elements`);
