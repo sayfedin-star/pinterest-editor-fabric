@@ -10,6 +10,9 @@
  * - New template flag
  * - Saving state
  * - Template gallery list
+ * 
+ * FIX (2025-12-17): Don't persist template name for new templates
+ * to prevent confusion when opening editor fresh.
  */
 
 import { create } from 'zustand';
@@ -79,13 +82,50 @@ export const useTemplateStore = create<TemplateState & TemplateActions>()(
         {
             name: 'pinterest-template-storage',
             storage: createJSONStorage(() => localStorage),
-            partialize: (state) => ({
-                // Only persist these fields
-                templateId: state.templateId,
-                templateName: state.templateName,
-                templateSource: state.templateSource,
-                isNewTemplate: state.isNewTemplate,
-            }),
+            // FIX: Custom partialize to handle new template state correctly
+            // Only persist fields when they have valid values
+            partialize: (state) => {
+                // For new templates, only persist minimal state
+                if (state.isNewTemplate) {
+                    return {
+                        templateSource: state.templateSource,
+                        isNewTemplate: true,
+                        // Don't persist templateId/templateName for new templates
+                        // This ensures fresh editor opens clean
+                    };
+                }
+                // For saved templates, persist everything
+                return {
+                    templateId: state.templateId,
+                    templateName: state.templateName,
+                    templateSource: state.templateSource,
+                    isNewTemplate: state.isNewTemplate,
+                };
+            },
+            // FIX: Merge function to handle partial persisted state
+            merge: (persisted, current) => {
+                const p = persisted as Partial<TemplateState> | undefined;
+                
+                // If no valid saved template in storage, start fresh
+                if (!p?.templateId || p?.isNewTemplate !== false) {
+                    return {
+                        ...current,
+                        templateId: generateId(),
+                        templateName: 'Untitled Template',
+                        templateSource: p?.templateSource || 'native',
+                        isNewTemplate: true,
+                    };
+                }
+                
+                // Valid saved template - restore it
+                return {
+                    ...current,
+                    templateId: p.templateId,
+                    templateName: p.templateName || 'Untitled Template',
+                    templateSource: p.templateSource || 'native',
+                    isNewTemplate: false,
+                };
+            },
         }
     )
 );

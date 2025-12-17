@@ -2,36 +2,25 @@
 
 import React from 'react';
 import {
-    Type,
-    Image,
     Undo2,
     Redo2,
-    ZoomIn,
-    ZoomOut,
-    Maximize2,
     Bold,
     Italic,
     Underline,
     AlignLeft,
     AlignCenter,
     AlignRight,
-    Grid3X3,
     Library,
-    Square,
-    Circle,
-    Minus,
-    ArrowRight
 } from 'lucide-react';
 import { useSelectionStore } from '@/stores/selectionStore';
 import { useElementsStore } from '@/stores/elementsStore';
-import { useCanvasStore } from '@/stores/canvasStore';
 import { useEditorStore } from '@/stores/editorStore'; // For element creation, undo/redo, history
 import { cn } from '@/lib/utils';
 import { TextElement as TextElementType } from '@/types/editor';
 import { FontPicker } from '@/components/panels/FontPicker';
 import { SnappingToolbarButton } from '@/components/editor/SnappingToolbarButton';
 
-const ZOOM_LEVELS = [0.1, 0.15, 0.2, 0.25, 0.5, 0.75, 1, 1.25, 1.5, 2];
+
 
 interface ToolbarProps {
     onOpenFontLibrary?: () => void;
@@ -59,11 +48,7 @@ export function Toolbar({ onOpenFontLibrary }: ToolbarProps) {
     const redo = useEditorStore((s) => s.redo);
     const pushHistory = useEditorStore((s) => s.pushHistory);
 
-    // Canvas from canvasStore
-    const zoom = useCanvasStore((s) => s.zoom);
-    const setZoom = useCanvasStore((s) => s.setZoom);
-    const canvasSize = useCanvasStore((s) => s.canvasSize);
-    const zoomToFit = useCanvasStore((s) => s.zoomToFit);
+
 
     // Keep snap settings in editorStore for now
     const snapToGrid = useEditorStore((s) => s.snapToGrid);
@@ -73,17 +58,8 @@ export function Toolbar({ onOpenFontLibrary }: ToolbarProps) {
     const isTextSelected = selectedElement?.type === 'text';
     const textElement = isTextSelected ? (selectedElement as TextElementType) : null;
 
-    const handleZoomIn = () => {
-        const idx = ZOOM_LEVELS.findIndex((z) => z >= zoom);
-        if (idx < ZOOM_LEVELS.length - 1) setZoom(ZOOM_LEVELS[idx + 1]);
-    };
-
-    const handleZoomOut = () => {
-        const idx = ZOOM_LEVELS.findIndex((z) => z >= zoom);
-        if (idx > 0) setZoom(ZOOM_LEVELS[idx - 1]);
-    };
-
     const toggleStyle = (style: 'bold' | 'italic') => {
+
         if (!textElement) return;
         const current = textElement.fontStyle || 'normal';
         let newStyle: string = 'normal';
@@ -201,52 +177,6 @@ export function Toolbar({ onOpenFontLibrary }: ToolbarProps) {
                     <Separator />
                 </>
             )}
-
-            {/* Spacer */}
-            <div className="flex-1" />
-
-            {/* Undo/Redo */}
-            <IconButton onClick={undo} icon={Undo2} label="Undo" disabled={!canUndo} withText />
-            <IconButton onClick={redo} icon={Redo2} label="Redo" disabled={!canRedo} withText />
-
-            <Separator />
-
-            {/* Zoom Controls - Grouped */}
-            <div className="flex items-center gap-1 px-1.5 py-1 bg-gray-50/50 rounded-lg border border-gray-200">
-                <IconButton onClick={handleZoomOut} icon={ZoomOut} label="Zoom Out" />
-
-                <select
-                    value={zoom}
-                    onChange={(e) => setZoom(parseFloat(e.target.value))}
-                    className="h-7 w-[70px] px-2 border border-gray-200 rounded-md text-xs font-medium bg-white hover:border-gray-300 focus:border-blue-400 focus:ring-2 focus:ring-blue-100 outline-none transition-all duration-150"
-                >
-                    {ZOOM_LEVELS.map((level) => (
-                        <option key={level} value={level}>{Math.round(level * 100)}%</option>
-                    ))}
-                </select>
-
-                <IconButton onClick={handleZoomIn} icon={ZoomIn} label="Zoom In" />
-
-                <div className="w-px h-5 bg-gray-300 mx-0.5" />
-
-                <button
-                    onClick={() => {
-                        const viewportWidth = window.innerWidth - 600;
-                        const viewportHeight = window.innerHeight - 200;
-                        zoomToFit(viewportWidth, viewportHeight);
-                    }}
-                    title="Zoom to Fit (Cmd+0)"
-                    className="h-7 px-2 rounded-md text-xs font-medium hover:bg-gray-100 active:scale-95 transition-all duration-150 flex items-center gap-1.5"
-                >
-                    <Maximize2 className="w-3.5 h-3.5" />
-                    <span className="hidden sm:inline">Fit</span>
-                </button>
-            </div>
-
-            <Separator />
-
-            {/* Snapping Controls */}
-            <SnappingToolbarButton />
         </div>
     );
 }

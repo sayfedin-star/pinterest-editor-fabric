@@ -2,9 +2,10 @@
 
 import React, { useState } from 'react';
 import {
-    MousePointer2,
+    Hand,
     Type,
     Square,
+    Image,
     Upload,
     FilePlus,
     LayoutGrid
@@ -16,7 +17,7 @@ import { TemplateGallery } from '@/components/gallery/TemplateGallery';
 import { CanvaImportModal } from '@/components/import/CanvaImportModal';
 import { RichTooltip } from '@/components/ui/RichTooltip';
 
-type ToolType = 'pointer' | 'text' | 'shape' | 'templates';
+type ToolType = 'pan' | 'text' | 'shape' | 'image' | 'templates';
 
 interface ToolButtonProps {
     icon: React.ElementType;
@@ -61,13 +62,14 @@ function ToolButton({ icon: Icon, label, description, shortcut, isActive, onClic
  * Left Sidebar - Clean vertical toolbar with accessible icons
  */
 export function LeftSidebar() {
-    const [activeTool, setActiveTool] = useState<ToolType>('pointer');
+    const [activeTool, setActiveTool] = useState<ToolType>('pan');
     const [isGalleryOpen, setIsGalleryOpen] = useState(false);
     const [isCanvaImportOpen, setIsCanvaImportOpen] = useState(false);
 
     // Editor actions
     const addText = useEditorStore((s) => s.addText);
     const addShape = useEditorStore((s) => s.addShape);
+    const addImage = useEditorStore((s) => s.addImage);
     const resetToNewTemplate = useEditorStore((s) => s.resetToNewTemplate);
 
     // Tool handlers
@@ -82,6 +84,10 @@ export function LeftSidebar() {
             case 'shape':
                 addShape('rect');
                 toast.success('Shape added');
+                break;
+            case 'image':
+                addImage();
+                toast.success('Image placeholder added');
                 break;
             case 'templates':
                 setIsGalleryOpen(true);
@@ -109,12 +115,12 @@ export function LeftSidebar() {
                 {/* Tools Section */}
                 <div className="flex-1 flex flex-col items-center py-4 gap-2">
                     <ToolButton
-                        icon={MousePointer2}
-                        label="Select"
-                        description="Select and move elements on canvas"
-                        shortcut="V"
-                        isActive={activeTool === 'pointer'}
-                        onClick={() => handleToolClick('pointer')}
+                        icon={Hand}
+                        label="Pan"
+                        description="Pan and navigate around the canvas"
+                        shortcut="H"
+                        isActive={activeTool === 'pan'}
+                        onClick={() => handleToolClick('pan')}
                     />
                     <ToolButton
                         icon={Type}
@@ -131,6 +137,14 @@ export function LeftSidebar() {
                         shortcut="R"
                         isActive={activeTool === 'shape'}
                         onClick={() => handleToolClick('shape')}
+                    />
+                    <ToolButton
+                        icon={Image}
+                        label="Image"
+                        description="Add an image placeholder"
+                        shortcut="I"
+                        isActive={activeTool === 'image'}
+                        onClick={() => handleToolClick('image')}
                     />
                     <ToolButton
                         icon={LayoutGrid}

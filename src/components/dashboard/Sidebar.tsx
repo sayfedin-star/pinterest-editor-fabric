@@ -5,6 +5,8 @@ import { usePathname } from 'next/navigation';
 import {
     Home,
     FolderOpen,
+    Folder,
+    Tag,
     Palette,
     Settings,
     LogOut,
@@ -49,6 +51,8 @@ const navGroups: NavGroup[] = [
         items: [
             { label: 'My Templates', icon: Layers, href: '/dashboard/templates' },
             { label: 'Campaigns', icon: FolderOpen, href: '/dashboard/campaigns' },
+            { label: 'Categories', icon: Folder, href: '/dashboard/categories' },
+            { label: 'Tags', icon: Tag, href: '/dashboard/tags' },
         ],
     },
     {

@@ -4,6 +4,86 @@
 import { Element, CanvasSize } from './editor';
 
 // ============================================
+// Categories
+// ============================================
+export interface DbCategory {
+    id: string;
+    user_id: string;
+    name: string;
+    slug: string;
+    description: string | null;
+    icon: string | null;
+    color: string | null;
+    template_count: number;
+    created_at: string;
+    updated_at: string;
+}
+
+export interface DbCategoryInsert {
+    id?: string;
+    user_id: string;
+    name: string;
+    slug: string;
+    description?: string | null;
+    icon?: string | null;
+    color?: string | null;
+    template_count?: number;
+}
+
+export interface DbCategoryUpdate {
+    name?: string;
+    slug?: string;
+    description?: string | null;
+    icon?: string | null;
+    color?: string | null;
+    template_count?: number;
+}
+
+// ============================================
+// Tags
+// ============================================
+export interface DbTag {
+    id: string;
+    user_id: string;
+    name: string;
+    slug: string;
+    description: string | null;
+    template_count: number;
+    created_at: string;
+    updated_at: string;
+}
+
+export interface DbTagInsert {
+    id?: string;
+    user_id: string;
+    name: string;
+    slug: string;
+    description?: string | null;
+    template_count?: number;
+}
+
+export interface DbTagUpdate {
+    name?: string;
+    slug?: string;
+    description?: string | null;
+    template_count?: number;
+}
+
+// ============================================
+// Template Tags (Junction Table)
+// ============================================
+export interface DbTemplateTag {
+    template_id: string;
+    tag_id: string;
+    created_at: string;
+}
+
+export interface DbTemplateTagInsert {
+    template_id: string;
+    tag_id: string;
+}
+
+// ============================================
 // Templates
 // ============================================
 export interface DbTemplate {
@@ -15,10 +95,17 @@ export interface DbTemplate {
     background_color: string;
     elements: Element[];
     thumbnail_url: string | null;
-    category: string | null;
+    category: string | null;           // Legacy field (string)
+    category_id: string | null;        // NEW: Foreign key to categories
     is_public: boolean;
+    is_featured: boolean;              // NEW: For highlighting best templates
+    view_count: number;                // NEW: Track popularity
+    like_count: number;                // NEW: Track user favorites
     created_at: string;
     updated_at: string;
+    // Virtual/joined fields (from queries with joins)
+    category_data?: DbCategory | null;
+    tags?: DbTag[];
 }
 
 export interface DbTemplateInsert {
@@ -31,7 +118,9 @@ export interface DbTemplateInsert {
     elements: Element[];
     thumbnail_url?: string | null;
     category?: string | null;
+    category_id?: string | null;
     is_public?: boolean;
+    is_featured?: boolean;
 }
 
 export interface DbTemplateUpdate {
@@ -42,7 +131,11 @@ export interface DbTemplateUpdate {
     elements?: Element[];
     thumbnail_url?: string | null;
     category?: string | null;
+    category_id?: string | null;
     is_public?: boolean;
+    is_featured?: boolean;
+    view_count?: number;
+    like_count?: number;
 }
 
 // ============================================
@@ -209,6 +302,21 @@ export interface Database {
                 Insert: DbTemplateInsert;
                 Update: DbTemplateUpdate;
             };
+            categories: {
+                Row: DbCategory;
+                Insert: DbCategoryInsert;
+                Update: DbCategoryUpdate;
+            };
+            tags: {
+                Row: DbTag;
+                Insert: DbTagInsert;
+                Update: DbTagUpdate;
+            };
+            template_tags: {
+                Row: DbTemplateTag;
+                Insert: DbTemplateTagInsert;
+                Update: never;
+            };
             campaigns: {
                 Row: DbCampaign;
                 Insert: DbCampaignInsert;
@@ -232,3 +340,4 @@ export interface Database {
         };
     };
 }
+

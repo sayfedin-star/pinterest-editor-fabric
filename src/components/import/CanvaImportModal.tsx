@@ -49,6 +49,29 @@ export function CanvaImportModal({ isOpen, onClose, onImportComplete }: CanvaImp
 
     const { addCanvaBackground, setCanvasSize, setTemplateName: setStoreTemplateName, resetToNewTemplate, setElements } = useEditorStore();
 
+    // BUG-SVG-005 FIX: Helper to convert RGB/RGBA to hex
+    const rgbToHex = (color: string): string => {
+        // Handle rgb() format
+        const rgbMatch = color.match(/rgb\((\d+),\s*(\d+),\s*(\d+)\)/);
+        if (rgbMatch) {
+            const r = parseInt(rgbMatch[1]).toString(16).padStart(2, '0');
+            const g = parseInt(rgbMatch[2]).toString(16).padStart(2, '0');
+            const b = parseInt(rgbMatch[3]).toString(16).padStart(2, '0');
+            return `#${r}${g}${b}`;
+        }
+
+        // Handle rgba() format (ignore alpha for now)
+        const rgbaMatch = color.match(/rgba\((\d+),\s*(\d+),\s*(\d+),\s*[\d.]+\)/);
+        if (rgbaMatch) {
+            const r = parseInt(rgbaMatch[1]).toString(16).padStart(2, '0');
+            const g = parseInt(rgbaMatch[2]).toString(16).padStart(2, '0');
+            const b = parseInt(rgbaMatch[3]).toString(16).padStart(2, '0');
+            return `#${r}${g}${b}`;
+        }
+
+        return color; // Return as-is if not RGB format
+    };
+
     // Handle file selection
     const handleFileSelect = useCallback(async (file: File) => {
         // Validate file type
@@ -136,10 +159,25 @@ export function CanvaImportModal({ isOpen, onClose, onImportComplete }: CanvaImp
         const svgEl = doc.documentElement;
         const viewBox = svgEl.getAttribute('viewBox');
         let scaleX = 1, scaleY = 1;
+
+        // BUG-SVG-006 FIX: Validate viewBox before using
         if (viewBox) {
-            const [, , vbW, vbH] = viewBox.split(/[\s,]+/).map(parseFloat);
-            scaleX = canvasWidth / vbW;
-            scaleY = canvasHeight / vbH;
+            const parts = viewBox.split(/[\s,]+/).map(parseFloat);
+
+            // Validate parse result and dimensions
+            if (parts.length === 4 && parts.every(n => !isNaN(n) && isFinite(n))) {
+                const [, , vbW, vbH] = parts;
+
+                // Prevent division by zero
+                if (vbW > 0 && vbH > 0) {
+                    scaleX = canvasWidth / vbW;
+                    scaleY = canvasHeight / vbH;
+                } else {
+                    console.warn(`[SVG Import] Invalid viewBox dimensions: ${vbW}x${vbH}, using scale 1:1`);
+                }
+            } else {
+                console.warn(`[SVG Import] Malformed viewBox: "${viewBox}", using scale 1:1`);
+            }
         }
 
         // Helper to recursively process nodes
@@ -234,8 +272,10 @@ export function CanvaImportModal({ isOpen, onClose, onImportComplete }: CanvaImp
                     name: `Path ${elements.length + 1}`,
                     type: 'shape',
                     shapeType: 'path',
-                    x: currentX,
-                    y: currentY,
+                    // BUG-SVG-002 FIX: Paths must have x=0, y=0
+                    // Path data contains absolute coordinates - setting x/y causes double-translation
+                    x: 0,
+                    y: 0,
                     width: canvasWidth,
                     height: canvasHeight,
                     rotation: 0,
@@ -399,102 +439,305 @@ export function CanvaImportModal({ isOpen, onClose, onImportComplete }: CanvaImp
                 }
 
                 // Get SVG dimensions from the parsed options
-                const svgWidth = options?.width || canvasWidth;
-                const svgHeight = options?.height || canvasHeight;
+                const svgWidth = options?.width || canvasWidth || 1000;
+                const svgHeight = options?.height || canvasHeight || 1500;
 
-                // Calculate scaling factors
-                const scaleX = canvasWidth / svgWidth;
-                const scaleY = canvasHeight / svgHeight;
+                // BUG-SVG-007 FIX: Validate dimensions to prevent NaN
+                if (!svgWidth || !svgHeight || svgWidth <= 0 || svgHeight <= 0 || !isFinite(svgWidth) || !isFinite(svgHeight)) {
+                    console.warn(`[SVG Import] Invalid SVG dimensions: ${svgWidth}x${svgHeight}, using defaults`);
+                    const scaleX = 1;
+                    const scaleY = 1;
+                    console.log(`SVG dimensions: defaulted, Canvas: ${canvasWidth}x${canvasHeight}, Scale: ${scaleX}x${scaleY}`);
+                } else {
+                    // Calculate scaling factors
+                    const scaleX = canvasWidth / svgWidth;
+                    const scaleY = canvasHeight / svgHeight;
 
-                console.log(`SVG dimensions: ${svgWidth}x${svgHeight}, Canvas: ${canvasWidth}x${canvasHeight}, Scale: ${scaleX}x${scaleY}`);
+                    console.log(`SVG dimensions: ${svgWidth}x${svgHeight}, Canvas: ${canvasWidth}x${canvasHeight}, Scale: ${scaleX}x${scaleY}`);
 
-                // Process each object directly
-                objects.forEach((obj, index) => {
-                    if (!obj) return;
+                    // Process each object directly
+                    objects.forEach((obj, index) => {
+                        if (!obj) return;
 
-                    // Get fill color - handle special cases
-                    let fillColor = (obj.fill as string) || '#000000';
-                    if (fillColor === 'rgb(0, 0, 0)' || fillColor === 'rgb(0,0,0)') {
-                        fillColor = '#000000';
-                    }
+                        // Get fill color - handle special cases
+                        let fillColor = (obj.fill as string) || '#000000';
 
-                    if (obj instanceof fabric.Path) {
-                        // For paths, scale the path data coordinates
-                        const pathArray = obj.path;
-                        let pathData = '';
-
-                        if (pathArray) {
-                            pathData = pathArray.map(cmd => {
-                                if (Array.isArray(cmd)) {
-                                    const command = String(cmd[0]);
-                                    const scaledParts: string[] = [command];
-
-                                    for (let i = 1; i < cmd.length; i++) {
-                                        const value = cmd[i];
-                                        if (typeof value === 'number') {
-                                            // Scale X values (odd indices) and Y values (even indices)
-                                            const scaledValue = i % 2 === 1 ? value * scaleX : value * scaleY;
-                                            scaledParts.push(String(scaledValue));
-                                        } else {
-                                            scaledParts.push(String(value));
-                                        }
-                                    }
-                                    return scaledParts.join(' ');
-                                }
-                                return String(cmd);
-                            }).join(' ');
+                        // BUG-SVG-005 FIX: Convert all RGB/RGBA colors to hex
+                        if (fillColor.startsWith('rgb(') || fillColor.startsWith('rgba(')) {
+                            fillColor = rgbToHex(fillColor);
                         }
 
-                        const element: ShapeElement = {
-                            id: nanoid(),
-                            name: `Path ${index + 1}`,
-                            type: 'shape',
-                            shapeType: 'path',
-                            // Don't set x/y - the path data has the coordinates
-                            x: 0,
-                            y: 0,
-                            width: canvasWidth,
-                            height: canvasHeight,
-                            rotation: obj.angle || 0,
-                            opacity: obj.opacity ?? 1,
-                            locked: lockBackground,
-                            visible: true,
-                            zIndex: index,
-                            fill: fillColor,
-                            stroke: (obj.stroke as string) || '',
-                            strokeWidth: (obj.strokeWidth || 0) * Math.min(scaleX, scaleY),
-                            pathData: pathData,
-                        };
-                        elements.push(element);
-                    } else if (obj instanceof fabric.Rect) {
-                        // For rectangles, scale position and dimensions
-                        const element: ShapeElement = {
-                            id: nanoid(),
-                            name: `Rect ${index + 1}`,
-                            type: 'shape',
-                            shapeType: 'rect',
-                            x: (obj.left || 0) * scaleX,
-                            y: (obj.top || 0) * scaleY,
-                            width: (obj.width || 100) * scaleX,
-                            height: (obj.height || 100) * scaleY,
-                            rotation: obj.angle || 0,
-                            opacity: obj.opacity ?? 1,
-                            locked: lockBackground,
-                            visible: true,
-                            zIndex: index,
-                            fill: fillColor,
-                            stroke: (obj.stroke as string) || '',
-                            strokeWidth: (obj.strokeWidth || 0) * Math.min(scaleX, scaleY),
-                            cornerRadius: 0,
-                        };
-                        elements.push(element);
-                    }
-                });
+                        if (obj instanceof fabric.Path) {
+                            // For paths, scale the path data coordinates
+                            const pathArray = obj.path;
+                            let pathData = '';
 
-                console.log(`Fabric SVG Import: Created ${elements.length} elements`);
+                            if (pathArray) {
+                                pathData = pathArray.map(cmd => {
+                                    if (Array.isArray(cmd)) {
+                                        const command = String(cmd[0]).toUpperCase();
+                                        const scaledParts: string[] = [String(cmd[0])]; // Preserve original case
+
+                                        // Scale coordinates based on command type
+                                        // Reference: https://developer.mozilla.org/en-US/docs/Web/SVG/Tutorial/Paths
+                                        for (let i = 1; i < cmd.length; i++) {
+                                            const value = cmd[i];
+                                            if (typeof value === 'number') {
+                                                let scaledValue = value;
+
+                                                switch (command) {
+                                                    case 'M': // moveto
+                                                    case 'L': // lineto
+                                                    case 'T': // smooth quadratic bezier
+                                                        // Simple x,y pairs - odd indices=X, even indices=Y
+                                                        scaledValue = i % 2 === 1 ? value * scaleX : value * scaleY;
+                                                        break;
+
+                                                    case 'C': // cubic bezier
+                                                    case 'S': // smooth cubic bezier
+                                                        // x1,y1,x2,y2,x,y - coordinate pairs at indices: (1,2), (3,4), (5,6)
+                                                        scaledValue = [1, 3, 5].includes(i) ? value * scaleX : value * scaleY;
+                                                        break;
+
+                                                    case 'Q': // quadratic bezier
+                                                        // x1,y1,x,y - coordinate pairs at indices: (1,2), (3,4)
+                                                        scaledValue = [1, 3].includes(i) ? value * scaleX : value * scaleY;
+                                                        break;
+
+                                                    case 'A': // arc
+                                                        // rx,ry,x-axis-rotation,large-arc-flag,sweep-flag,x,y
+                                                        if (i === 1) scaledValue = value * scaleX; // rx
+                                                        else if (i === 2) scaledValue = value * scaleY; // ry
+                                                        else if (i === 6) scaledValue = value * scaleX; // x
+                                                        else if (i === 7) scaledValue = value * scaleY; // y
+                                                        // i=3: rotation angle, i=4,5: flags - don't scale
+                                                        break;
+
+                                                    case 'H': // horizontal lineto
+                                                        // Only X coordinate
+                                                        scaledValue = value * scaleX;
+                                                        break;
+
+                                                    case 'V': // vertical lineto
+                                                        // Only Y coordinate
+                                                        scaledValue = value * scaleY;
+                                                        break;
+
+                                                    case 'Z': // closepath
+                                                        // No parameters to scale
+                                                        break;
+
+                                                    default:
+                                                        // Unknown command - log warning but don't scale
+                                                        console.warn(`Unknown SVG path command: ${command}`);
+                                                        scaledValue = value;
+                                                }
+
+                                                scaledParts.push(String(scaledValue));
+                                            } else {
+                                                scaledParts.push(String(value));
+                                            }
+                                        }
+                                        return scaledParts.join(' ');
+                                    }
+                                    return String(cmd);
+                                }).join(' ');
+                            }
+
+                            // BUG-SVG-003 FIX: Validate pathData before creating element
+                            if (!pathData || pathData.trim() === '') {
+                                console.warn(`[SVG Import] Skipping path ${index + 1} with empty data`);
+                                return; // Skip this path
+                            }
+
+                            // Get actual path bounds from Fabric object for centering
+                            const pathLeft = (obj.left || 0) * scaleX;
+                            const pathTop = (obj.top || 0) * scaleY;
+                            const pathWidth = (obj.width || 100) * scaleX;
+                            const pathHeight = (obj.height || 100) * scaleY;
+
+                            const element: ShapeElement = {
+                                id: nanoid(),
+                                name: `Path ${index + 1}`,
+                                type: 'shape',
+                                shapeType: 'path',
+                                // Use actual path position from Fabric for centering calc
+                                x: pathLeft,
+                                y: pathTop,
+                                width: pathWidth,
+                                height: pathHeight,
+                                rotation: obj.angle || 0,
+                                opacity: obj.opacity ?? 1,
+                                locked: lockBackground,
+                                visible: true,
+                                zIndex: index,
+                                fill: fillColor,
+                                stroke: (obj.stroke as string) || '',
+                                strokeWidth: (obj.strokeWidth || 0) * Math.min(scaleX, scaleY),
+                                pathData: pathData,
+                            };
+                            elements.push(element);
+                        } else if (obj instanceof fabric.Rect) {
+                            // For rectangles, scale position and dimensions
+                            const element: ShapeElement = {
+                                id: nanoid(),
+                                name: `Rect ${index + 1}`,
+                                type: 'shape',
+                                shapeType: 'rect',
+                                x: (obj.left || 0) * scaleX,
+                                y: (obj.top || 0) * scaleY,
+                                width: (obj.width || 100) * scaleX,
+                                height: (obj.height || 100) * scaleY,
+                                rotation: obj.angle || 0,
+                                opacity: obj.opacity ?? 1,
+                                locked: lockBackground,
+                                visible: true,
+                                zIndex: index,
+                                fill: fillColor,
+                                stroke: (obj.stroke as string) || '',
+                                strokeWidth: (obj.strokeWidth || 0) * Math.min(scaleX, scaleY),
+                                cornerRadius: 0,
+                            };
+                            elements.push(element);
+                        }
+                        // BUG-SVG-008 FIX: Support more object types
+                        else if (obj instanceof fabric.Circle) {
+                            const element: ShapeElement = {
+                                id: nanoid(),
+                                name: `Circle ${index + 1}`,
+                                type: 'shape',
+                                shapeType: 'circle',
+                                x: (obj.left || 0) * scaleX,
+                                y: (obj.top || 0) * scaleY,
+                                width: ((obj.radius || 50) * 2) * scaleX,
+                                height: ((obj.radius || 50) * 2) * scaleY,
+                                rotation: obj.angle || 0,
+                                opacity: obj.opacity ?? 1,
+                                locked: lockBackground,
+                                visible: true,
+                                zIndex: index,
+                                fill: fillColor,
+                                stroke: (obj.stroke as string) || '',
+                                strokeWidth: (obj.strokeWidth || 0) * Math.min(scaleX, scaleY),
+                            };
+                            elements.push(element);
+                        }
+                        else if (obj instanceof fabric.Ellipse) {
+                            const element: ShapeElement = {
+                                id: nanoid(),
+                                name: `Ellipse ${index + 1}`,
+                                type: 'shape',
+                                shapeType: 'circle', // Use circle as ellipse (scaled)
+                                x: (obj.left || 0) * scaleX,
+                                y: (obj.top || 0) * scaleY,
+                                width: ((obj.rx || 50) * 2) * scaleX,
+                                height: ((obj.ry || 50) * 2) * scaleY,
+                                rotation: obj.angle || 0,
+                                opacity: obj.opacity ?? 1,
+                                locked: lockBackground,
+                                visible: true,
+                                zIndex: index,
+                                fill: fillColor,
+                                stroke: (obj.stroke as string) || '',
+                                strokeWidth: (obj.strokeWidth || 0) * Math.min(scaleX, scaleY),
+                            };
+                            elements.push(element);
+                        }
+                        else if (obj instanceof fabric.Polygon || obj instanceof fabric.Polyline) {
+                            // Convert polygon/polyline to path for preservation
+                            console.log(`[SVG Import] ${obj.type} converted to path for element ${index + 1}`);
+                            // Skip for now - would need path conversion logic
+                        }
+                        else if (obj instanceof fabric.Line) {
+                            const element: ShapeElement = {
+                                id: nanoid(),
+                                name: `Line ${index + 1}`,
+                                type: 'shape',
+                                shapeType: 'line',
+                                x: ((obj.x1 || 0) + (obj.left || 0)) * scaleX,
+                                y: ((obj.y1 || 0) + (obj.top || 0)) * scaleY,
+                                width: Math.abs(((obj.x2 || 0) - (obj.x1 || 0))) * scaleX,
+                                height: Math.abs(((obj.y2 || 0) - (obj.y1 || 0))) * scaleY,
+                                rotation: obj.angle || 0,
+                                opacity: obj.opacity ?? 1,
+                                locked: lockBackground,
+                                visible: true,
+                                zIndex: index,
+                                fill: '',
+                                stroke: (obj.stroke as string) || fillColor,
+                                strokeWidth: (obj.strokeWidth || 1) * Math.min(scaleX, scaleY),
+                                points: [
+                                    (obj.x1 || 0) * scaleX,
+                                    (obj.y1 || 0) * scaleY,
+                                    (obj.x2 || 0) * scaleX,
+                                    (obj.y2 || 0) * scaleY
+                                ],
+                            };
+                            elements.push(element);
+                        }
+                        else if (obj instanceof fabric.Group) {
+                            // Handle groups - process nested objects
+                            console.log(`[SVG Import] Group element ${index + 1} - processing ${obj.size()} nested objects`);
+                            // Groups would need recursive processing - skip for now
+                        }
+                        else {
+                            // Unknown object type
+                            console.warn(`[SVG Import] Unsupported object type: ${obj.type || 'unknown'} at index ${index}`);
+                            console.warn(`[SVG Import] Unsupported object type: ${obj.type || 'unknown'} at index ${index}`);
+                        }
+                    });
+                }  // Close else block
+
+                // CENTER SVG ON CANVAS
+                // Calculate bounding box and center offset for imported elements
+                if (elements.length > 0) {
+                    let minX = Infinity, minY = Infinity;
+                    let maxX = -Infinity, maxY = -Infinity;
+
+                    // Find bounding box of all elements
+                    elements.forEach(el => {
+                        const elX = el.x || 0;
+                        const elY = el.y || 0;
+                        const elW = el.width || 0;
+                        const elH = el.height || 0;
+
+                        minX = Math.min(minX, elX);
+                        minY = Math.min(minY, elY);
+                        maxX = Math.max(maxX, elX + elW);
+                        maxY = Math.max(maxY, elY + elH);
+                    });
+
+                    const groupWidth = maxX - minX;
+                    const groupHeight = maxY - minY;
+
+                    // Calculate offset to center on canvas
+                    const centerOffsetX = (canvasWidth - groupWidth) / 2 - minX;
+                    const centerOffsetY = (canvasHeight - groupHeight) / 2 - minY;
+
+                    console.log('[SVG Import] Centering:', {
+                        boundingBox: { minX, minY, maxX, maxY, groupWidth, groupHeight },
+                        canvas: { canvasWidth, canvasHeight },
+                        offset: { centerOffsetX, centerOffsetY }
+                    });
+
+                    // Apply offset to center all elements
+                    elements.forEach(el => {
+                        el.x = (el.x || 0) + centerOffsetX;
+                        el.y = (el.y || 0) + centerOffsetY;
+                    });
+                }
+
+                console.log(`Fabric SVG Import: Created ${elements.length} elements (centered)`);
                 resolve(elements);
             }).catch((err) => {
                 console.error('Fabric SVG parse error:', err);
+
+                // BUG-SVG-004 FIX: Notify user of parse failure
+                toast.warning(
+                    'SVG parsing encountered issues. Some elements may not import correctly.',
+                    { duration: 4000 }
+                );
+
                 resolve([]);
             });
         });
@@ -584,7 +827,11 @@ export function CanvaImportModal({ isOpen, onClose, onImportComplete }: CanvaImp
                     setElements(elements);
                     toast.success(`Imported ${elements.length} editable ${importMode === 'merged' ? 'merged' : 'separate'} elements from SVG`);
                 } else {
-                    // Fallback to image if no elements found
+                    // BUG-SVG-004 FIX: Explicit fallback notification
+                    toast.info(
+                        'SVG contained no parseable elements. Importing as static image instead.',
+                        { duration: 4000 }
+                    );
                     await uploadAsImage();
                 }
             }

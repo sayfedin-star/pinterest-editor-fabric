@@ -49,7 +49,7 @@ describe('csvValidator', () => {
                 { name: 'Product 2', price: '20' }
             ];
             const fieldMapping = { text1: 'name', text2: 'price' };
-            const requiredFields = [];
+            const requiredFields: string[] = [];
 
             const result = validateCSV(csvData, fieldMapping, requiredFields);
 
@@ -94,7 +94,7 @@ describe('csvValidator', () => {
                 { name: 'Product', image: 'https://example.com/image' } // No extension
             ];
             const fieldMapping = { text1: 'name', image1: 'image' };
-            const requiredFields = [];
+            const requiredFields: string[] = [];
 
             const result = validateCSV(csvData, fieldMapping, requiredFields);
 
@@ -108,7 +108,7 @@ describe('csvValidator', () => {
                 { name: 'Product', image: 'http://localhost:3000/image.jpg' }
             ];
             const fieldMapping = { text1: 'name', image1: 'image' };
-            const requiredFields = [];
+            const requiredFields: string[] = [];
 
             const result = validateCSV(csvData, fieldMapping, requiredFields);
 
@@ -123,7 +123,7 @@ describe('csvValidator', () => {
                 { name: longText, price: '10' }
             ];
             const fieldMapping = { text1: 'name', text2: 'price' };
-            const requiredFields = [];
+            const requiredFields: string[] = [];
 
             const result = validateCSV(csvData, fieldMapping, requiredFields);
 
@@ -138,7 +138,7 @@ describe('csvValidator', () => {
                 { name: 'Product <script>', price: '10' }
             ];
             const fieldMapping = { text1: 'name', text2: 'price' };
-            const requiredFields = [];
+            const requiredFields: string[] = [];
 
             const result = validateCSV(csvData, fieldMapping, requiredFields);
 

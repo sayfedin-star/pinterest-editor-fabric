@@ -6,7 +6,7 @@ import { useElementsStore } from '@/stores/elementsStore';
 import { useSelectionStore } from '@/stores/selectionStore';
 import { useEditorStore } from '@/stores/editorStore'; // Keep for duplicate/delete coordination
 import { useSnappingSettingsStore } from '@/stores/snappingSettingsStore';
-import { Element } from '@/types/editor';
+import { Element, ImageElement, TextElement } from '@/types/editor';
 import { CanvasManager, CanvasConfig } from '@/lib/canvas/CanvasManager';
 import { useSynchronizationBridge } from '@/hooks/useSynchronizationBridge';
 import { detectElementChange } from '@/lib/canvas/elementChangeDetection';
@@ -280,7 +280,7 @@ export function EditorCanvasV2({ containerWidth, containerHeight }: EditorCanvas
     // Update canvas size when dimensions or zoom changes
     useEffect(() => {
         if (canvasManagerRef.current && isCanvasReady) {
-            console.log('[EditorCanvas] Updating canvas size:', {
+            console.log('[EditorCanvas.v2] Updating canvas size:', {
                 canvasWidth: canvasSize.width,
                 canvasHeight: canvasSize.height,
                 zoom
@@ -475,10 +475,24 @@ export function EditorCanvasV2({ containerWidth, containerHeight }: EditorCanvas
                         visible={true}
                         zoom={zoom}
                         isLocked={!!selectedElement.locked}
-                        onRotate={() => {
-                            const newAngle = ((selectedElement.rotation || 0) + 45) % 360;
-                            canvasManagerRef.current?.updateElement(selectedElement.id, { rotation: newAngle });
-                        }}
+                        elementName={selectedElement.name || 'Untitled'}
+                        elementId={selectedElement.id}
+                        elementType={selectedElement.type as 'image' | 'text' | 'shape'}
+                        isDynamic={
+                            selectedElement.type === 'image' 
+                                ? !!(selectedElement as ImageElement).isDynamic 
+                                : selectedElement.type === 'text' 
+                                    ? !!(selectedElement as TextElement).isDynamic 
+                                    : false
+                        }
+                        dynamicFieldName={
+                            selectedElement.type === 'image' 
+                                ? (selectedElement as ImageElement).dynamicSource 
+                                : selectedElement.type === 'text' 
+                                    ? (selectedElement as TextElement).dynamicField 
+                                    : undefined
+                        }
+                        elements={elements}
                         onDelete={() => {
                             if (selectedElement && !selectedElement.locked) {
                                 deleteElement(selectedElement.id);
@@ -489,6 +503,34 @@ export function EditorCanvasV2({ containerWidth, containerHeight }: EditorCanvas
                         }}
                         onToggleLock={() => {
                             updateElement(selectedElement.id, { locked: !selectedElement.locked });
+                        }}
+                        onRename={(newName) => {
+                            updateElement(selectedElement.id, { name: newName });
+                        }}
+                        onDynamicChange={(fieldName, isDynamic) => {
+                            if (selectedElement.type === 'image') {
+                                updateElement(selectedElement.id, { 
+                                    isDynamic, 
+                                    dynamicSource: isDynamic ? fieldName : undefined 
+                                });
+                            } else if (selectedElement.type === 'text') {
+                                const textEl = selectedElement as TextElement;
+                                // When disabling dynamic, replace {{field}} with static text
+                                // When enabling, set text to {{fieldName}}
+                                let newText = textEl.text;
+                                if (isDynamic) {
+                                    newText = `{{${fieldName}}}`;
+                                } else {
+                                    // Remove template syntax if present, or use field name as placeholder
+                                    const templateMatch = textEl.text.match(/^\{\{(.+)\}\}$/);
+                                    newText = templateMatch ? templateMatch[1] : textEl.text;
+                                }
+                                updateElement(selectedElement.id, { 
+                                    isDynamic, 
+                                    dynamicField: isDynamic ? fieldName : undefined,
+                                    text: newText
+                                });
+                            }
                         }}
                         onMore={() => {
                             console.log('More options clicked');

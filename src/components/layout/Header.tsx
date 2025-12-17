@@ -10,7 +10,7 @@ import { useEditorStore } from '@/stores/editorStore'; // Keep for previewMode, 
 import { useStageRef } from '@/hooks/useStageRef';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
-import { saveTemplate as saveTemplateToDb } from '@/lib/db/templates';
+import { saveTemplate as saveTemplateToDb, checkTemplateNameExists } from '@/lib/db/templates';
 import { generateThumbnail, uploadThumbnail } from '@/lib/canvasUtils';
 import { isSupabaseConfigured } from '@/lib/supabase';
 import { useAuth } from '@/lib/auth/AuthContext';
@@ -24,8 +24,10 @@ export function Header() {
     const setTemplateName = useTemplateStore((s) => s.setTemplateName);
     const templateId = useTemplateStore((s) => s.templateId);
     const isNewTemplate = useTemplateStore((s) => s.isNewTemplate);
+    const setIsNewTemplate = useTemplateStore((s) => s.setIsNewTemplate);
     const isSaving = useTemplateStore((s) => s.isSaving);
     const setIsSaving = useTemplateStore((s) => s.setIsSaving);
+    const setTemplateId = useTemplateStore((s) => s.setTemplateId);
 
     // Canvas state from canvasStore
     const backgroundColor = useCanvasStore((s) => s.backgroundColor);
@@ -37,7 +39,6 @@ export function Header() {
     // Keep some state in editorStore for now (will migrate later)
     const previewMode = useEditorStore((s) => s.previewMode);
     const setPreviewMode = useEditorStore((s) => s.setPreviewMode);
-    const loadTemplate = useEditorStore((s) => s.loadTemplate);
 
     const stageRef = useStageRef();
     const stage = stageRef?.current;
@@ -73,6 +74,19 @@ export function Header() {
         if (!userId) {
             toast.error('Please sign in to save templates');
             return;
+        }
+
+        // Check for duplicate name (only for new templates)
+        if (isNewTemplate) {
+            const { exists } = await checkTemplateNameExists(templateName);
+            if (exists) {
+                // Show error - require unique name
+                setNameError(true);
+                nameInputRef.current?.focus();
+                toast.error(`A template named "${templateName}" already exists. Please choose a different name.`);
+                setTimeout(() => setNameError(false), 600);
+                return;
+            }
         }
 
         setIsSaving(true);
@@ -113,13 +127,20 @@ export function Header() {
                 });
 
                 if (savedTemplate) {
-                    loadTemplate({
-                        id: savedTemplate.id,
-                        name: savedTemplate.name,
-                        elements: savedTemplate.elements,
-                        background_color: savedTemplate.background_color,
-                        canvas_size: savedTemplate.canvas_size,
+                    // Don't call loadTemplate - elements are already in stores
+                    // Just sync the template ID across stores
+                    
+                    // Update editorStore's templateId and isNewTemplate
+                    // (without resetting elements - they're already correct!)
+                    useEditorStore.setState({
+                        templateId: savedTemplate.id,
+                        isNewTemplate: false
                     });
+                    
+                    // Sync templateStore with the saved template
+                    setTemplateId(savedTemplate.id);
+                    setIsNewTemplate(false);
+                    
                     toast.success('Template saved successfully!');
                 } else {
                     throw new Error('Failed to save to database');

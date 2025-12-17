@@ -30,15 +30,38 @@ export function createFabricObject(element: Element): fabric.FabricObject | null
         }
 
         case 'image': {
-            // For now, use colored rectangle placeholder
-            // TODO: Load actual image with fabric.Image.fromURL
-            obj = new fabric.Rect({
-                left: element.x,
-                top: element.y,
-                width: element.width,
-                height: element.height,
-                fill: '#cccccc',
-            });
+            const imageEl = element as ImageElement;
+            const imageUrl = imageEl.imageUrl;
+
+            if (imageUrl) {
+                // Return placeholder immediately, then load async
+                // The actual image will be loaded by createFabricObjectAsync
+                obj = new fabric.Rect({
+                    left: element.x,
+                    top: element.y,
+                    width: element.width,
+                    height: element.height,
+                    fill: '#e5e7eb', // Light grey loading placeholder
+                    stroke: '#d1d5db',
+                    strokeWidth: 1,
+                });
+                // Mark for async loading
+                (obj as any)._needsAsyncImageLoad = true;
+                (obj as any)._imageUrl = imageUrl;
+                (obj as any)._element = element;
+            } else {
+                // No URL - show empty placeholder
+                obj = new fabric.Rect({
+                    left: element.x,
+                    top: element.y,
+                    width: element.width,
+                    height: element.height,
+                    fill: '#f3f4f6',
+                    stroke: '#d1d5db',
+                    strokeWidth: 2,
+                    strokeDashArray: [8, 4],
+                });
+            }
             break;
         }
 
@@ -67,19 +90,32 @@ export function createFabricObject(element: Element): fabric.FabricObject | null
                 });
             } else if (shapeEl.shapeType === 'path') {
                 // Handle path shapes (from SVG imports)
-                // CRITICAL: Do NOT set left/top for paths - the path data itself
-                // contains the coordinates. Setting left/top would offset the path
-                // from its intended position.
+
+                // BUG-SVG-003 FIX: Validate pathData exists and is not empty
+                if (!shapeEl.pathData || shapeEl.pathData.trim() === '') {
+                    console.warn(`[ObjectFactory] Skipping path with empty data: ${element.name} (ID: ${element.id})`);
+                    return null;
+                }
+
                 const pathFill = shapeEl.fill === 'none' ? null : (shapeEl.fill || '#000000');
                 const pathStroke = shapeEl.stroke === 'none' ? null : (shapeEl.stroke || null);
                 const finalFill = (!pathFill && !pathStroke) ? '#000000' : pathFill;
 
-                obj = new fabric.Path(shapeEl.pathData || '', {
-                    // Don't set left/top - path data has native coordinates
+                obj = new fabric.Path(shapeEl.pathData, {
                     fill: finalFill,
                     stroke: pathStroke,
                     strokeWidth: shapeEl.strokeWidth || 0,
                 });
+
+                // CENTERING FIX: Set left/top to element.x/y directly
+                // Element x/y contains the final centered position
+                // Don't ADD to currentLeft - that causes double-positioning!
+                if (element.x !== 0 || element.y !== 0) {
+                    obj.set({
+                        left: element.x || 0,
+                        top: element.y || 0
+                    });
+                }
             }
             break;
         }
@@ -195,4 +231,96 @@ export function syncFabricToElement(fabricObject: fabric.FabricObject): Element 
     }
 
     return null;
+}
+
+/**
+ * Load an image asynchronously and return a Fabric.js Image object
+ * Handles CORS via proxy for external URLs
+ */
+export async function loadFabricImage(
+    imageUrl: string,
+    element: ImageElement
+): Promise<fabric.FabricImage | null> {
+    // Handle CORS by using proxy for external URLs
+    const knownCorsBlockedDomains = ['s3.tebi.io', 'tebi.io', 'amazonaws.com'];
+    const needsProxy = knownCorsBlockedDomains.some(d => imageUrl.includes(d));
+
+    const urlToLoad = needsProxy
+        ? `/api/proxy-image?url=${encodeURIComponent(imageUrl)}`
+        : imageUrl;
+
+    try {
+        const img = await fabric.FabricImage.fromURL(urlToLoad, {
+            crossOrigin: 'anonymous'
+        });
+
+        // Scale image to fit element dimensions
+        if (img.width && element.width) {
+            img.scaleX = element.width / img.width;
+            img.scaleY = element.height / img.height;
+        }
+
+        // Set position and other properties
+        img.set({
+            left: element.x,
+            top: element.y,
+            angle: element.rotation || 0,
+            opacity: element.opacity ?? 1,
+            selectable: !element.locked,
+            evented: !element.locked,
+        });
+
+        // Store element ID for reference
+        (img as any).id = element.id;
+        (img as any).name = element.name;
+
+        // Apply corner radius if specified
+        if (element.cornerRadius && element.cornerRadius > 0) {
+            img.clipPath = new fabric.Rect({
+                width: img.width,
+                height: img.height,
+                rx: element.cornerRadius / (img.scaleX || 1),
+                ry: element.cornerRadius / (img.scaleY || 1),
+                originX: 'center',
+                originY: 'center',
+            });
+        }
+
+        console.log('[ObjectFactory] Image loaded successfully:', element.id);
+        return img;
+    } catch (error) {
+        console.error('[ObjectFactory] Failed to load image:', imageUrl, error);
+
+        // Try with proxy if direct load failed
+        if (!needsProxy) {
+            try {
+                const proxyUrl = `/api/proxy-image?url=${encodeURIComponent(imageUrl)}`;
+                const img = await fabric.FabricImage.fromURL(proxyUrl, {
+                    crossOrigin: 'anonymous'
+                });
+
+                if (img.width && element.width) {
+                    img.scaleX = element.width / img.width;
+                    img.scaleY = element.height / img.height;
+                }
+
+                img.set({
+                    left: element.x,
+                    top: element.y,
+                    angle: element.rotation || 0,
+                    opacity: element.opacity ?? 1,
+                });
+
+                (img as any).id = element.id;
+                (img as any).name = element.name;
+
+                console.log('[ObjectFactory] Image loaded via proxy fallback:', element.id);
+                return img;
+            } catch (proxyError) {
+                console.error('[ObjectFactory] Proxy fallback also failed:', proxyError);
+            }
+        }
+
+        return null;
+    }
 }

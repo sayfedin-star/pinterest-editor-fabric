@@ -12,7 +12,7 @@ import {
     SelectionChangeCallback,
     PerformanceMetrics
 } from './types';
-import { createFabricObject, syncElementToFabric, syncFabricToElement } from './ObjectFactory';
+import { createFabricObject, syncElementToFabric, syncFabricToElement, loadFabricImage } from './ObjectFactory';
 import { PerformanceMonitor } from './PerformanceMonitor';
 import { ViewportManager } from './ViewportManager';
 
@@ -236,6 +236,34 @@ export class CanvasManager {
         }
 
         this.canvas.renderAll();
+
+        // Check if this is an image that needs async loading
+        if ((fabricObject as any)._needsAsyncImageLoad && element.type === 'image') {
+            const imageUrl = (fabricObject as any)._imageUrl;
+            const imageElement = element as import('@/types/editor').ImageElement;
+
+            console.log('[CanvasManager] Triggering async image load:', element.id);
+
+            // Load image asynchronously and replace placeholder
+            loadFabricImage(imageUrl, imageElement).then((img) => {
+                if (img && this.canvas) {
+                    // Remove placeholder
+                    const placeholder = this.elementMap.get(element.id);
+                    if (placeholder) {
+                        this.canvas.remove(placeholder);
+                    }
+
+                    // Add loaded image
+                    this.canvas.add(img);
+                    this.elementMap.set(element.id, img);
+                    this.canvas.renderAll();
+
+                    console.log('[CanvasManager] Image replaced placeholder:', element.id);
+                }
+            }).catch((err) => {
+                console.error('[CanvasManager] Async image load failed:', element.id, err);
+            });
+        }
     }
 
     /**

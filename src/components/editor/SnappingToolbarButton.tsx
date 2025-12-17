@@ -3,7 +3,8 @@
 import React, { useState } from 'react';
 import { useSnappingSettingsStore } from '@/stores/snappingSettingsStore';
 import { SnappingControlsPanel } from './SnappingControlsPanel';
-import { Magnet } from 'lucide-react';
+import { Magnet, ChevronUp } from 'lucide-react';
+import { cn } from '@/lib/utils';
 
 export function SnappingToolbarButton() {
     const [isOpen, setIsOpen] = useState(false);
@@ -13,36 +14,39 @@ export function SnappingToolbarButton() {
     return (
         <div className="relative">
             {/* Main Button */}
-            <div className="flex items-center gap-1">
+            <div className="flex items-center gap-0.5">
                 <button
                     onClick={() => setMagneticSnapping(!magneticSnapping)}
-                    className={`p-2 rounded-lg transition-colors ${magneticSnapping
-                            ? 'bg-pink-100 text-pink-600 hover:bg-pink-200'
-                            : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
-                        }`}
+                    className={cn(
+                        "flex items-center justify-center w-7 h-7 rounded-md transition-all duration-150",
+                        magneticSnapping
+                            ? "bg-pink-100 text-pink-600 hover:bg-pink-200"
+                            : "text-gray-400 hover:bg-gray-100 hover:text-gray-600"
+                    )}
                     title={magneticSnapping ? 'Snapping On' : 'Snapping Off'}
                 >
-                    <Magnet size={18} />
+                    <Magnet className="w-4 h-4" />
                 </button>
                 <button
                     onClick={() => setIsOpen(!isOpen)}
-                    className="p-1 rounded hover:bg-gray-100 transition-colors"
+                    className={cn(
+                        "flex items-center justify-center w-5 h-7 rounded-md transition-all duration-150",
+                        "hover:bg-gray-100 text-gray-400 hover:text-gray-600"
+                    )}
                     title="Snapping Settings"
                 >
-                    <svg width="12" height="12" viewBox="0 0 12 12" className="text-gray-400">
-                        <path fill="currentColor" d="M2 4l4 4 4-4z" />
-                    </svg>
+                    <ChevronUp className={cn("w-3 h-3 transition-transform", isOpen && "rotate-180")} />
                 </button>
             </div>
 
-            {/* Dropdown Panel */}
+            {/* Dropdown Panel - Opens UPWARD */}
             {isOpen && (
                 <>
                     <div
                         className="fixed inset-0 z-40"
                         onClick={() => setIsOpen(false)}
                     />
-                    <div className="absolute top-full right-0 mt-2 z-50">
+                    <div className="absolute bottom-full right-0 mb-2 z-50">
                         <SnappingControlsPanel />
                     </div>
                 </>

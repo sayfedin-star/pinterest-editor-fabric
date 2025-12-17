@@ -14,7 +14,7 @@ import {
     CANVAS_HEIGHT
 } from '@/types/editor';
 import { generateId } from '@/lib/utils';
-import { parseFieldNameFromLayer } from '@/lib/utils/fieldNameParser';
+import { generateUniqueName } from '@/lib/utils/nameValidation';
 // Import specialized stores for cross-store sync
 import { useElementsStore } from './elementsStore';
 import { useSelectionStore } from './selectionStore';
@@ -233,37 +233,31 @@ export const useEditorStore = create(
                 const newElement = {
                     ...cloneDeep(element),
                     id: generateId(),
-                    name: `${element.name} Copy`,
                     x: element.x + 20,
                     y: element.y + 20,
                     zIndex: state.elements.length
                 };
 
-                // For image elements, assign a new unique dynamicSource
-                if (newElement.type === 'image' && (newElement as ImageElement).isDynamic) {
-                    // Get existing image numbers to find the next available number
-                    const imageNumbers = state.elements
-                        .filter(e => e.type === 'image' && (e as ImageElement).isDynamic)
-                        .map(e => {
-                            const match = (e as ImageElement).dynamicSource?.match(/^image(\d+)$/);
-                            return match ? parseInt(match[1]) : 0;
-                        });
-                    const nextNumber = imageNumbers.length > 0 ? Math.max(...imageNumbers) + 1 : 1;
-                    (newElement as ImageElement).dynamicSource = `image${nextNumber}`;
-                    newElement.name = `Image ${nextNumber}`;
+                // For image elements, assign a new unique name and dynamicSource
+                if (newElement.type === 'image') {
+                    const unique = generateUniqueName(state.elements, 'image');
+                    newElement.name = unique.name;
+                    if ((newElement as ImageElement).isDynamic) {
+                        (newElement as ImageElement).dynamicSource = unique.fieldName;
+                    }
                 }
-
-                // For text elements, assign a new unique dynamicField
-                if (newElement.type === 'text' && (newElement as TextElement).isDynamic) {
-                    const textNumbers = state.elements
-                        .filter(e => e.type === 'text' && (e as TextElement).isDynamic)
-                        .map(e => {
-                            const match = (e as TextElement).dynamicField?.match(/^text(\d+)$/i);
-                            return match ? parseInt(match[1]) : 0;
-                        });
-                    const nextNumber = textNumbers.length > 0 ? Math.max(...textNumbers) + 1 : 1;
-                    (newElement as TextElement).dynamicField = `text${nextNumber}`;
-                    newElement.name = `Text ${nextNumber}`;
+                // For text elements, assign a new unique name and dynamicField
+                else if (newElement.type === 'text') {
+                    const unique = generateUniqueName(state.elements, 'text');
+                    newElement.name = unique.name;
+                    if ((newElement as TextElement).isDynamic) {
+                        (newElement as TextElement).dynamicField = unique.fieldName;
+                        (newElement as TextElement).text = `{{${unique.fieldName}}}`;
+                    }
+                }
+                // For other types (shapes), append Copy
+                else {
+                    newElement.name = `${element.name} Copy`;
                 }
 
                 state.addElement(newElement);
@@ -742,6 +736,10 @@ export const useEditorStore = create(
                 useSelectionStore.getState().clearSelection();
                 useCanvasStore.getState().setCanvasSize(canvasSize.width, canvasSize.height);
                 useCanvasStore.getState().setBackgroundColor(backgroundColor);
+                
+                // FIX: Also reset templateStore to clear name and set isNewTemplate
+                const { useTemplateStore } = require('./templateStore');
+                useTemplateStore.getState().resetTemplate();
 
                 // Update editorStore
                 set({
@@ -800,9 +798,10 @@ export const useEditorStore = create(
                 set({
                     elements: [canvaBackground, ...shiftedElements],
                     templateSource: 'canva_import',
-                    // Keep backgroundImage null since we're using regular element now
-
                 });
+
+                // CRITICAL: Sync to elementsStore (source of truth for canvas rendering)
+                useElementsStore.getState().setElements([canvaBackground, ...shiftedElements]);
 
                 pushHistory();
             },
@@ -846,19 +845,12 @@ export const useEditorStore = create(
             addText: () => {
                 const { elements, addElement, pushHistory, canvasSize } = get();
 
-                // Get next text number based on existing elements
-                const textNumbers = elements
-                    .filter(e => e.type === 'text')
-                    .map(e => {
-                        const match = e.name.match(/^Text\s*(\d+)$/i);
-                        return match ? parseInt(match[1]) : 0;
-                    });
-                const nextNumber = textNumbers.length > 0 ? Math.max(...textNumbers) + 1 : 1;
-                const fieldName = `text${nextNumber}`;
+                // Get next text number using utility (checks both name and dynamicField)
+                const unique = generateUniqueName(elements, 'text');
 
                 const newText: TextElement = {
                     id: generateId(),
-                    name: `Text ${nextNumber}`,
+                    name: unique.name,
                     type: 'text',
                     x: canvasSize.width / 2 - 100,
                     y: canvasSize.height / 2 - 25,
@@ -869,7 +861,7 @@ export const useEditorStore = create(
                     locked: false,
                     visible: true,
                     zIndex: elements.length,
-                    text: `{{${fieldName}}}`,
+                    text: `{{${unique.fieldName}}}`,
                     fontFamily: 'Inter',
                     fontSize: 32,
                     fontStyle: 'normal',
@@ -880,7 +872,7 @@ export const useEditorStore = create(
                     letterSpacing: 0,
                     textDecoration: '',
                     isDynamic: true,
-                    dynamicField: fieldName
+                    dynamicField: unique.fieldName
                 };
 
                 addElement(newText);
@@ -890,19 +882,12 @@ export const useEditorStore = create(
             addImage: () => {
                 const { elements, addElement, pushHistory, canvasSize } = get();
 
-                // Get next image number based on existing elements
-                const imageNumbers = elements
-                    .filter(e => e.type === 'image')
-                    .map(e => {
-                        const match = e.name.match(/^Image\s*(\d+)$/i);
-                        return match ? parseInt(match[1]) : 0;
-                    });
-                const nextNumber = imageNumbers.length > 0 ? Math.max(...imageNumbers) + 1 : 1;
-                const fieldName = `image${nextNumber}`;
+                // Get next image number using utility (checks both name and dynamicSource)
+                const unique = generateUniqueName(elements, 'image');
 
                 const newImage: ImageElement = {
                     id: generateId(),
-                    name: `Image ${nextNumber}`,
+                    name: unique.name,
                     type: 'image',
                     x: canvasSize.width / 2 - 150,
                     y: canvasSize.height / 2 - 150,
@@ -916,7 +901,7 @@ export const useEditorStore = create(
                     fitMode: 'cover',
                     cornerRadius: 0,
                     isDynamic: true,
-                    dynamicSource: fieldName
+                    dynamicSource: unique.fieldName
                 };
 
                 addElement(newImage);

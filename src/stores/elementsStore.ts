@@ -23,6 +23,7 @@ import {
     ImageElement,
 } from '@/types/editor';
 import { generateId } from '@/lib/utils';
+import { generateUniqueName } from '@/lib/utils/nameValidation';
 import { parseFieldNameFromLayer } from '@/lib/utils/fieldNameParser';
 import { useSelectionStore } from './selectionStore';
 
@@ -172,37 +173,31 @@ export const useElementsStore = create<ElementsState & ElementsActions>((set, ge
         const newElement: Element = {
             ...cloneDeep(element),
             id: generateId(),
-            name: `${element.name} Copy`,
             x: element.x + 20,
             y: element.y + 20,
             zIndex: state.elements.length,
         };
 
-        // For image elements with dynamic source, assign new unique source
-        if (newElement.type === 'image' && (newElement as ImageElement).isDynamic) {
-            const imageNumbers = state.elements
-                .filter((e) => e.type === 'image' && (e as ImageElement).isDynamic)
-                .map((e) => {
-                    const match = (e as ImageElement).dynamicSource?.match(/^image(\d+)$/);
-                    return match ? parseInt(match[1]) : 0;
-                });
-            const nextNumber = imageNumbers.length > 0 ? Math.max(...imageNumbers) + 1 : 1;
-            (newElement as ImageElement).dynamicSource = `image${nextNumber}`;
-            newElement.name = `Image ${nextNumber}`;
+        // For image elements, assign a new unique name and dynamicSource
+        if (newElement.type === 'image') {
+            const unique = generateUniqueName(state.elements, 'image');
+            newElement.name = unique.name;
+            if ((newElement as ImageElement).isDynamic) {
+                (newElement as ImageElement).dynamicSource = unique.fieldName;
+            }
         }
-
-        // For text elements with dynamic field, assign new unique field
-        if (newElement.type === 'text' && (newElement as TextElement).isDynamic) {
-            const textNumbers = state.elements
-                .filter((e) => e.type === 'text' && (e as TextElement).isDynamic)
-                .map((e) => {
-                    const match = (e as TextElement).dynamicField?.match(/^text(\d+)$/i);
-                    return match ? parseInt(match[1]) : 0;
-                });
-            const nextNumber = textNumbers.length > 0 ? Math.max(...textNumbers) + 1 : 1;
-            (newElement as TextElement).dynamicField = `text${nextNumber}`;
-            (newElement as TextElement).text = `{{text${nextNumber}}}`;
-            newElement.name = `Text ${nextNumber}`;
+        // For text elements, assign a new unique name and dynamicField
+        else if (newElement.type === 'text') {
+            const unique = generateUniqueName(state.elements, 'text');
+            newElement.name = unique.name;
+            if ((newElement as TextElement).isDynamic) {
+                (newElement as TextElement).dynamicField = unique.fieldName;
+                (newElement as TextElement).text = `{{${unique.fieldName}}}`;
+            }
+        }
+        // For other types (shapes), append Copy
+        else {
+            newElement.name = `${element.name} Copy`;
         }
 
         set((state) => ({

@@ -174,6 +174,12 @@ async function createFabricObject(
         else if (shapeEl.shapeType === 'circle') fabricObject = new fabric.Circle({ ...commonOptions, radius: (shapeEl.width || 0) / 2, fill: shapeEl.fill, stroke: shapeEl.stroke, strokeWidth: shapeEl.strokeWidth });
         else if (shapeEl.shapeType === 'line') fabricObject = new fabric.Line(shapeEl.points as [number, number, number, number] || [0, 0, shapeEl.width, 0], { ...commonOptions, stroke: shapeEl.stroke, strokeWidth: shapeEl.strokeWidth });
         else if (shapeEl.shapeType === 'path') {
+            // BUG-SVG-003 FIX: Validate pathData exists and is not empty
+            if (!shapeEl.pathData || shapeEl.pathData.trim() === '') {
+                console.warn(`[RenderEngine] Skipping path with empty data: ${el.name} (ID: ${el.id})`);
+                return null;
+            }
+
             // Handle 'none' fill - convert to null for Fabric.js transparency
             const pathFill = shapeEl.fill === 'none' ? null : (shapeEl.fill || '#000000');
             const pathStroke = shapeEl.stroke === 'none' ? null : (shapeEl.stroke || null);
@@ -182,19 +188,24 @@ async function createFabricObject(
             // If no fill AND no stroke, default to black fill so path is visible
             const finalFill = (!pathFill && !pathStroke) ? '#000000' : pathFill;
 
-            // CRITICAL: Do NOT set left/top for paths - the path data itself
-            // contains the coordinates. Setting left/top would offset the path.
-            fabricObject = new fabric.Path(shapeEl.pathData || '', {
-                // Apply only non-positional common options
+            fabricObject = new fabric.Path(shapeEl.pathData, {
                 angle: el.rotation || 0,
                 opacity: el.opacity ?? 1,
                 selectable: !el.locked,
                 evented: !el.locked,
-                // Path-specific options
                 fill: finalFill,
                 stroke: pathStroke,
                 strokeWidth: pathStrokeWidth
             });
+
+            // CENTERING FIX: Set left/top to element.x/y directly
+            // Element x/y contains the final centered position
+            if (el.x !== 0 || el.y !== 0) {
+                fabricObject.set({
+                    left: el.x || 0,
+                    top: el.y || 0
+                });
+            }
         }
     }
     else if (el.type === 'frame') {

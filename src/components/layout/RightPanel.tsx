@@ -1,14 +1,14 @@
 'use client';
 
 import React, { useState } from 'react';
-import { useEditorStore } from '@/stores/editorStore';
 import { cn } from '@/lib/utils';
 import { PropertiesPanel } from '@/components/panels/PropertiesPanel';
 import { ArrangePanel } from '@/components/panels/ArrangePanel';
 import { LayersPanel } from '@/components/panels/LayersPanel';
+import { TemplateMetadataPanel } from '@/components/panels/TemplateMetadataPanel';
 import { Settings } from 'lucide-react';
 
-type TabType = 'properties' | 'arrange' | 'layers';
+type TabType = 'properties' | 'arrange' | 'layers' | 'details';
 
 export function RightPanel() {
     const [activeTab, setActiveTab] = useState<TabType>('properties');
@@ -50,7 +50,7 @@ export function RightPanel() {
                         aria-selected={activeTab === 'properties'}
                         aria-controls="properties-panel"
                         className={cn(
-                            "flex-1 text-sm font-medium transition-all duration-150 border-b-2",
+                            "flex-1 text-xs font-medium transition-all duration-150 border-b-2",
                             activeTab === 'properties'
                                 ? "text-blue-600 border-blue-600 bg-blue-50/50"
                                 : "text-gray-500 border-transparent hover:text-gray-700 hover:bg-gray-50"
@@ -64,7 +64,7 @@ export function RightPanel() {
                         aria-selected={activeTab === 'arrange'}
                         aria-controls="arrange-panel"
                         className={cn(
-                            "flex-1 text-sm font-medium transition-all duration-150 border-b-2",
+                            "flex-1 text-xs font-medium transition-all duration-150 border-b-2",
                             activeTab === 'arrange'
                                 ? "text-blue-600 border-blue-600 bg-blue-50/50"
                                 : "text-gray-500 border-transparent hover:text-gray-700 hover:bg-gray-50"
@@ -78,7 +78,7 @@ export function RightPanel() {
                         aria-selected={activeTab === 'layers'}
                         aria-controls="layers-panel"
                         className={cn(
-                            "flex-1 text-sm font-medium transition-all duration-150 border-b-2",
+                            "flex-1 text-xs font-medium transition-all duration-150 border-b-2",
                             activeTab === 'layers'
                                 ? "text-blue-600 border-blue-600 bg-blue-50/50"
                                 : "text-gray-500 border-transparent hover:text-gray-700 hover:bg-gray-50"
@@ -86,18 +86,33 @@ export function RightPanel() {
                     >
                         Layers
                     </button>
+                    <button
+                        onClick={() => setActiveTab('details')}
+                        role="tab"
+                        aria-selected={activeTab === 'details'}
+                        aria-controls="details-panel"
+                        className={cn(
+                            "flex-1 text-xs font-medium transition-all duration-150 border-b-2",
+                            activeTab === 'details'
+                                ? "text-blue-600 border-blue-600 bg-blue-50/50"
+                                : "text-gray-500 border-transparent hover:text-gray-700 hover:bg-gray-50"
+                        )}
+                    >
+                        Details
+                    </button>
                 </div>
 
                 {/* Tab Content */}
                 <div
-                    className="flex-1 overflow-y-auto p-4"
+                    className="flex-1 overflow-y-auto"
                     role="tabpanel"
                     id={`${activeTab}-panel`}
                     aria-labelledby={`${activeTab}-tab`}
                 >
-                    {activeTab === 'properties' && <PropertiesPanel />}
-                    {activeTab === 'arrange' && <ArrangePanel />}
-                    {activeTab === 'layers' && <LayersPanel />}
+                    {activeTab === 'properties' && <div className="p-4"><PropertiesPanel /></div>}
+                    {activeTab === 'arrange' && <div className="p-4"><ArrangePanel /></div>}
+                    {activeTab === 'layers' && <div className="p-4"><LayersPanel /></div>}
+                    {activeTab === 'details' && <TemplateMetadataPanel />}
                 </div>
             </aside>
         </>

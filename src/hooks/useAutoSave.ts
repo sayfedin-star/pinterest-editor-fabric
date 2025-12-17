@@ -13,16 +13,20 @@
  * - Auto-save status indicator
  * 
  * Finding #4 Resolution: Prevents data loss for users
+ * 
+ * FIX (2025-12-17): Uses templateStore instead of editorStore for
+ * template metadata to prevent duplicate template creation.
  */
 
 import { useEffect, useRef, useCallback, useState } from 'react';
+import { useTemplateStore } from '@/stores/templateStore';
 import { useEditorStore } from '@/stores/editorStore';
 import { useElementsStore } from '@/stores/elementsStore';
 import { useCanvasStore } from '@/stores/canvasStore';
 import { saveTemplate as saveTemplateToDb } from '@/lib/db/templates';
 import { isSupabaseConfigured, supabase } from '@/lib/supabase';
 
-export type AutoSaveStatus = 'idle' | 'pending' | 'saving' | 'saved' | 'error';
+export type AutoSaveStatus = 'idle' | 'pending' | 'saving' | 'saved' | 'error' | 'conflict';
 
 interface AutoSaveOptions {
     /** Delay in ms before auto-save triggers after last change */
@@ -61,13 +65,17 @@ export function useAutoSave(options: AutoSaveOptions = {}): AutoSaveState & {
     const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
     const lastStateRef = useRef<string>('');
     const retryCountRef = useRef(0);
+    const isSavingRef = useRef(false); // Prevent concurrent saves
     const maxRetries = 3;
 
-    // Get state from stores
-    const templateId = useEditorStore((s) => s.templateId);
-    const templateName = useEditorStore((s) => s.templateName);
-    const isNewTemplate = useEditorStore((s) => s.isNewTemplate);
-    const loadTemplate = useEditorStore((s) => s.loadTemplate);
+    // Get state from templateStore (FIX: use templateStore, not editorStore)
+    const templateId = useTemplateStore((s) => s.templateId);
+    const templateName = useTemplateStore((s) => s.templateName);
+    const isNewTemplate = useTemplateStore((s) => s.isNewTemplate);
+    const setTemplateId = useTemplateStore((s) => s.setTemplateId);
+    const setIsNewTemplate = useTemplateStore((s) => s.setIsNewTemplate);
+
+    // Get state from other stores
     const elements = useElementsStore((s) => s.elements);
     const canvasSize = useCanvasStore((s) => s.canvasSize);
     const backgroundColor = useCanvasStore((s) => s.backgroundColor);
@@ -91,6 +99,11 @@ export function useAutoSave(options: AutoSaveOptions = {}): AutoSaveState & {
 
     // Perform the actual save
     const performSave = useCallback(async (): Promise<boolean> => {
+        // Prevent concurrent saves
+        if (isSavingRef.current) {
+            return false;
+        }
+
         // Don't save if:
         // - Template is new and unnamed
         // - No elements
@@ -118,11 +131,28 @@ export function useAutoSave(options: AutoSaveOptions = {}): AutoSaveState & {
             return false;
         }
 
+        isSavingRef.current = true;
         updateStatus('saving');
 
         try {
+            // FIX: If new template has same name as existing, SKIP auto-save
+            // User must rename or manually save to update existing
+            const effectiveTemplateId = isNewTemplate ? undefined : templateId;
+            
+            if (isNewTemplate) {
+                const { checkTemplateNameExists } = await import('@/lib/db/templates');
+                const { exists } = await checkTemplateNameExists(templateName);
+                if (exists) {
+                    // Don't auto-save if name conflicts - user must choose
+                    // Set status to 'conflict' so UI can show helpful message
+                    isSavingRef.current = false;
+                    updateStatus('conflict');
+                    return false;
+                }
+            }
+
             const savedTemplate = await saveTemplateToDb({
-                id: isNewTemplate ? undefined : templateId,
+                id: effectiveTemplateId,
                 name: templateName,
                 canvas_size: canvasSize,
                 background_color: backgroundColor,
@@ -130,14 +160,18 @@ export function useAutoSave(options: AutoSaveOptions = {}): AutoSaveState & {
             });
 
             if (savedTemplate) {
-                // Update state with saved template (gets new ID if new)
-                if (isNewTemplate && savedTemplate.id !== templateId) {
-                    loadTemplate({
-                        id: savedTemplate.id,
-                        name: savedTemplate.name,
-                        elements: savedTemplate.elements,
-                        background_color: savedTemplate.background_color,
-                        canvas_size: savedTemplate.canvas_size,
+                // FIX: Don't call loadTemplate - elements are already in stores
+                // Just sync the template IDs across stores
+                
+                if (isNewTemplate || savedTemplate.id !== templateId) {
+                    // Update templateStore with new/correct ID
+                    setTemplateId(savedTemplate.id);
+                    setIsNewTemplate(false);
+                    
+                    // Also update editorStore's ID (without resetting elements)
+                    useEditorStore.setState({
+                        templateId: savedTemplate.id,
+                        isNewTemplate: false
                     });
                 }
 
@@ -156,6 +190,8 @@ export function useAutoSave(options: AutoSaveOptions = {}): AutoSaveState & {
             setErrorMessage(message);
             updateStatus('error');
             return false;
+        } finally {
+            isSavingRef.current = false;
         }
     }, [
         templateId,
@@ -164,7 +200,8 @@ export function useAutoSave(options: AutoSaveOptions = {}): AutoSaveState & {
         elements,
         canvasSize,
         backgroundColor,
-        loadTemplate,
+        setTemplateId,
+        setIsNewTemplate,
         computeStateHash,
         updateStatus,
     ]);

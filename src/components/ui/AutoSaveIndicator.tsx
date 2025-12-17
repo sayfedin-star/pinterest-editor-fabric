@@ -66,6 +66,14 @@ export function AutoSaveIndicator({
                     bgColor: 'bg-red-50',
                     animate: false,
                 };
+            case 'conflict':
+                return {
+                    icon: CloudOff,
+                    text: 'Name exists - rename to save',
+                    color: 'text-amber-600',
+                    bgColor: 'bg-amber-50',
+                    animate: false,
+                };
             default:
                 return {
                     icon: Cloud,

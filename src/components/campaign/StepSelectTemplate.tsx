@@ -10,9 +10,9 @@ import Link from 'next/link';
 
 // Demo templates for when database is not configured
 const demoTemplates: TemplateListItem[] = [
-    { id: 'demo-1', name: 'Recipe Card', thumbnail_url: null, category: 'Food', created_at: '', updated_at: '' },
-    { id: 'demo-2', name: 'Quote Post', thumbnail_url: null, category: 'Quote', created_at: '', updated_at: '' },
-    { id: 'demo-3', name: 'Product Showcase', thumbnail_url: null, category: 'Product', created_at: '', updated_at: '' },
+    { id: 'demo-1', name: 'Recipe Card', thumbnail_url: null, category: 'Food', category_id: null, is_featured: false, view_count: 0, created_at: '', updated_at: '' },
+    { id: 'demo-2', name: 'Quote Post', thumbnail_url: null, category: 'Quote', category_id: null, is_featured: false, view_count: 0, created_at: '', updated_at: '' },
+    { id: 'demo-3', name: 'Product Showcase', thumbnail_url: null, category: 'Product', category_id: null, is_featured: false, view_count: 0, created_at: '', updated_at: '' },
 ];
 
 // Skeleton loading card
