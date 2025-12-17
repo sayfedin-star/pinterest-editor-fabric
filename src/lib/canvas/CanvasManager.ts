@@ -1,4 +1,5 @@
 import * as fabric from 'fabric';
+import { debounce } from 'lodash';
 import { Element } from '@/types/editor';
 import { AlignmentGuides } from '../fabric/AlignmentGuides';
 import { SnappingSettings } from '@/stores/snappingSettingsStore';
@@ -62,6 +63,14 @@ export class CanvasManager {
         lastSnapDuration: 0
     };
     private collisionCalcTime: number = 0;
+
+    /**
+     * Debounced render for 60fps performance
+     * Batches multiple render requests into single frame
+     */
+    private debouncedRender = debounce(() => {
+        this.canvas?.requestRenderAll();
+    }, 16); // 60fps = 16ms frame budget
 
     /**
      * Initialize the canvas manager with a canvas element
@@ -137,6 +146,9 @@ export class CanvasManager {
         console.log('[CanvasManager] Destroying canvas');
 
         this.enabled = false;
+
+        // Cancel pending debounced renders
+        this.debouncedRender.cancel();
 
         // Stop performance monitoring (via PerformanceMonitor)
         this.performanceMonitor.stop();
@@ -235,7 +247,7 @@ export class CanvasManager {
             });
         }
 
-        this.canvas.renderAll();
+        this.debouncedRender();
 
         // Check if this is an image that needs async loading
         if ((fabricObject as any)._needsAsyncImageLoad && element.type === 'image') {
@@ -256,7 +268,7 @@ export class CanvasManager {
                     // Add loaded image
                     this.canvas.add(img);
                     this.elementMap.set(element.id, img);
-                    this.canvas.renderAll();
+                    this.debouncedRender();
 
                     console.log('[CanvasManager] Image replaced placeholder:', element.id);
                 }
@@ -298,7 +310,7 @@ export class CanvasManager {
             });
         }
 
-        this.canvas.renderAll();
+        this.debouncedRender();
     }
 
     /**
@@ -325,7 +337,7 @@ export class CanvasManager {
         // Remove from element map
         this.elementMap.delete(id);
 
-        this.canvas.renderAll();
+        this.debouncedRender();
     }
 
     /**
@@ -370,7 +382,7 @@ export class CanvasManager {
         // Re-apply Canva-style controls to all objects after replacement
         applyCanvaStyleControls(this.canvas);
 
-        this.canvas.renderAll();
+        this.debouncedRender();
         console.log('[CanvasManager] Element replacement complete');
     }
 
