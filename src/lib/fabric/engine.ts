@@ -1,5 +1,6 @@
 import * as fabric from 'fabric';
 import { Element, TextElement, ImageElement, ShapeElement, FrameElement } from '@/types/editor';
+import { convertToFabricStyles } from '@/lib/text/characterStyles';
 
 export interface RenderConfig {
     width: number;
@@ -87,6 +88,29 @@ function getDynamicImageUrl(element: ImageElement, rowData: Record<string, strin
     return src;
 }
 
+/**
+ * Apply text transformation (uppercase, lowercase, capitalize)
+ * Phase 1 Typography Enhancement
+ */
+function applyTextTransform(
+    text: string,
+    transform: 'none' | 'uppercase' | 'lowercase' | 'capitalize' | undefined
+): string {
+    if (!transform || transform === 'none') return text;
+    
+    switch (transform) {
+        case 'uppercase':
+            return text.toUpperCase();
+        case 'lowercase':
+            return text.toLowerCase();
+        case 'capitalize':
+            // Capitalize first letter of each word
+            return text.replace(/\b\w/g, (char) => char.toUpperCase());
+        default:
+            return text;
+    }
+}
+
 // --- Fabric Object Creation ---
 async function createFabricObject(
     el: Element,
@@ -107,14 +131,22 @@ async function createFabricObject(
     if (el.type === 'text') {
         const textEl = el as TextElement;
         let text = textEl.text;
-        if (rowData && Object.keys(rowData).length > 0) text = replaceDynamicFields(text, rowData, fieldMapping);
+        
+        // Step 1: Replace dynamic fields first (e.g., {{name}} -> "John Smith")
+        if (rowData && Object.keys(rowData).length > 0) {
+            text = replaceDynamicFields(text, rowData, fieldMapping);
+        }
+        
+        // Step 2: Apply text transform AFTER field substitution (Phase 1)
+        text = applyTextTransform(text, textEl.textTransform);
 
         const textbox = new fabric.Textbox(text, {
             ...commonOptions,
             width: textEl.width, fontSize: textEl.fontSize, fontFamily: textEl.fontFamily,
             fill: textEl.fill, textAlign: textEl.align, lineHeight: textEl.lineHeight,
             charSpacing: (textEl.letterSpacing || 0) * 10,
-            fontWeight: textEl.fontStyle?.includes('bold') ? 'bold' : 'normal',
+            // Phase 1: Use fontWeight property (100-900), fallback to fontStyle for backward compatibility
+            fontWeight: textEl.fontWeight || (textEl.fontStyle?.includes('bold') ? 'bold' : 'normal'),
             fontStyle: textEl.fontStyle?.includes('italic') ? 'italic' : 'normal',
             underline: textEl.textDecoration === 'underline',
             linethrough: textEl.textDecoration === 'line-through',
@@ -131,9 +163,20 @@ async function createFabricObject(
             textbox.stroke = textEl.stroke; textbox.strokeWidth = textEl.strokeWidth || 1;
         }
 
+        // Phase 2: Apply character-level styles for rich text
+        if (textEl.richTextEnabled && textEl.characterStyles && textEl.characterStyles.length > 0) {
+            const styles = convertToFabricStyles(text, textEl.characterStyles);
+            textbox.set('styles', styles);
+        }
+
+        // Phase 1: Text background with padding support
         if (textEl.backgroundEnabled) {
+            const padding = textEl.backgroundPadding || 0;
             const bgRect = new fabric.Rect({
-                width: textEl.width, height: textEl.height,
+                width: textEl.width + padding * 2,
+                height: textEl.height + padding * 2,
+                left: -padding,
+                top: -padding,
                 fill: textEl.backgroundColor,
                 rx: textEl.backgroundCornerRadius, ry: textEl.backgroundCornerRadius,
             });

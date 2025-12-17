@@ -328,6 +328,11 @@ export const useEditorStore = create(
                         fontFamily: textEl.fontFamily,
                         fontSize: textEl.fontSize,
                         fontStyle: textEl.fontStyle,
+                        // Phase 1 Typography Enhancement
+                        fontWeight: textEl.fontWeight,
+                        textTransform: textEl.textTransform,
+                        fontProvider: textEl.fontProvider,
+                        // End Phase 1
                         fill: textEl.fill,
                         align: textEl.align,
                         lineHeight: textEl.lineHeight,

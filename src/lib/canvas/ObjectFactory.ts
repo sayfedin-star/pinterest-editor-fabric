@@ -7,6 +7,7 @@
 
 import * as fabric from 'fabric';
 import { Element, TextElement, ShapeElement, ImageElement } from '@/types/editor';
+import { convertToFabricStyles } from '@/lib/text/characterStyles';
 
 /**
  * Extended Fabric.js object with custom properties for async loading
@@ -18,6 +19,8 @@ interface ExtendedFabricObject extends fabric.FabricObject {
     _needsAsyncImageLoad?: boolean;
     _imageUrl?: string;
     _element?: Element;
+    /** Original untransformed text for text elements (Phase 1) */
+    _originalText?: string;
 }
 
 /**
@@ -57,7 +60,8 @@ export function createFabricObject(element: Element): fabric.FabricObject | null
                 displayText = applyTextTransform(displayText, textEl.textTransform);
             }
             
-            obj = new fabric.Textbox(displayText, {
+            // Build textbox options
+            const textboxOptions: Record<string, unknown> = {
                 left: element.x,
                 top: element.y,
                 width: element.width,
@@ -66,7 +70,19 @@ export function createFabricObject(element: Element): fabric.FabricObject | null
                 fontWeight: textEl.fontWeight || 400,
                 fill: textEl.fill || '#000000',
                 textAlign: textEl.align || 'left',
-            });
+            };
+            
+            // Apply character styles if rich text mode is enabled
+            if (textEl.richTextEnabled && textEl.characterStyles && textEl.characterStyles.length > 0) {
+                textboxOptions.styles = convertToFabricStyles(
+                    displayText,
+                    textEl.characterStyles
+                );
+            }
+            
+            obj = new fabric.Textbox(displayText, textboxOptions);
+            // Store original text for text transform switching (Phase 1)
+            (obj as ExtendedFabricObject)._originalText = textEl.text || '';
             break;
         }
 
@@ -259,11 +275,31 @@ export function syncElementToFabric(
         }
         
         // Text transform - requires re-applying to display text
+        // Use stored original text to properly switch transforms (Phase 1 fix)
         if (textUpdates.textTransform !== undefined || textUpdates.text !== undefined) {
-            const originalText = textUpdates.text ?? fabricObject.text ?? '';
+            // Get original untransformed text: prefer update, then stored original, then fabric text
+            const extFabric = fabricObject as unknown as ExtendedFabricObject;
+            const originalText = textUpdates.text ?? extFabric._originalText ?? fabricObject.text ?? '';
             const transform = textUpdates.textTransform ?? 'none';
             const displayText = applyTextTransform(originalText, transform);
             fabricObject.set('text', displayText);
+            
+            // Update stored original if text changed
+            if (textUpdates.text !== undefined) {
+                extFabric._originalText = textUpdates.text;
+            }
+        }
+        
+        // Character styles - apply per-character formatting
+        if (textUpdates.characterStyles !== undefined || textUpdates.richTextEnabled !== undefined) {
+            if (textUpdates.richTextEnabled && textUpdates.characterStyles && textUpdates.characterStyles.length > 0) {
+                const currentText = fabricObject.text || '';
+                const styles = convertToFabricStyles(currentText, textUpdates.characterStyles);
+                fabricObject.set('styles', styles);
+            } else {
+                // Clear styles when rich text is disabled
+                fabricObject.set('styles', {});
+            }
         }
     }
 
@@ -303,6 +339,20 @@ export function syncFabricToElement(fabricObject: fabric.FabricObject): Element 
 
     // Type-specific properties
     if (fabricObject instanceof fabric.Textbox) {
+        // Extract fontWeight - fabric stores it as string or number
+        const fabricWeight = fabricObject.fontWeight;
+        let fontWeight: 100 | 200 | 300 | 400 | 500 | 600 | 700 | 800 | 900 = 400;
+        if (typeof fabricWeight === 'number' && [100, 200, 300, 400, 500, 600, 700, 800, 900].includes(fabricWeight)) {
+            fontWeight = fabricWeight as typeof fontWeight;
+        } else if (typeof fabricWeight === 'string') {
+            const parsed = parseInt(fabricWeight, 10);
+            if ([100, 200, 300, 400, 500, 600, 700, 800, 900].includes(parsed)) {
+                fontWeight = parsed as typeof fontWeight;
+            } else if (fabricWeight === 'bold') {
+                fontWeight = 700;
+            }
+        }
+        
         return {
             ...base,
             type: 'text',
@@ -310,13 +360,16 @@ export function syncFabricToElement(fabricObject: fabric.FabricObject): Element 
             fontFamily: fabricObject.fontFamily || 'Arial',
             fontSize: fabricObject.fontSize || 16,
             fontStyle: 'normal',
+            fontWeight, // Phase 1: Preserve fontWeight
             fill: (fabricObject.fill as string) || '#000000',
             align: (fabricObject.textAlign as 'left' | 'center' | 'right') || 'left',
             verticalAlign: 'top',
-            lineHeight: 1.2,
-            letterSpacing: 0,
-            textDecoration: '',
+            lineHeight: fabricObject.lineHeight || 1.2,
+            letterSpacing: (fabricObject.charSpacing || 0) / 10,
+            textDecoration: fabricObject.underline ? 'underline' : (fabricObject.linethrough ? 'line-through' : ''),
             isDynamic: false,
+            // Note: textTransform, backgroundEnabled, etc. are NOT stored on fabric object
+            // They must be preserved from the original element in the store, not extracted here
         } as TextElement;
     }
 

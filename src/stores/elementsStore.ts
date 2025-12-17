@@ -25,6 +25,7 @@ import {
 import { generateId } from '@/lib/utils';
 import { generateUniqueName } from '@/lib/utils/nameValidation';
 import { parseFieldNameFromLayer } from '@/lib/utils/fieldNameParser';
+import { validateCharacterStyles } from '@/lib/text/characterStyles';
 import { useSelectionStore } from './selectionStore';
 
 interface ElementsState {
@@ -143,6 +144,33 @@ export const useElementsStore = create<ElementsState & ElementsActions>((set, ge
                                 dynamicSource: undefined,
                             } as ImageElement;
                         }
+                    }
+                }
+
+                // Phase 2: Validate character styles if present in update
+                if (el.type === 'text') {
+                    const textEl = el as TextElement;
+                    const textUpdates = updates as Partial<TextElement>;
+                    
+                    // Get the final text (from update or existing)
+                    const finalText = textUpdates.text ?? textEl.text ?? '';
+                    
+                    // Check if characterStyles are being updated
+                    if (textUpdates.characterStyles && textUpdates.characterStyles.length > 0) {
+                        const { sanitized, errors } = validateCharacterStyles(
+                            textUpdates.characterStyles,
+                            finalText.length
+                        );
+                        
+                        if (errors.length > 0) {
+                            console.warn('[elementsStore] Character style validation errors:', errors);
+                        }
+                        
+                        return {
+                            ...el,
+                            ...updates,
+                            characterStyles: sanitized,
+                        } as TextElement;
                     }
                 }
 

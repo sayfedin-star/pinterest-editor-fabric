@@ -8,4 +8,5 @@ export { TextPropertiesSection } from './TextPropertiesSection';
 export { ImagePropertiesSection } from './ImagePropertiesSection';
 export { EffectsSection } from './EffectsSection';
 export { TypographySection } from './TypographySection';
+export { CharacterStylesSection } from './CharacterStylesSection';
 export { PropertyInput, StyleButton, Accordion, SliderRow, SectionHeader } from './shared';
