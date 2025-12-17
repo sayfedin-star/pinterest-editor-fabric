@@ -143,124 +143,39 @@ const redo = useEditorStore((s) => s.redo);
 
 **This matches the recommended fix exactly!** No `useHistoryStore` exists in the codebase.
 
-### 1.2 Fix Undo/Redo Store Sync
+### 1.2 ~~Fix Undo/Redo Store Sync~~ ✅ ALREADY FIXED
 
-**Priority:** 🔴 CRITICAL  
-**Effort:** 1 hour  
-**Risk:** MEDIUM  
-**Reference:** GitHub Issue #2 (`docs/GITHUB_ISSUES.md`)
+**Priority:** N/A  
+**Status:** COMPLETE  
+**Reference:** GitHub Issue #2 (verified in current codebase 2025-12-17)
 
-#### Current State
+#### Verification
 
-**File:** `src/stores/editorStore.ts` (lines 663-676)
+**File:** `src/stores/editorStore.ts` (lines 621-668)
 
-```typescript
-// ❌ BROKEN: Only updates editorStore
-undo: () => {
-  const { canUndo, history, historyIndex } = get();
-  if (canUndo()) {
-    const newIndex = historyIndex - 1;
-    const snapshot = history[newIndex];
-
-    set({
-      elements: cloneDeep(snapshot.elements),
-      canvasSize: { ...snapshot.canvasSize },
-      backgroundColor: snapshot.backgroundColor,
-      historyIndex: newIndex,
-      selectedIds: [],
-    });
-    // ❌ MISSING: Sync to elementsStore, selectionStore, canvasStore
-  }
-};
-```
-
-**Problem:**
-
-- After undo, `editorStore.elements` updated ✅
-- But `elementsStore.elements` NOT updated ❌
-- Components reading from `elementsStore` show stale data
-- Result: LayersPanel shows 5 elements, canvas shows 3 (split-brain)
-
-#### Proposed Solution
+Both `undo()` and `redo()` already include full store synchronization:
 
 ```typescript
-// ✅ FIXED: Sync to all specialized stores
-undo: () => {
-  const { canUndo, history, historyIndex } = get();
-  if (canUndo()) {
-    const newIndex = historyIndex - 1;
-    const snapshot = history[newIndex];
-    const restoredElements = cloneDeep(snapshot.elements);
-
-    // Update editorStore state
-    set({
-      elements: restoredElements,
-      canvasSize: { ...snapshot.canvasSize },
-      backgroundColor: snapshot.backgroundColor,
-      historyIndex: newIndex,
-      selectedIds: [],
-    });
-
-    // Sync to specialized stores
-    useElementsStore.getState().setElements(cloneDeep(snapshot.elements));
-    useSelectionStore.getState().clearSelection();
-    useCanvasStore
-      .getState()
-      .setCanvasSize(snapshot.canvasSize.width, snapshot.canvasSize.height);
-    useCanvasStore.getState().setBackgroundColor(snapshot.backgroundColor);
-  }
-};
+// ✅ FIXED: undo() method (lines 637-642)
+// Sync to specialized stores
+useElementsStore.getState().setElements(cloneDeep(snapshot.elements));
+useSelectionStore.getState().clearSelection();
+const canvasStore = require("./canvasStore").useCanvasStore.getState();
+canvasStore.setCanvasSize(
+  snapshot.canvasSize.width,
+  snapshot.canvasSize.height
+);
+canvasStore.setBackgroundColor(snapshot.backgroundColor);
 ```
 
-#### Implementation Steps
+**Stores synced on undo/redo:**
 
-1. **Study correct pattern:**
+- ✅ `elementsStore.setElements()` - Elements array restored
+- ✅ `selectionStore.clearSelection()` - Selection cleared
+- ✅ `canvasStore.setCanvasSize()` - Canvas dimensions restored
+- ✅ `canvasStore.setBackgroundColor()` - Background color restored
 
-   - File: `src/stores/editorStore.ts` lines 750-780
-   - Method: `loadTemplate()` - shows how to sync ALL stores
-
-2. **Apply fix to both methods:**
-
-   - `undo()` - Add 4 sync calls
-   - `redo()` - Add same 4 sync calls (lines 680-695)
-
-3. **Handle edge cases:**
-
-   - If `elementsStore` doesn't have `setElements`, add it
-   - Verify `canvasStore` has both `setCanvasSize` and `setBackgroundColor`
-
-4. **Test thoroughly:**
-
-```typescript
-// Test Case 1: Undo after adding element
-// - Add text → Undo → Check both stores match
-
-// Test Case 2: Undo after canvas resize
-// - Resize canvas → Undo → Check canvasStore updated
-
-// Test Case 3: Multiple undo/redo cycles
-// - Perform 10 actions → Undo 5 → Redo 3 → Verify consistency
-
-// Test Case 4: Undo while element selected
-// - Select element → Undo deletion → Check selection cleared
-```
-
-#### Success Criteria
-
-- [ ] After undo, `elementsStore.elements.length === editorStore.elements.length`
-- [ ] After undo, `selectionStore.selectedIds.length === 0`
-- [ ] After undo, `canvasStore.canvasSize` matches snapshot
-- [ ] LayersPanel and EditorCanvas show same element count
-- [ ] Redo works symmetrically (same sync behavior)
-- [ ] No console errors after 10 undo/redo cycles
-
-#### Rollback Plan
-
-If issues occur:
-
-- Revert commit
-- Investigate which store sync is failing
-- Add debug logs: `console.log('[UNDO]', { editorElements, specializedElements })`
+**This matches the recommended fix exactly!** Both methods were already updated in a previous session.
 
 ---
 
