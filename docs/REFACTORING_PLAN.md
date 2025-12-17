@@ -1,1333 +1,1384 @@
-# Refactoring Plan
+# 🔄 REFACTORING_PLAN.md - Pinterest Editor Fabric
 
-> **Created:** 2025-12-15  
-> **Status:** Phase 1 Complete - Ready for Execution  
-> **Total Issues:** 23  
-> **Estimated Effort:** ~131 hours (4-6 weeks)
-
----
-
-## 📊 Executive Summary
-
-### Issues by Priority
-
-| Priority | Issues | Effort | Timeline |
-|----------|--------|--------|----------|
-| 🔴 **CRITICAL** | 5 | 62h | Week 1-2 |
-| 🟠 **HIGH** | 6 | 22h | Week 2-3 |
-| 🟡 **MEDIUM** | 8 | 42h | Week 4-6 |
-| 🟢 **LOW** | 4 | 5h | Week 6-8 |
-
-### Quick Wins (Can do now)
-
-1. **Remove unused dependencies** (15 min) - Save 150KB
-2. **Add error boundaries** (4h) - Prevent white screen crashes
-3. **Document UUID/nanoid policy** (30 min) - Prevent confusion
+**Version:** 1.0  
+**Last Updated:** December 17, 2024  
+**Total Estimated Effort:** 23-25 hours (3-4 weeks part-time)  
+**Status:** 177/199 tests passing (88% coverage)
 
 ---
 
-## 🔴 PRIORITY 1: CRITICAL (BLOCKING DEVELOPMENT)
+## 📖 Table of Contents
 
-**Goal:** Unblock feature development, prevent catastrophic failures
-
-**Timeline:** Week 1-2 (62 hours)
-
----
-
-### ISSUE 1.1: editorStore God Store (1,178 LINES)
-
-**Current State:**
-- Single file with 1,178 lines
-- 62 functions, 16 distinct responsibilities
-- Hard to test, navigate, extend
-- Performance risk (unnecessary re-renders)
-
-**Desired State:**
-```
-editorStore.ts → 7 specialized stores:
-├── templateStore.ts (150 lines)
-├── canvasStore.ts (100 lines)
-├── elementsStore.ts (200 lines)
-├── selectionStore.ts (100 lines)
-├── historyStore.ts (150 lines)
-├── layersStore.ts (250 lines)
-└── alignmentStore.ts (200 lines)
-```
-
-**Execution Plan:**
-
-**Phase 1.1.1: Extract Template & Canvas (Week 1, Day 1-2)**
-```typescript
-// templateStore.ts
-export const useTemplateStore = create<{
-  templateId: string;
-  templateName: string;
-  isNewTemplate: boolean;
-  templates: TemplateListItem[];
-  // Actions
-  loadTemplate: (template) => void;
-  resetToNewTemplate: () => void;
-  setTemplateName: (name) => void;
-}>(...);
-
-// canvasStore.ts
-export const useCanvasStore = create<{
-  canvasSize: CanvasSize;
-  backgroundColor: string;
-  zoom: number;
-  // Actions
-  setCanvasSize: (width, height) => void;
-  setBackgroundColor: (color) => void;
-  setZoom: (zoom) => void;
-}>(...);
-```
-
-**Effort:** 4 hours
-- 1h: Design store interfaces
-- 2h: Extract code, update imports
-- 1h: Test
-
-**Phase 1.1.2: Extract Elements & Selection (Week 1, Day 2-3)**
-```typescript
-// elementsStore.ts
-export const useElementsStore = create<{
-  elements: Element[];
-  // CRUD only
-  addElement: (element) => void;
-  updateElement: (id, updates) => void;
-  deleteElement: (id) => void;
-  duplicateElement: (id) => void;
-}>(...);
-
-// selectionStore.ts
-export const useSelectionStore = create<{
-  selectedIds: string[];
-  // Selection management
-  selectElement: (id) => void;
-  toggleSelection: (id) => void;
-  deselectAll: () => void;
-}>(...);
-```
-
-**Effort:** 5 hours
-- 2h: Extract elementsStore
-- 2h: Extract selectionStore
-- 1h: Update components to use multiple stores
-
-**Phase 1.1.3: Extract History (Week 1, Day 4)**
-```typescript
-// historyStore.ts
-type HistorySnapshot = {
-  elements: Element[];
-  canvasSize: CanvasSize;
-  backgroundColor: string;
-};
-
-export const useHistoryStore = create<{
-  past: HistorySnapshot[];
-  future: HistorySnapshot[];
-  // History actions
-  pushHistory: (snapshot) => void;
-  undo: () => void;
-  redo: () => void;
-  canUndo: () => boolean;
-  canRedo: () => boolean;
-}>(...);
-```
-
-**Effort:** 3 hours
-- 2h: Extract store, handle snapshot creation
-- 1h: Wire up to elements/canvas stores
-
-**Phase 1.1.4: Extract Layers & Alignment (Week 1, Day 5)**
-```typescript
-// layersStore.ts
-export const useLayersStore = create<{
-  // All layer ordering
-  moveElementForward: (id) => void;
-  moveElementBackward: (id) => void;
-  moveElementToFront: (id) => void;
-  moveElementToBack: (id) => void;
-  reorderElements: (fromIndex, toIndex) => void;
-}>(...);
-
-// alignmentStore.ts
-export const useAlignmentStore = create<{
-  // All alignment/distribution
-  alignElement: (id, alignment) => void;
-  alignSelectedElements: (alignment) => void;
-  distributeSelectedElements: (direction) => void;
-}>(...);
-```
-
-**Effort:** 4 hours
-- 2h: Extract layers
-- 2h: Extract alignment
-
-**Total Effort:** 16 hours
-
-**Dependencies:** None (can start immediately)
-
-**Risk Level:** HIGH
-- **Risk:** Breaking undo/redo (relies on entire state snapshot)
-- **Mitigation:** 
-  - Extract one store at a time
-  - Test undo/redo after each extraction
-  - Use git branches for each phase
-- **Rollback:** Git revert to previous working state
-
-**Testing Strategy:**
-```typescript
-// Test undo/redo after each extraction
-describe('History integration', () => {
-  it('should undo element addition', () => {
-    // Add element
-    elementsStore.getState().addElement(testElement);
-    // Undo
-    historyStore.getState().undo();
-    // Verify element removed
-    expect(elementsStore.getState().elements).toHaveLength(0);
-  });
-});
-```
-
-**Success Criteria:**
-- [ ] 7 separate store files created
-- [ ] Each file < 300 lines
-- [ ] All existing functionality preserved
-- [ ] Undo/redo works across stores
-- [ ] Performance maintained or improved
-- [ ] No circular dependencies
-- [ ] Components update imports correctly
-- [ ] TypeScript compiles without errors
-
-**Priority:** 🔴 CRITICAL
+1. [Executive Summary](#executive-summary)
+2. [Current State Analysis](#current-state-analysis)
+3. [Phase 1: Critical Bug Fixes](#phase-1-critical-bug-fixes)
+4. [Phase 2: Canvas Performance Optimization](#phase-2-canvas-performance-optimization)
+5. [Phase 3: Component Optimization](#phase-3-component-optimization)
+6. [Phase 4: Code Quality Improvements](#phase-4-code-quality-improvements)
+7. [Success Metrics & Validation](#success-metrics--validation)
+8. [Risk Assessment](#risk-assessment)
 
 ---
 
-### ISSUE 1.2: PropertiesPanel God Component (895 LINES)
+## 🎯 Executive Summary
 
-**Current State:**
-- 895 lines in single file
-- 8+ UI sections mixed together
-- Hard to test, maintain, reuse
+### Refactoring Philosophy
 
-**Desired State:**
+**"Fix bugs before optimizing performance. You can't optimize broken code."**
+
+This plan addresses three categories of technical debt:
+
+1. **Critical Bugs** (Phase 1) - Data integrity issues blocking production readiness
+2. **Performance Bottlenecks** (Phase 2) - Canvas rendering slowdowns affecting UX
+3. **Code Quality** (Phase 3-4) - Maintainability and scalability improvements
+
+### Deployment Strategy
+
+- **Phase 1:** Deploy after each bug fix (granular deployments)
+- **Phase 2:** Deploy after each optimization (measure before/after)
+- **Phase 3:** Deploy weekly (batched component improvements)
+- **Phase 4:** Continuous (no user-facing changes)
+
+---
+
+## 📊 Current State Analysis
+
+### System Health Overview
+
 ```
-src/components/panels/
-├── PropertiesPanel.tsx (100 lines) - Container only
-└── sections/
-    ├── LayerOrderSection.tsx (80 lines)
-    ├── AlignmentSection.tsx (120 lines)
-    ├── PositionSection.tsx (60 lines)
-    ├── SizeSection.tsx (80 lines)
-    ├── AppearanceSection.tsx (50 lines)
-    ├── TextPropertiesSection.tsx (150 lines)
-    ├── ImagePropertiesSection.tsx (100 lines)
-    └── effects/
-        ├── EffectsSection.tsx (60 lines)
-        ├── ShadowControls.tsx (80 lines)
-        ├── OutlineControls.tsx (60 lines)
-        └── BackgroundControls.tsx (50 lines)
+✅ COMPLETED (Phase 0):
+├─ editorStore split into 7 specialized stores (90% complete)
+├─ PropertiesPanel split (896 → 85 lines, 10 sections)
+├─ CanvasManager modularized (825 → 567 lines)
+├─ Error boundaries (4 levels: app, canvas, sidebars, panels)
+├─ Auto-save mechanism (30s debounce)
+└─ Test infrastructure (Jest + Playwright)
+
+🔴 CRITICAL ISSUES:
+├─ GitHub Issue #1: Toolbar store mismatch (30 min fix)
+├─ GitHub Issue #2: Undo/redo sync failure (1 hour fix)
+├─ GitHub Issue #3: ✅ ALREADY FIXED (selection clears on delete)
+└─ GitHub Issue #4: Dual-state architecture decision (2 hours)
+
+🟠 PERFORMANCE BOTTLENECKS:
+├─ Canvas renders on every change (no debouncing)
+├─ Fabric objects recreated instead of reused (70% waste)
+├─ Bulk generation creates new canvas per pin (memory pressure)
+└─ No React.memo on expensive components (50% excess renders)
+
+🟡 CODE QUALITY DEBT:
+├─ 15 unused dependencies (bundle bloat)
+├─ Prop drilling in alignment code (3-4 levels deep)
+├─ Missing JSDoc for CanvasManager (567 lines undocumented)
+└─ No virtual scrolling in LayersPanel (slow at 100+ elements)
 ```
 
-**Execution Plan:**
+### Performance Baseline (Before Refactoring)
 
-**Phase 1.2.1: Create Folder Structure & Extract Helpers (Day 1)**
+| Metric                     | Current | Target  | Measurement Method         |
+| -------------------------- | ------- | ------- | -------------------------- |
+| Canvas FPS (50 elements)   | 30 FPS  | 55+ FPS | PerformanceMonitor         |
+| Element update time        | 45ms    | 15ms    | Chrome DevTools            |
+| Bulk generation (100 pins) | 180s    | 90s     | GenerationController timer |
+| Bundle size                | 1.2MB   | 900KB   | `next build` output        |
+| Test coverage              | 88%     | 90%+    | Jest --coverage            |
+
+### Store Architecture Status
+
+```
+FACADE PATTERN (In Transition):
+
+editorStore.ts (1,390 lines)
+├─ Role: Facade for legacy components
+├─ Status: Delegates to specialized stores
+└─ Issue: Some methods still update editorStore directly
+
+elementsStore.ts (215 lines)
+├─ Role: SOURCE OF TRUTH for elements array
+├─ Status: ✅ Complete, well-tested
+└─ Issue: deleteElement fixed, selection sync working
+
+selectionStore.ts (61 lines)
+├─ Role: SOURCE OF TRUTH for selectedIds
+├─ Status: ✅ Complete
+└─ Issue: None
+
+canvasStore.ts (85 lines)
+├─ Role: SOURCE OF TRUTH for canvas config
+├─ Status: ✅ Complete
+└─ Issue: None
+
+10 additional stores (all functional)
+```
+
+---
+
+## 🔴 Phase 1: Critical Bug Fixes
+
+**Goal:** Restore data integrity, fix split-brain state issues  
+**Duration:** 3-4 hours  
+**Risk Level:** LOW (well-isolated changes)  
+**Can Deploy:** YES (after each fix)
+
+---
+
+### 1.1 Fix Toolbar Store Mismatch
+
+**Priority:** 🔴 CRITICAL  
+**Effort:** 30 minutes  
+**Risk:** LOW  
+**Reference:** GitHub Issue #1 (`docs/GITHUB_ISSUES.md`)
+
+#### Current State
+
+**File:** `src/components/layout/Toolbar.tsx` (lines 57-62)
+
+```typescript
+// ❌ BROKEN: Reads from historyStore, calls editorStore
+const canUndo = useHistoryStore((s) => s.canUndo()); // historyStore
+const canRedo = useHistoryStore((s) => s.canRedo()); // historyStore
+const undo = useEditorStore((s) => s.undo); // editorStore (DIFFERENT!)
+const redo = useEditorStore((s) => s.redo); // editorStore (DIFFERENT!)
+```
+
+**Problem:**
+
+- `historyStore` doesn't exist (typo or renamed store)
+- Buttons show incorrect enabled/disabled state
+- Clicking undo/redo may fail silently
+
+#### Proposed Solution
+
+```typescript
+// ✅ FIXED: Use same store for state and actions
+const canUndo = useEditorStore((s) => s.canUndo());
+const canRedo = useEditorStore((s) => s.canRedo());
+const undo = useEditorStore((s) => s.undo);
+const redo = useEditorStore((s) => s.redo);
+```
+
+#### Implementation Steps
+
+1. **Locate the file:**
+
 ```bash
-mkdir -p src/components/panels/sections
-mkdir -p src/components/panels/sections/effects
-mkdir -p src/components/panels/inputs
+# Verify current implementation
+grep -n "useHistoryStore" src/components/layout/Toolbar.tsx
 ```
 
-Extract helper components:
-- `PropertyInput.tsx`
-- `SliderRow.tsx`
-- `StyleButton.tsx`
+2. **Study existing pattern:**
 
-**Effort:** 2 hours
+   - File: `src/stores/editorStore.ts` lines 663-720
+   - Methods: `canUndo()`, `canRedo()`, `undo()`, `redo()`
+   - History stored in: `editorStore.history`, `editorStore.historyIndex`
 
-**Phase 1.2.2: Extract Simple Sections (Day 2-3)**
+3. **Apply fix:**
 
-Order: Simplest first (fewer dependencies)
+   - Replace `useHistoryStore` with `useEditorStore` (4 lines)
+   - Remove `useHistoryStore` import if unused elsewhere
 
-1. **PositionSection.tsx** (60 lines)
-```typescript
-export const PositionSection = ({ element }: { element: Element }) => {
-  const updateElement = useElementsStore(state => state.updateElement);
-  const pushHistory = useHistoryStore(state => state.pushHistory);
-  
-  const handleChange = (updates: Partial<Element>) => {
-    pushHistory();
-    updateElement(element.id, updates);
-  };
-  
-  return (
-    <div className="space-y-2">
-      <PropertyInput label="X" value={element.x} onChange={x => handleChange({ x })} />
-      <PropertyInput label="Y" value={element.y} onChange={y => handleChange({ y })} />
-    </div>
-  );
-};
-```
-
-2. **SizeSection.tsx** (80 lines)
-3. **AppearanceSection.tsx** (50 lines)
-
-**Effort:** 3 hours
-
-**Phase 1.2.3: Extract Complex Sections (Day 4-5)**
-
-4. **AlignmentSection.tsx** (120 lines) - Uses alignment store
-5. **LayerOrderSection.tsx** (80 lines) - Uses layers store
-6. **TextPropertiesSection.tsx** (150 lines)
-7. **ImagePropertiesSection.tsx** (100 lines)
-
-**Effort:** 5 hours
-
-**Phase 1.2.4: Split EffectsSection (Day 6)**
-
-8. Extract effects sub-components
-9. Update PropertiesPanel to import sections
-
-**Effort:** 2 hours
-
-**Total Effort:** 12 hours
-
-**Dependencies:** Should do AFTER editorStore split (cleaner store access)
-
-**Risk Level:** MEDIUM
-- **Risk:** Breaking property updates
-- **Mitigation:** Extract one section at a time, test after each
-- **Rollback:** Git commits per section
-
-**Performance Optimization:**
-```typescript
-// Add React.memo to prevent unnecessary re-renders
-export const PositionSection = React.memo(({ element }) => {
-  // ... component code
-}, (prevProps, nextProps) => {
-  // Only re-render if position changed
-  return prevProps.element.x === nextProps.element.x &&
-         prevProps.element.y === nextProps.element.y;
-});
-```
-
-**Success Criteria:**
-- [ ] PropertiesPanel.tsx < 150 lines
-- [ ] Each section in separate file
-- [ ] All sections independently testable
-- [ ] Property updates still work
-- [ ] Performance improved (React.memo on sections)
-- [ ] No visual changes (pixel-perfect)
-
-**Priority:** 🔴 CRITICAL
-
----
-
-### ISSUE 1.3: CanvasManager God Class (824 LINES)
-
-**Current State:**
-- 824 lines in single file
-- 36+ methods, 10+ responsibilities
-- Tightly coupled to Fabric.js
-
-**Desired State:**
-```
-src/lib/canvas/
-├── CanvasManager.ts (300 lines) - Orchestrator
-└── services/
-    ├── CanvasLifecycle.ts (120 lines)
-    ├── ElementRenderer.ts (180 lines)
-    ├── ElementOperations.ts (150 lines)
-    ├── SelectionManager.ts (100 lines)
-    ├── ZoomManager.ts (80 lines)
-    └── PerformanceMonitor.ts (60 lines)
-```
-
-**Execution Plan:**
-
-**Phase 1.3.1: Extract Independent Services (Day 1-2)**
-
-Start with services with NO dependencies on others:
+4. **Test:**
 
 ```typescript
-// PerformanceMonitor.ts (60 lines)
-export class PerformanceMonitor {
-  private fps = 60;
-  private frames = 0;
-  private lastTime = performance.now();
-  
-  update() {
-    const now = performance.now();
-    this.frames++;
-    if (now >= this.lastTime + 1000) {
-      this.fps = Math.round((this.frames * 1000) / (now - this.lastTime));
-      this.frames = 0;
-      this.lastTime = now;
-    }
-  }
-  
-  getFPS() { return this.fps; }
-}
-
-// ZoomManager.ts (80 lines)
-export class ZoomManager {
-  private canvas: fabric.Canvas | null = null;
-  private currentZoom = 1;
-  
-  setCanvas(canvas: fabric.Canvas) {
-    this.canvas = canvas;
-  }
-  
-  setZoom(zoom: number) {
-    if (!this.canvas) return;
-    this.currentZoom = zoom;
-    this.canvas.setZoom(zoom);
-    this.canvas.renderAll();
-  }
-  
-  getZoom() { return this.currentZoom; }
-}
+// Manual test script:
+// 1. Open editor
+// 2. Add text element
+// 3. Undo button should enable
+// 4. Click undo → element disappears
+// 5. Redo button should enable
+// 6. Click redo → element reappears
 ```
 
-**Effort:** 3 hours
+#### Success Criteria
 
-**Phase 1.3.2: Extract ElementRenderer (Day 3-4)**
+- [ ] Undo button disabled when `historyIndex === 0`
+- [ ] Redo button disabled when at latest state
+- [ ] Clicking undo reverts last action
+- [ ] Clicking redo restores undone action
+- [ ] No console errors
+- [ ] Existing tests pass
 
-Most complex service (handles all element types):
+#### Rollback Plan
 
-```typescript
-// ElementRenderer.ts
-export class ElementRenderer {
-  createFabricObject(element: Element): fabric.FabricObject | null {
-    switch (element.type) {
-      case 'text':
-        return this.createTextObject(element as TextElement);
-      case 'image':
-        return this.createImageObject(element as ImageElement);
-      case 'shape':
-        return this.createShapeObject(element as ShapeElement);
-      default:
-        return null;
-    }
-  }
-  
-  private createTextObject(element: TextElement): fabric.Textbox {
-    // 50 lines of text creation logic
-  }
-  
-  private createImageObject(element: ImageElement): fabric.Image {
-    // 40 lines of image creation logic
-  }
-  
-  private createShapeObject(element: ShapeElement): fabric.Object {
-    // 30 lines of shape creation logic
-  }
-}
-```
-
-**Effort:** 5 hours
-
-**Phase 1.3.3: Extract Operations & Selection (Day 5-6)**
-
-```typescript
-// ElementOperations.ts
-export class ElementOperations {
-  constructor(
-    private canvas: fabric.Canvas,
-    private renderer: ElementRenderer
-  ) {}
-  
-  addElement(element: Element) {
-    const fabricObject = this.renderer.createFabricObject(element);
-    if (fabricObject) {
-      this.canvas.add(fabricObject);
-      this.canvas.renderAll();
-    }
-  }
-  
-  // updateElement, removeElement, etc.
-}
-
-// SelectionManager.ts
-export class SelectionManager {
-  getSelection(): string[] {
-    const activeObjects = this.canvas.getActiveObjects();
-    return activeObjects.map(obj => obj.data?.id).filter(Boolean);
-  }
-  
-  // setSelection, clearSelection, etc.
-}
-```
-
-**Effort:** 4 hours
-
-**Phase 1.3.4: Integrate Services into CanvasManager (Day 7)**
-
-```typescript
-// CanvasManager.ts (now 300 lines)
-export class CanvasManager {
-  private lifecycle: CanvasLifecycle;
-  private renderer: ElementRenderer;
-  private operations: ElementOperations;
-  private selection: SelectionManager;
-  private zoom: ZoomManager;
-  private performance: PerformanceMonitor;
-  
-  constructor() {
-    this.renderer = new ElementRenderer();
-    this.zoom = new ZoomManager();
-    this.performance = new PerformanceMonitor();
-    // Services initialized in initialize()
-  }
-  
-  initialize(canvasElement: HTMLCanvasElement, config: CanvasConfig) {
-    this.lifecycle = new CanvasLifecycle(canvasElement, config);
-    const canvas = this.lifecycle.getCanvas();
-    
-    this.operations = new ElementOperations(canvas, this.renderer);
-    this.selection = new SelectionManager(canvas);
-    this.zoom.setCanvas(canvas);
-  }
-  
-  // Public API delegates to services
-  addElement(element: Element) {
-    this.operations.addElement(element);
-  }
-  
-  setZoom(zoom: number) {
-    this.zoom.setZoom(zoom);
-  }
-}
-```
-
-**Effort:** 2 hours
-
-**Total Effort:** 14 hours
-
-**Dependencies:** Should do AFTER editorStore split (less coupling)
-
-**Risk Level:** HIGH
-- **Risk:** Breaking canvas rendering
-- **Mitigation:** 
-  - Extract one service at a time
-  - Extensive visual testing after each
-  - Keep integration tests running
-- **Rollback:** Git branch per service
-
-**Testing Strategy:**
-```typescript
-describe('ElementRenderer', () => {
-  it('should create text object with correct props', () => {
-    const renderer = new ElementRenderer();
-    const textElement: TextElement = { /* ... */ };
-    const fabricObject = renderer.createFabricObject(textElement);
-    
-    expect(fabricObject).toBeInstanceOf(fabric.Textbox);
-    expect(fabricObject.text).toBe(textElement.text);
-  });
-});
-```
-
-**Success Criteria:**
-- [ ] CanvasManager.ts < 400 lines
-- [ ] 6 service classes created
-- [ ] All canvas operations still work
-- [ ] Performance maintained
-- [ ] Easier to add new element types
-- [ ] Services are testable in isolation
-
-**Priority:** 🔴 CRITICAL
-
----
-
-### ISSUE 1.4: No Error Boundaries
-
-**Current State:**
-- Zero error boundaries
-- Any React error crashes entire app
-- White screen of death for users
-
-**Desired State:**
-```
-App
-└── TopLevelErrorBoundary (catches catastrophic errors)
-    └── EditorPage
-        ├── CanvasErrorBoundary (isolates canvas crashes)
-        │   └── EditorCanvas
-        ├── LeftSidebarErrorBoundary
-        │   └── LeftSidebar
-        └── RightPanelErrorBoundary
-            └── RightPanel
-```
-
-**Execution Plan:**
-
-**Phase 1.4.1: Install Dependency (15 min)**
 ```bash
-npm install react-error-boundary@^4.0.0
+# If issue occurs:
+git revert <commit-hash>
 ```
 
-**Phase 1.4.2: Create Error Fallback UIs (1h)**
-
-```typescript
-// src/components/errors/ErrorFallback.tsx
-export const ErrorFallback = ({ error, resetErrorBoundary }: FallbackProps) => {
-  return (
-    <div className="flex flex-col items-center justify-center h-full p-8">
-      <AlertTriangle className="w-16 h-16 text-red-500 mb-4" />
-      <h2 className="text-2xl font-bold mb-2">Something went wrong</h2>
-      <p className="text-gray-600 mb-4">
-        {error.message || 'An unexpected error occurred'}
-      </p>
-      <button
-        onClick={resetErrorBoundary}
-        className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
-      >
-        Try again
-      </button>
-    </div>
-  );
-};
-
-// CanvasErrorFallback.tsx - Specific to canvas
-export const CanvasErrorFallback = ({ error, resetErrorBoundary }) => {
-  return (
-    <div className="flex flex-col items-center justify-center h-full">
-      <p>Canvas failed to render</p>
-      <p className="text-sm text-gray-500">{error.message}</p>
-      <button onClick={resetErrorBoundary}>Reload Canvas</button>
-    </div>
-  );
-};
-```
-
-**Phase 1.4.3: Wrap Critical Sections (2h)**
-
-```typescript
-// src/app/editor/page.tsx
-import { ErrorBoundary } from 'react-error-boundary';
-import { ErrorFallback, CanvasErrorFallback } from '@/components/errors';
-
-export default function EditorPage() {
-  return (
-    <ErrorBoundary FallbackComponent={ErrorFallback}>
-      <div className="flex h-screen">
-        <LeftSidebar />
-        
-        <ErrorBoundary FallbackComponent={CanvasErrorFallback}>
-          <CanvasArea />
-        </ErrorBoundary>
-        
-        <RightPanel />
-      </div>
-    </ErrorBoundary>
-  );
-}
-```
-
-**Phase 1.4.4: Add Error Logging (1h)**
-
-```typescript
-// src/lib/errorLogger.ts
-export const logError = (error: Error, errorInfo: ErrorInfo) => {
-  console.error('Error caught by boundary:', error, errorInfo);
-  
-  // Send to error tracking service (Sentry, LogRocket, etc.)
-  // if (process.env.NODE_ENV === 'production') {
-  //   Sentry.captureException(error);
-  // }
-};
-
-// Update error boundaries
-<ErrorBoundary 
-  FallbackComponent={ErrorFallback}
-  onError={logError}
->
-```
-
-**Total Effort:** 4 hours
-
-**Dependencies:** None
-
-**Risk Level:** LOW (only adding, not changing existing code)
-
-**Success Criteria:**
-- [ ] App wrapped in top-level ErrorBoundary
-- [ ] EditorCanvas wrapped in canvas-specific boundary
-- [ ] Each panel wrapped in panel boundary
-- [ ] Errors show user-friendly message
-- [ ] Errors logged to console (and Sentry if set up)
-- [ ] Test error scenarios (throw error in component)
-
-**Priority:** 🔴 CRITICAL - User experience protection
+Extremely low risk - simple substitution.
 
 ---
 
-### ISSUE 1.5: No Tests
+### 1.2 Fix Undo/Redo Store Sync
 
-**Current State:**
-- Jest configured but 0 tests written
-- Can't refactor safely
-- Regression bugs likely
+**Priority:** 🔴 CRITICAL  
+**Effort:** 1 hour  
+**Risk:** MEDIUM  
+**Reference:** GitHub Issue #2 (`docs/GITHUB_ISSUES.md`)
 
-**Desired State:**
-- **Critical coverage:** editorStore, CanvasManager, alignment
-- **Target:** 50% coverage minimum (80% goal for Phase 3)
+#### Current State
 
-**Execution Plan:**
-
-**Phase 1.5.1: Test Infrastructure (Week 2, Day 1)**
+**File:** `src/stores/editorStore.ts` (lines 663-676)
 
 ```typescript
-// src/setupTests.ts
-import '@testing-library/jest-dom';
+// ❌ BROKEN: Only updates editorStore
+undo: () => {
+  const { canUndo, history, historyIndex } = get();
+  if (canUndo()) {
+    const newIndex = historyIndex - 1;
+    const snapshot = history[newIndex];
 
-// Mock Fabric.js
-jest.mock('fabric', () => ({
-  Canvas: jest.fn(() => ({
-    add: jest.fn(),
-    remove: jest.fn(),
-    renderAll: jest.fn(),
-  })),
-  Textbox: jest.fn(),
-  // Mock other Fabric classes
-}));
-
-// Mock Supabase
-jest.mock('@supabase/supabase-js', () => ({
-  createClient: jest.fn(() => ({
-    from: jest.fn(() => ({
-      select: jest.fn(),
-      insert: jest.fn(),
-    })),
-  })),
-}));
-```
-
-**Effort:** 2 hours
-
-**Phase 1.5.2: Test Stores (Week 2, Day 2-3)**
-
-After store split, test each store:
-
-```typescript
-// src/stores/__tests__/elementsStore.test.ts
-describe('elementsStore', () => {
-  beforeEach(() => {
-    useElementsStore.setState({ elements: [] });
-  });
-  
-  describe('addElement', () => {
-    it('should add element to store', () => {
-      const element = { id: '1', type: 'text', /* ... */ };
-      useElementsStore.getState().addElement(element);
-      
-      const elements = useElementsStore.getState().elements;
-      expect(elements).toHaveLength(1);
-      expect(elements[0]).toEqual(element);
+    set({
+      elements: cloneDeep(snapshot.elements),
+      canvasSize: { ...snapshot.canvasSize },
+      backgroundColor: snapshot.backgroundColor,
+      historyIndex: newIndex,
+      selectedIds: [],
     });
-  });
-  
-  describe('updateElement', () => {
-    it('should update element properties', () => {
-      const element = { id: '1', type: 'text', x: 0, y: 0 };
-      useElementsStore.setState({ elements: [element] });
-      
-      useElementsStore.getState().updateElement('1', { x: 100 });
-      
-      const updated = useElementsStore.getState().elements[0];
-      expect(updated.x).toBe(100);
-      expect(updated.y).toBe(0); // Unchanged
+    // ❌ MISSING: Sync to elementsStore, selectionStore, canvasStore
+  }
+};
+```
+
+**Problem:**
+
+- After undo, `editorStore.elements` updated ✅
+- But `elementsStore.elements` NOT updated ❌
+- Components reading from `elementsStore` show stale data
+- Result: LayersPanel shows 5 elements, canvas shows 3 (split-brain)
+
+#### Proposed Solution
+
+```typescript
+// ✅ FIXED: Sync to all specialized stores
+undo: () => {
+  const { canUndo, history, historyIndex } = get();
+  if (canUndo()) {
+    const newIndex = historyIndex - 1;
+    const snapshot = history[newIndex];
+    const restoredElements = cloneDeep(snapshot.elements);
+
+    // Update editorStore state
+    set({
+      elements: restoredElements,
+      canvasSize: { ...snapshot.canvasSize },
+      backgroundColor: snapshot.backgroundColor,
+      historyIndex: newIndex,
+      selectedIds: [],
     });
-  });
-  
-  describe('deleteElement', () => {
-    it('should remove element from store', () => {
-      const elements = [
-        { id: '1', type: 'text' },
-        { id: '2', type: 'text' },
-      ];
-      useElementsStore.setState({ elements });
-      
-      useElementsStore.getState().deleteElement('1');
-      
-      expect(useElementsStore.getState().elements).toHaveLength(1);
-      expect(useElementsStore.getState().elements[0].id).toBe('2');
-    });
-  });
-});
+
+    // Sync to specialized stores
+    useElementsStore.getState().setElements(cloneDeep(snapshot.elements));
+    useSelectionStore.getState().clearSelection();
+    useCanvasStore
+      .getState()
+      .setCanvasSize(snapshot.canvasSize.width, snapshot.canvasSize.height);
+    useCanvasStore.getState().setBackgroundColor(snapshot.backgroundColor);
+  }
+};
 ```
 
-**Effort:** 8 hours (7 stores × ~1h each)
+#### Implementation Steps
 
-**Phase 1.5.3: Test Utilities (Week 2, Day 4)**
+1. **Study correct pattern:**
+
+   - File: `src/stores/editorStore.ts` lines 750-780
+   - Method: `loadTemplate()` - shows how to sync ALL stores
+
+2. **Apply fix to both methods:**
+
+   - `undo()` - Add 4 sync calls
+   - `redo()` - Add same 4 sync calls (lines 680-695)
+
+3. **Handle edge cases:**
+
+   - If `elementsStore` doesn't have `setElements`, add it
+   - Verify `canvasStore` has both `setCanvasSize` and `setBackgroundColor`
+
+4. **Test thoroughly:**
 
 ```typescript
-// src/lib/utils/__tests__/csvValidator.test.ts
-describe('csvValidator', () => {
-  it('should validate correct CSV structure', () => {
-    const csv = 'name,price\nProduct 1,10\nProduct 2,20';
-    const result = validateCSV(csv);
-    expect(result.isValid).toBe(true);
-  });
-  
-  it('should detect missing headers', () => {
-    const csv = 'Product 1,10\nProduct 2,20';
-    const result = validateCSV(csv);
-    expect(result.isValid).toBe(false);
-    expect(result.errors).toContain('Missing headers');
-  });
-});
+// Test Case 1: Undo after adding element
+// - Add text → Undo → Check both stores match
 
-// src/lib/utils/__tests__/fieldNameParser.test.ts
-describe('fieldNameParser', () => {
-  it('should extract field names from template string', () => {
-    const text = 'Hello {{name}}, your price is {{price}}';
-    const fields = parseFieldNames(text);
-    expect(fields).toEqual(['name', 'price']);
-  });
-});
+// Test Case 2: Undo after canvas resize
+// - Resize canvas → Undo → Check canvasStore updated
+
+// Test Case 3: Multiple undo/redo cycles
+// - Perform 10 actions → Undo 5 → Redo 3 → Verify consistency
+
+// Test Case 4: Undo while element selected
+// - Select element → Undo deletion → Check selection cleared
 ```
 
-**Effort:** 4 hours
+#### Success Criteria
 
-**Phase 1.5.4: Integration Tests (Week 2, Day 5)**
+- [ ] After undo, `elementsStore.elements.length === editorStore.elements.length`
+- [ ] After undo, `selectionStore.selectedIds.length === 0`
+- [ ] After undo, `canvasStore.canvasSize` matches snapshot
+- [ ] LayersPanel and EditorCanvas show same element count
+- [ ] Redo works symmetrically (same sync behavior)
+- [ ] No console errors after 10 undo/redo cycles
+
+#### Rollback Plan
+
+If issues occur:
+
+- Revert commit
+- Investigate which store sync is failing
+- Add debug logs: `console.log('[UNDO]', { editorElements, specializedElements })`
+
+---
+
+### 1.3 ~~Fix Selection on Delete~~ ✅ ALREADY FIXED
+
+**Priority:** N/A  
+**Status:** COMPLETE  
+**Reference:** GitHub Issue #3 (resolved in current codebase)
+
+#### Verification
+
+**File:** `src/stores/elementsStore.ts` (lines 152-160)
 
 ```typescript
-// src/__tests__/integration/elementLifecycle.test.ts
-describe('Element Lifecycle', () => {
-  it('should add element to store and canvas', () => {
-    // Arrange
-    const canvasManager = new CanvasManager();
-    const canvasElement = document.createElement('canvas');
-    canvasManager.initialize(canvasElement, { width: 800, height: 600 });
-    
-    // Act
-    const element = { id: '1', type: 'text', x: 100, y: 100 };
-    useElementsStore.getState().addElement(element);
-    canvasManager.addElement(element);
-    
-    // Assert
-    const storeElements = useElementsStore.getState().elements;
-    expect(storeElements).toHaveLength(1);
-    
-    const canvasObjects = canvasManager.getCanvas().getObjects();
-    expect(canvasObjects).toHaveLength(1);
-  });
-});
+// ✅ FIXED: Selection sync already implemented
+deleteElement: (id) => {
+  set((state) => ({
+    elements: state.elements.filter((el) => el.id !== id),
+  }));
+
+  // Sync selection - remove deleted element from selection
+  const selection = useSelectionStore.getState();
+  if (selection.selectedIds.includes(id)) {
+    selection.setSelectedIds(selection.selectedIds.filter((sid) => sid !== id));
+  }
+};
 ```
 
-**Effort:** 6 hours
-
-**Total Effort:** 20 hours
-
-**Dependencies:** Do AFTER store split (easier to test)
-
-**Success Criteria:**
-- [ ] 50+ tests written
-- [ ] Coverage >50% (statements, branches)
-- [ ] All critical paths tested
-- [ ] Tests run in CI (future)
-- [ ] Can refactor with confidence
-
-**Priority:** 🔴 CRITICAL - Enables safe refactoring
+**This matches the recommended fix exactly!** No action needed.
 
 ---
 
-## 🟠 PRIORITY 2: HIGH (CAUSING DAILY PAIN)
+### 1.4 Architectural Decision: Source of Truth
 
-**Goal:** Improve developer experience, reduce friction
+**Priority:** 🔴 CRITICAL (architectural)  
+**Effort:** 2 hours (decision + documentation)  
+**Risk:** HIGH (affects all element rendering)  
+**Can Deploy:** NO (requires gradual migration)  
+**Reference:** GitHub Issue #4 (`docs/GITHUB_ISSUES.md`)
 
-**Timeline:** Week 2-3 (22 hours)
+#### Current State
 
----
+**File:** `src/stores/editorStore.ts` (lines 193-203)
 
-### ISSUE 2.1: Remove Unused Dependencies
-
-**Impact:** Save ~150KB bundle size (33% reduction!)
-
-**Execution:**
-
-```bash
-# Confirmed UNUSED (15 minutes)
-npm uninstall date-fns nanoid uuid use-image
-
-# If papaparse/jszip not used or lazy-loaded
-npm uninstall papaparse jszip
-npm uninstall --save-dev @types/papaparse
-```
-
-**Verification:**
-```bash
-npm run build
-# Check bundle size before/after
-```
-
-**Effort:** 15 minutes
-
-**Priority:** 🟠 HIGH - Quick win
-
----
-
-### ISSUE 2.2: LeftSidebar Extraction (Finish)
-
-**Status:** Partially done (responsive work complete)
-
-**Remaining:** Extract panels to separate files
-
-**See:** PHASE1_GUIDE.md for detailed extraction plan
-
-**Effort:** 6 hours
-
-**Priority:** 🟠 HIGH
-
----
-
-### ISSUE 2.3: Create Custom Hooks
-
-**useDebounced:**
 ```typescript
-// src/hooks/useDebounced.ts
-export function useDebounced<T>(value: T, delay = 300): T {
-  const [debouncedValue, setDebouncedValue] = useState(value);
-  
-  useEffect(() => {
-    const timer = setTimeout(() => setDebouncedValue(value), delay);
-    return () => clearTimeout(timer);
-  }, [value, delay]);
-  
-  return debouncedValue;
+// Current pattern (potentially confusing):
+addElement: (element) => {
+  // Step 1: Add to elementsStore (source of truth)
+  useElementsStore.getState().addElement(element);
+  useSelectionStore.getState().selectElement(element.id);
+
+  // Step 2: Sync back to editorStore (facade)
+  const elements = useElementsStore.getState().elements;
+  set({
+    elements: elements,
+    selectedIds: [element.id],
+  });
+};
+```
+
+**Question:** Is this a bug or intended behavior?
+
+**Analysis:**
+
+- `elementsStore` adds element to its array ✅
+- `editorStore` **mirrors** the array from elementsStore ✅
+- Both stores contain same data (not duplicate, but synchronized)
+- Legacy components read from `editorStore`
+- New components read from `elementsStore`
+
+**This is the FACADE PATTERN working as designed!**
+
+#### Architectural Options
+
+**Option A: Keep Dual State (Current)**
+
+- **Pros:** Backward compatible, gradual migration possible
+- **Cons:** Risk of divergence, confusing for new developers
+- **Effort:** 0 hours (status quo)
+
+**Option B: Remove editorStore.elements (Breaking Change)**
+
+- **Pros:** Single source of truth, cleaner architecture
+- **Cons:** Breaks all components reading from editorStore
+- **Effort:** 20+ hours (migrate all components)
+
+**Option C: Make editorStore.elements Computed Property**
+
+- **Pros:** Always in sync, no manual syncing
+- **Cons:** Zustand doesn't support computed properties natively
+- **Effort:** 8 hours (implement subscription pattern)
+
+#### Recommended Decision: **Option A + Documentation**
+
+**Rationale:**
+
+1. Current pattern is **NOT a bug** - it's the facade pattern
+2. Both stores stay in sync via explicit sync calls
+3. Breaking change (Option B) is too risky mid-project
+4. Computed properties (Option C) add complexity
+
+**Action Items:**
+
+1. **Document the pattern (2 hours):**
+
+   - Create `docs/ARCHITECTURE_DECISION_002.md`
+   - Explain facade pattern rationale
+   - Document sync requirements
+   - Add examples of correct usage
+
+2. **Add validation (30 min):**
+
+```typescript
+// In development mode, verify sync
+if (process.env.NODE_ENV === "development") {
+  const editorElements = useEditorStore.getState().elements;
+  const specializedElements = useElementsStore.getState().elements;
+  if (editorElements.length !== specializedElements.length) {
+    console.error("[SYNC ERROR] Store mismatch detected!");
+  }
 }
 ```
 
-**useLocalStorage:**
+3. **Update WORKFLOW.md:**
+   - Add section: "Understanding the Facade Pattern"
+   - Clarify when to use which store
+
+#### Success Criteria
+
+- [ ] Architecture Decision Record created
+- [ ] Sync validation added (dev mode only)
+- [ ] WORKFLOW.md updated with clear guidance
+- [ ] No actual code changes (documentation only)
+- [ ] Team understands pattern (solo dev = you!)
+
+---
+
+## 🟠 Phase 2: Canvas Performance Optimization
+
+**Goal:** Improve rendering performance from 30 FPS → 55+ FPS  
+**Duration:** 12 hours  
+**Risk Level:** MEDIUM  
+**Can Deploy:** YES (after measuring each optimization)
+
+---
+
+### 2.1 Add Debounced Rendering
+
+**Priority:** 🟠 HIGH  
+**Effort:** 2 hours  
+**Risk:** LOW  
+**Expected Impact:** 40% fewer renders, +15 FPS
+
+#### Current State
+
+**File:** `src/lib/canvas/CanvasManager.ts`
+
 ```typescript
-// src/hooks/useLocalStorage.ts
-export function useLocalStorage<T>(key: string, defaultValue: T) {
-  const [value, setValue] = useState<T>(() => {
+// ❌ PROBLEM: Immediate render on every change
+updateElement(id, updates) {
+    syncElementToFabric(fabricObject, updates);
+    this.canvas.renderAll(); // Triggers 60+ renders/sec during drag
+}
+```
+
+**Performance Issue:**
+
+- Dragging element = 60 updates/sec
+- Each update calls `renderAll()` immediately
+- GPU can't keep up → dropped frames
+- 60fps budget = 16ms per frame
+- Rendering takes 25-30ms → 30 FPS result
+
+#### Proposed Solution
+
+```typescript
+import { debounce } from "lodash";
+
+class CanvasManager {
+  // Add debounced render method
+  private debouncedRender = debounce(() => {
+    this.canvas?.requestRenderAll();
+  }, 16); // 60fps = 16ms frame budget
+
+  updateElement(id, updates) {
+    syncElementToFabric(fabricObject, updates);
+    this.debouncedRender(); // ✅ Batches renders
+  }
+
+  // Also update in other methods:
+  // - addElement()
+  // - removeElement()
+  // - Spatial grid updates
+}
+```
+
+#### Implementation Steps
+
+1. **Study debouncing pattern:**
+
+   - File: `src/hooks/useAutoSave.ts` lines 10-25
+   - Shows correct lodash debounce usage
+
+2. **Add debounce to CanvasManager:**
+
+   - Import lodash at top
+   - Add `debouncedRender` property (line ~45)
+   - Replace 8-10 `renderAll()` calls with `debouncedRender()`
+
+3. **Handle cleanup:**
+
+```typescript
+destroy() {
+    this.debouncedRender.cancel(); // ✅ Cancel pending renders
+    // ... rest of cleanup
+}
+```
+
+4. **Measure performance:**
+
+```typescript
+// Before optimization:
+const before = CanvasManager.getPerformanceMetrics();
+console.log("FPS before:", before.fps); // ~30 FPS
+
+// After optimization:
+const after = CanvasManager.getPerformanceMetrics();
+console.log("FPS after:", after.fps); // Target: 45+ FPS
+```
+
+#### Success Criteria
+
+- [ ] FPS improves from 30 → 45+ (50% improvement)
+- [ ] Dragging element feels smooth (no stutter)
+- [ ] No visual artifacts (elements render correctly)
+- [ ] Canvas updates within 16ms (Chrome DevTools timeline)
+- [ ] Memory usage stable (no memory leaks)
+
+#### Rollback Plan
+
+If FPS decreases or visual bugs appear:
+
+- Revert debounce changes
+- Try longer delay (32ms instead of 16ms)
+- Profile with Chrome DevTools to find real bottleneck
+
+---
+
+### 2.2 Object Reuse Cache
+
+**Priority:** 🟠 HIGH  
+**Effort:** 4 hours  
+**Risk:** MEDIUM  
+**Expected Impact:** 70% faster updates, -30% memory
+
+#### Current State
+
+**File:** `src/lib/canvas/ObjectFactory.ts`
+
+```typescript
+// ❌ PROBLEM: Sets ALL properties even if unchanged
+export function syncElementToFabric(fabricObject, updates) {
+  fabricObject.set({
+    left: element.x, // Set even if unchanged
+    top: element.y, // Set even if unchanged
+    width: element.width, // Set even if unchanged
+    // ... 20+ properties always set
+  });
+}
+```
+
+**Performance Issue:**
+
+- Updating `x` position triggers full property sync
+- Fabric.js marks object as "dirty" for ALL properties
+- GPU re-uploads geometry, textures, transforms
+- Wasted work: 70% of properties unchanged
+
+#### Proposed Solution
+
+```typescript
+// ✅ SOLUTION: Diff detection + object cache
+const fabricObjectCache = new Map<string, fabric.Object>();
+
+function updateOnlyChanged(obj: fabric.Object, updates: Partial<Element>) {
+  let hasChanges = false;
+
+  // Position
+  if (updates.x !== undefined && obj.left !== updates.x) {
+    obj.set("left", updates.x);
+    hasChanges = true;
+  }
+  if (updates.y !== undefined && obj.top !== updates.y) {
+    obj.set("top", updates.y);
+    hasChanges = true;
+  }
+
+  // Only update other properties if they changed
+  // ... (same for width, height, rotation, etc.)
+
+  return hasChanges;
+}
+
+export function syncElementToFabric(fabricObject, updates) {
+  const hasChanges = updateOnlyChanged(fabricObject, updates);
+  if (hasChanges) {
+    fabricObject.setCoords(); // Only recalc if changed
+  }
+}
+```
+
+#### Implementation Steps
+
+1. **Add diff helper function:**
+
+   - File: `src/lib/canvas/ObjectFactory.ts`
+   - Add `updateOnlyChanged()` before `syncElementToFabric()`
+   - ~80 lines for all properties
+
+2. **Implement property-specific checks:**
+
+```typescript
+// Position properties (x, y)
+// Size properties (width, height)
+// Transform properties (rotation, scaleX, scaleY)
+// Style properties (fill, stroke, opacity)
+// Text properties (fontSize, fontFamily, text)
+```
+
+3. **Add caching for complex properties:**
+
+```typescript
+// Cache parsed shadow values
+const shadowCache = new Map<string, fabric.Shadow>();
+
+function getShadow(element: Element) {
+    const key = `${element.shadowColor}-${element.shadowBlur}`;
+    if (!shadowCache.has(key)) {
+        shadowCache.set(key, new fabric.Shadow({...}));
+    }
+    return shadowCache.get(key);
+}
+```
+
+4. **Measure performance:**
+
+```typescript
+// Test: Update element position 1000 times
+const start = performance.now();
+for (let i = 0; i < 1000; i++) {
+  updateElement(id, { x: i });
+}
+const duration = performance.now() - start;
+console.log("Update time:", duration); // Target: < 500ms
+```
+
+#### Success Criteria
+
+- [ ] Element update time: 45ms → 15ms (70% improvement)
+- [ ] Memory usage reduced by 30% (fewer object allocations)
+- [ ] Visual correctness maintained (no rendering bugs)
+- [ ] All properties sync correctly when changed
+- [ ] Cache hits logged in dev mode
+
+#### Rollback Plan
+
+If rendering bugs appear:
+
+- Add `FORCE_FULL_SYNC` flag to bypass diff detection
+- Log all property changes to identify which property has issue
+- Revert to full sync for that property only
+
+---
+
+### 2.3 Canvas Pooling for Bulk Generation
+
+**Priority:** 🟠 HIGH (conditional - only if bulk generation used)  
+**Effort:** 6 hours  
+**Risk:** MEDIUM  
+**Expected Impact:** 50% faster bulk generation, -40% memory pressure
+
+#### Current State
+
+**File:** `src/components/campaign/GenerationController.tsx`
+
+```typescript
+// ❌ PROBLEM: New canvas created per pin
+const renderPinClient = async (rowData, rowIndex) => {
+    const canvas = new fabric.StaticCanvas(); // Expensive allocation
+    await renderTemplate(canvas, ...);
+    const blob = await exportToBlob(canvas);
+    canvas.dispose(); // Triggers GC
+    return blob;
+};
+
+// At 100 pins: 100 canvas allocations + 100 GC cycles
+```
+
+**Performance Issue:**
+
+- Creating `StaticCanvas` = 20-30ms
+- Disposing canvas = 10ms + GC pause
+- 100 pins × 30ms = 3000ms (3 seconds) wasted on allocation
+- GC pauses cause stuttering
+
+#### Proposed Solution
+
+```typescript
+// ✅ SOLUTION: Pool of reusable canvases
+class CanvasPool {
+    private pool: fabric.StaticCanvas[] = [];
+    private maxSize = 5; // Tune based on concurrency
+
+    acquire(): fabric.StaticCanvas {
+        if (this.pool.length > 0) {
+            return this.pool.pop()!; // Reuse existing
+        }
+        return new fabric.StaticCanvas(null, {
+            width: 1000,
+            height: 1000,
+        });
+    }
+
+    release(canvas: fabric.StaticCanvas): void {
+        canvas.clear(); // Reset state
+        canvas.backgroundColor = '#ffffff';
+
+        if (this.pool.length < this.maxSize) {
+            this.pool.push(canvas);
+        } else {
+            canvas.dispose(); // Exceed max, throw away
+        }
+    }
+
+    drain(): void {
+        this.pool.forEach(c => c.dispose());
+        this.pool = [];
+    }
+}
+
+// Usage:
+const pool = new CanvasPool();
+
+const renderPinClient = async (rowData, rowIndex) => {
+    const canvas = pool.acquire(); // ✅ Reuse from pool
     try {
-      const stored = localStorage.getItem(key);
-     return stored ? JSON.parse(stored) : defaultValue;
-    } catch {
-      return defaultValue;
+        await renderTemplate(canvas, ...);
+        const blob = await exportToBlob(canvas);
+        return blob;
+    } finally {
+        pool.release(canvas); // ✅ Return to pool
     }
-  });
-  
-  useEffect(() => {
-    localStorage.setItem(key, JSON.stringify(value));
-  }, [key, value]);
-  
-  return [value, setValue] as const;
-}
-```
-
-**useSelectedElement:**
-```typescript
-// src/hooks/useSelectedElement.ts
-export function useSelectedElement(): Element | null {
-  return useEditorStore(state => {
-    const selectedId = state.selectedIds[0];
-    if (!selectedId) return null;
-    return state.elements.find(e => e.id === selectedId) || null;
-  });
-}
-```
-
-**Effort:** 4 hours (create + refactor usages)
-
-**Priority:** 🟠 HIGH - DRY and performance
-
----
-
-### ISSUE 2.4: Fix Prop Drilling
-
-**Pattern:**
-```typescript
-// BEFORE: Props drilled 3 levels
-<EditorLayout zoom={zoom}>
-  <CanvasArea zoom={zoom}>
-    <AlignmentGuides zoom={zoom} />
-
-// AFTER: Direct subscription
-const AlignmentGuides = () => {
-  const zoom = useCanvasStore(state => state.zoom);
-  // Use zoom directly
 };
 ```
 
-**Effort:** 3 hours (find all cases + refactor)
+#### Implementation Steps
 
-**Priority:** 🟠 HIGH - Code clarity
+1. **Create CanvasPool class:**
 
----
+   - File: `src/lib/canvas/CanvasPool.ts` (NEW)
+   - ~100 lines
+   - Add JSDoc comments
 
-### ISSUE 2.5: Document State Management Rules
+2. **Integrate with GenerationController:**
 
-**Create:** `docs/STATE_MANAGEMENT.md`
+   - File: `src/components/campaign/GenerationController.tsx`
+   - Replace `new fabric.StaticCanvas()` with `pool.acquire()`
+   - Add cleanup in `finally` block
 
-```markdown
-# State Management Guidelines
-
-## When to use useState
-
-- Truly local UI state (hover, focus, dropdown open)
-- Not needed by any other component
-- Temporary state (form inputs before submit)
-
-## When to use Zustand
-
-- Shared state accessed by multiple components
-- Persisted state (survives component unmount)
-- Global app state (selection, elements, canvas config)
-
-## When to use useRef
-
-- Imperative handles (DOM refs, CanvasManager, timers)
-- Values that change but don't trigger re-renders
-- Mutable values in callbacks
-
-## Current Stores
-
-- `useTemplateStore` - Template metadata
-- `useCanvasStore` - Canvas configuration
-- `useElementsStore` - Element CRUD
-- `useSelectionStore` - Element selection
-- `useHistoryStore` - Undo/redo
-- `useLayersStore` - Layer ordering
-- `useAlignmentStore` - Alignment operations
-```
-
-**Effort:** 2 hours
-
-**Priority:** 🟠 HIGH - Team clarity
-
----
-
-### ISSUE 2.6: Reorganize Components Folder
-
-**Current (messy):**
-```
-src/components/
-├── campaign/
-├── dashboard/
-├── editor/
-├── gallery/
-```
-
-**Proposed (clear):**
-```
-src/components/
-├── canvas/       # Canvas-specific
-├── panels/       # All panels
-│   ├── sections/ # Panel sections
-│   └── inputs/   # Panel inputs
-├── layout/       # Layout containers
-├── primitives/   # UI building blocks
-├── features/     # Feature-specific
-└── errors/       # Error boundaries
-```
-
-**Effort:** 6 hours
-
-**Priority:** 🟠 HIGH - Developer experience
-
----
-
-## 🟡 PRIORITY 3: MEDIUM (TECHNICAL DEBT)
-
-**Timeline:** Week 4-6 (42 hours)
-
-### ISSUE 3.1: Virtual Scrolling for LayersPanel
-
-**Add react-window:**
-```bash
-npm install react-window@^1.8.10
-npm install --save-dev @types/react-window
-```
+3. **Handle edge cases:**
 
 ```typescript
-import { FixedSizeList } from 'react-window';
+// What if render fails? Still return to pool
+// What if user cancels generation? Drain pool
+// What if pool size too small? Log warnings
+```
 
+4. **Measure performance:**
+
+```typescript
+// Test: Generate 100 pins
+const start = performance.now();
+await generateAllPins(csvData);
+const duration = performance.now() - start;
+console.log("Generation time:", duration);
+// Before: 180s, Target: 90s
+```
+
+#### Success Criteria
+
+- [ ] Bulk generation time: 180s → 90s (50% improvement)
+- [ ] Memory usage stays flat (no leaks from pooled canvases)
+- [ ] No visual artifacts in generated pins
+- [ ] Pool size auto-tunes based on concurrency
+- [ ] Cleanup works correctly on cancel
+
+#### Rollback Plan
+
+If memory leaks or corruption occur:
+
+- Disable pooling (set `maxSize = 0`)
+- Add memory profiling to identify leak source
+- Check if `canvas.clear()` fully resets state
+
+---
+
+## 🟡 Phase 3: Component Optimization
+
+**Goal:** Reduce unnecessary re-renders, improve perceived performance  
+**Duration:** 8 hours  
+**Risk Level:** LOW  
+**Can Deploy:** YES (weekly batches)
+
+---
+
+### 3.1 Memoize PropertiesPanel Sections
+
+**Priority:** 🟡 MEDIUM  
+**Effort:** 2 hours  
+**Risk:** LOW  
+**Expected Impact:** 50% fewer component re-renders
+
+#### Current State
+
+**Files:** `src/components/panels/sections/*.tsx` (10 files)
+
+```typescript
+// ❌ PROBLEM: Re-renders on ANY store change
+export function PositionSection() {
+  const element = useEditorStore((state) => state.selectedElements);
+  // Re-renders when zoom changes, canvas size changes, etc.
+}
+```
+
+**Performance Issue:**
+
+- Every `editorStore` change triggers ALL sections to re-render
+- Changing zoom → PositionSection re-renders (unnecessary)
+- 10 sections × 10ms render = 100ms wasted per action
+
+#### Proposed Solution
+
+```typescript
+import { shallow } from "zustand/shallow";
+
+// ✅ SOLUTION: Shallow comparison + memoization
+export const PositionSection = React.memo(() => {
+  const element = useEditorStore(
+    (state) => state.selectedElements,
+    shallow // Only re-render if element reference changed
+  );
+
+  // Rest of component...
+});
+```
+
+#### Implementation Steps
+
+1. **Wrap all 10 sections with React.memo:**
+
+   - PositionSection.tsx
+   - SizeSection.tsx
+   - TextPropertiesSection.tsx
+   - ImagePropertiesSection.tsx
+   - ShapePropertiesSection.tsx
+   - LayerOrderSection.tsx
+   - AlignmentSection.tsx
+   - OpacitySection.tsx
+   - RotationSection.tsx
+   - VisibilitySection.tsx
+
+2. **Add shallow comparison:**
+
+```typescript
+import { shallow } from "zustand/shallow";
+
+// For each section, add shallow to useEditorStore
+```
+
+3. **Measure re-renders:**
+
+```typescript
+// Add to each component (dev mode):
+if (process.env.NODE_ENV === "development") {
+  console.log("[RENDER]", "PositionSection");
+}
+
+// Before: 50 logs per element drag
+// After: 5 logs per element drag (10x reduction)
+```
+
+#### Success Criteria
+
+- [ ] PropertiesPanel sections re-render 50% less
+- [ ] Changing zoom doesn't trigger PositionSection render
+- [ ] Selecting element triggers ONE render per section
+- [ ] No visual bugs (sections update correctly)
+- [ ] React DevTools Profiler shows improvement
+
+#### Rollback Plan
+
+Extremely low risk. If issues:
+
+- Remove `React.memo()` wrapper from problematic section
+- Keep memoization on working sections
+
+---
+
+### 3.2 Add Virtual Scrolling to LayersPanel
+
+**Priority:** 🟡 MEDIUM  
+**Effort:** 4 hours  
+**Risk:** LOW  
+**Expected Impact:** Smooth scrolling with 100+ elements
+
+#### Current State
+
+**File:** `src/components/panels/LayersPanel.tsx`
+
+```typescript
+// ❌ PROBLEM: Renders ALL elements even if not visible
+{
+  elements.map((element) => <LayerItem key={element.id} element={element} />);
+}
+// With 200 elements, renders 200 DOM nodes (slow scroll)
+```
+
+**Performance Issue:**
+
+- 100+ elements = 100+ DOM nodes
+- Scrolling feels laggy
+- Browser reflows on every scroll event
+
+#### Proposed Solution
+
+```typescript
+import { FixedSizeList } from "react-window";
+
+// ✅ SOLUTION: Only render visible items
 <FixedSizeList
   height={600}
-  itemCount={layers.length}
-  itemSize={50}
+  itemCount={elements.length}
+  itemSize={48} // Height of each LayerItem
   width="100%"
 >
   {({ index, style }) => (
-    <LayerItem style={style} layer={layers[index]} />
+    <div style={style}>
+      <LayerItem element={elements[index]} />
+    </div>
   )}
-</FixedSizeList>
+</FixedSizeList>;
 ```
 
-**Effort:** 4 hours
+#### Implementation Steps
 
----
-
-### ISSUE 3.2: Add React.memo
-
-**Pattern:**
-```typescript
-const PositionSection = React.memo(({ element }) => {
-  // Component code
-}, (prevProps, nextProps) => {
-  // Custom comparison
-  return prevProps.element.x === nextProps.element.x &&
-         prevProps.element.y === nextProps.element.y;
-});
-```
-
-**Apply to:** All PropertiesPanel sections
-
-**Effort:** 2 hours
-
----
-
-### ISSUE 3.3: Compound Components
-
-**Create 10 primitives:**
-- Dropdown
-- Modal
-- Tabs
-- Accordion (enhance existing)
-- Slider
-- ColorPicker (wrap react-colorful)
-- Button (enhance existing)
-- Input (enhance existing)
-- Tooltip (enhance existing)
-- Dialog
-
-**Effort:** 20 hours (2h per component)
-
----
-
-### ISSUE 3.4: Add Form Validation (Zod)
+1. **Install dependency:**
 
 ```bash
-npm install zod@^3.22.0
+npm install react-window @types/react-window
 ```
 
+2. **Refactor LayersPanel:**
+
+   - Import `FixedSizeList`
+   - Wrap layer list in virtual scroller
+   - Adjust drag-and-drop (react-beautiful-dnd may need update)
+
+3. **Handle dynamic item heights (optional):**
+
+   - Use `VariableSizeList` if items have different heights
+   - Measure item heights on mount
+
+4. **Test with large templates:**
+
 ```typescript
-// src/lib/validations/element.ts
-import { z } from 'zod';
+// Create test template with 500 elements
+// Scroll up/down rapidly
+// Check FPS with Chrome DevTools
+```
 
-export const ElementSchema = z.object({
-  id: z.string(),
-  type: z.enum(['text', 'image', 'shape', 'frame']),
-  x: z.number().min(0),
-  y: z.number().min(0),
-  width: z.number().positive(),
-  height: z.number().positive(),
-});
+#### Success Criteria
 
-// Usage
-const result = ElementSchema.safeParse(data);
-if (!result.success) {
-  console.error(result.error.errors);
+- [ ] Smooth 60 FPS scrolling with 200+ elements
+- [ ] Only 10-15 DOM nodes rendered at once
+- [ ] Drag-and-drop still works
+- [ ] Selection highlights correctly
+- [ ] No layout shift during scroll
+
+#### Rollback Plan
+
+If drag-and-drop breaks:
+
+- Use `react-window` only when element count > 100
+- Below 100, use original implementation
+
+---
+
+### 3.3 Extract Text Formatting Hook
+
+**Priority:** 🟡 MEDIUM  
+**Effort:** 2 hours  
+**Risk:** LOW  
+**Expected Impact:** DRY principle, easier testing
+
+#### Current State
+
+**Files:**
+
+- `src/components/panels/sections/TextPropertiesSection.tsx` (lines 120-250)
+- `src/components/layout/Toolbar.tsx` (lines 200-350)
+
+```typescript
+// ❌ PROBLEM: Duplicated formatting logic
+// In TextPropertiesSection:
+const handleFontSizeChange = (size: number) => {
+  const { selectedIds, elements } = useEditorStore.getState();
+  selectedIds.forEach((id) => {
+    const element = elements.find((e) => e.id === id);
+    if (element?.type === "text") {
+      updateElement(id, { fontSize: size });
+    }
+  });
+};
+
+// In Toolbar: SAME LOGIC REPEATED
+```
+
+#### Proposed Solution
+
+```typescript
+// ✅ SOLUTION: Extract to custom hook
+// File: src/hooks/useTextFormatting.ts
+
+export function useTextFormatting() {
+  const updateFontSize = (size: number) => {
+    const { selectedIds } = useSelectionStore.getState();
+    const { elements } = useElementsStore.getState();
+
+    selectedIds.forEach((id) => {
+      const element = elements.find((e) => e.id === id);
+      if (element?.type === "text") {
+        useElementsStore.getState().updateElement(id, { fontSize: size });
+      }
+    });
+  };
+
+  return {
+    updateFontSize,
+    updateFontFamily,
+    updateTextColor,
+    toggleBold,
+    toggleItalic,
+    toggleUnderline,
+    setAlignment,
+  };
 }
 ```
 
-**Effort:** 6 hours
+#### Implementation Steps
 
----
+1. **Create hook file:**
 
-### ISSUE 3.5: JSDoc All Public APIs
+   - File: `src/hooks/useTextFormatting.ts`
+   - Export 7 functions
+   - ~150 lines total
 
-**Target:** CanvasManager (36 methods)
-
-**Effort:** 8 hours
-
----
-
-### ISSUE 3.6: Bundle Size Monitoring
-
-```bash
-npm install --save-dev @next/bundle-analyzer
-```
+2. **Refactor TextPropertiesSection:**
 
 ```typescript
-// next.config.ts
-const withBundleAnalyzer = require('@next/bundle-analyzer')({
-  enabled: process.env.ANALYZE === 'true'
-});
+const { updateFontSize, updateFontFamily, ... } = useTextFormatting();
 
-module.exports = withBundleAnalyzer({
-  // existing config
+// Replace 50+ lines of inline logic with hook calls
+```
+
+3. **Refactor Toolbar:**
+
+```typescript
+// Same hook usage, remove 80+ lines
+```
+
+4. **Add tests:**
+
+```typescript
+// File: src/hooks/__tests__/useTextFormatting.test.ts
+
+it("should update font size for all selected text elements", () => {
+  // Test implementation
 });
 ```
 
-**Run:**
+#### Success Criteria
+
+- [ ] TextPropertiesSection reduced by 50+ lines
+- [ ] Toolbar reduced by 80+ lines
+- [ ] All text formatting works identically
+- [ ] 20+ unit tests for hook
+- [ ] Undo/redo still works
+
+---
+
+## 🔵 Phase 4: Code Quality Improvements
+
+**Goal:** Reduce technical debt, improve maintainability  
+**Duration:** Variable (ongoing)  
+**Risk Level:** MINIMAL  
+**Can Deploy:** Continuous (no user impact)
+
+---
+
+### 4.1 Remove Unused Dependencies
+
+**Priority:** 🔵 LOW  
+**Effort:** 15 minutes  
+**Risk:** MINIMAL  
+**Expected Impact:** -100KB bundle size
+
+#### Analysis
+
+**File:** `package.json`
+
 ```bash
-ANALYZE=true npm run build
+# Find unused dependencies
+npx depcheck
+
+# Likely candidates (verify before removing):
+# - Old canvas library (if fully migrated to Fabric.js)
+# - Unused UI libraries
+# - Development tools no longer needed
 ```
 
-**Effort:** 2 hours
+#### Proposed Removals
+
+```bash
+# Only remove after 100% verification!
+npm uninstall [package-name]
+npm run build  # Verify no errors
+npm test       # Verify tests pass
+```
+
+#### Success Criteria
+
+- [ ] Bundle size reduced by 100-200KB
+- [ ] All tests pass
+- [ ] Production build succeeds
+- [ ] No runtime errors
 
 ---
 
-## 🟢 PRIORITY 4: LOW (POLISH)
+### 4.2 Add JSDoc to CanvasManager
 
-**Timeline:** Week 6-8 (5 hours)
+**Priority:** 🔵 LOW  
+**Effort:** 3 hours  
+**Risk:** NONE  
+**Expected Impact:** Better developer experience
 
-### ISSUE 4.1: UUID/nanoid Policy
+#### Current State
 
-**Document in ARCHITECTURE.md:**
-- nanoid for client-side IDs
-- uuid for database records (if needed)
-- Or remove both if not used
+**File:** `src/lib/canvas/CanvasManager.ts` (567 lines, mostly undocumented)
 
-**Effort:** 30 minutes
+#### Proposed Solution
 
----
+Add JSDoc comments to:
 
-### ISSUE 4.2: Create ADRs
+- Class description
+- All public methods
+- Complex private methods
+- Type parameters
 
-**Architecture Decision Records:**
+```typescript
+/**
+ * CanvasManager - Core Fabric.js lifecycle manager
+ *
+ * Responsibilities:
+ * - Initialize/destroy Fabric.js canvas
+ * - Sync Element data to Fabric objects
+ * - Handle user interactions (drag, resize, rotate)
+ * - Emit change events to React layer
+ *
+ * @example
+ * const manager = new CanvasManager();
+ * manager.initialize(canvasElement, config);
+ * manager.addElement(textElement);
+ */
+export class CanvasManager {
+  /**
+   * Add an element to the canvas
+   *
+   * @param element - Element data from Zustand store
+   * @throws {Error} If canvas not initialized
+   */
+  addElement(element: Element): void {
+    // ...
+  }
+}
+```
 
-1. **001-use-fabricjs-over-konva.md**
-2. **002-three-layer-architecture.md**
-3. **003-zustand-over-redux.md**
+#### Success Criteria
 
-**Effort:** 3 hours
-
----
-
-### ISSUE 4.3: CONTRIBUTING.md
-
-**Onboarding guide with:**
-- Setup instructions
-- How to add features
-- Code style guidelines
-- PR process
-
-**Effort:** 4 hours (or wait for team growth)
-
----
-
-## 📅 WEEK-BY-WEEK BREAKDOWN
-
-### Week 1 (40 hours)
-
-**Mon-Tue:** editorStore split (16h)
-- Extract templateStore, canvasStore
-- Extract elementsStore, selectionStore
-- Extract historyStore, layersStore, alignmentStore
-- Test undo/redo integration
-
-**Wed:** Error boundaries (4h)
-- Install react-error-boundary
-- Create fallback UIs
-- Wrap critical sections
-
-**Thu:** Remove unused deps + custom hooks (4h)
-- npm uninstall unused packages
-- Create useDebounced, useLocalStorage, useSelectedElement
-
-**Fri:** Start tests (16h of 20h)
-- Test infrastructure setup
-- Test all new stores
+- [ ] All public methods documented
+- [ ] TypeDoc generates clean API docs
+- [ ] Examples provided for complex methods
 
 ---
 
-### Week 2 (42 hours)
+### 4.3 Extract Alignment Logic to Custom Hook
 
-**Mon:** Finish tests (4h remaining)
-- Integration tests
+**Priority:** 🔵 LOW  
+**Effort:** 3 hours  
+**Risk:** LOW  
+**Expected Impact:** Eliminate prop drilling
 
-**Tue-Wed:** PropertiesPanel split (12h)
-- Extract helpers
-- Extract simple sections
-- Extract complex sections
-- Split EffectsSection
+#### Current State
 
-**Thu-Fri:** CanvasManager split (14h)
-- Extract PerformanceMonitor, ZoomManager
-- Extract ElementRenderer
-- Extract Operations, Selection
-- Integrate services
+**File:** `src/components/panels/sections/AlignmentSection.tsx`
 
-**Weekend:** LeftSidebar extraction (6h)
+Alignment logic passed through 3-4 component levels via props.
 
----
+#### Proposed Solution
 
-### Week 3 (16 hours)
+```typescript
+// File: src/hooks/useAlignment.ts
 
-**Mon:** Fix prop drilling (3h)
+export function useAlignment() {
+    const alignLeft = () => {
+        const { selectedIds } = useSelectionStore.getState();
+        useAlignmentStore.getState().alignElements(selectedIds, 'left');
+    };
 
-**Tue:** Reorganize components (6h)
+    return { alignLeft, alignCenter, alignRight, ... };
+}
+```
 
-**Wed:** Document state management (2h)
+#### Success Criteria
 
-**Thu-Fri:** Start Phase 3 work or take break
-
----
-
-### Weeks 4-8: Medium & Low Priority (47 hours)
-
-Spread across 5 weeks as time permits
+- [ ] No prop drilling in alignment components
+- [ ] Toolbar, PropertiesPanel, ContextMenu all use hook
+- [ ] Alignment logic centralized
 
 ---
 
-## ✅ SUCCESS METRICS
+## 📈 Success Metrics & Validation
 
-### Phase 1 Complete When:
+### Performance Targets
 
-**Code Quality:**
-- [ ] No files >500 lines
-- [ ] 7 Zustand stores (each <300 lines)
-- [ ] PropertiesPanel split into 10+ files
-- [ ] CanvasManager split into 6 services
-- [ ] 50+ tests written (>50% coverage)
-- [ ] Error boundaries in place
+| Metric                     | Before    | After    | Validation Method               |
+| -------------------------- | --------- | -------- | ------------------------------- |
+| Canvas FPS (50 elements)   | 30        | 55+      | PerformanceMonitor.getMetrics() |
+| Element update time        | 45ms      | 15ms     | Chrome DevTools Performance tab |
+| Bulk generation (100 pins) | 180s      | 90s      | console.time('generation')      |
+| PropertiesPanel re-renders | 50/action | 5/action | React DevTools Profiler         |
+| Bundle size                | 1.2MB     | 900KB    | `next build` output             |
+| Test coverage              | 88%       | 92%+     | `npm test -- --coverage`        |
 
-**Bundle Size:**
-- [ ] <300KB (from ~455KB)
-- [ ] Unused deps removed
+### Measurement Checklist
 
-**Documentation:**
-- [x] ARCHITECTURE.md ✅
-- [x] TECHNICAL_DEBT.md ✅
-- [x] DEPENDENCIES.md ✅
-- [x] REFACTORING_PLAN.md ✅
-- [ ] STATE_MANAGEMENT.md (Week 2)
+**Before Each Phase:**
 
-**Developer Experience:**
-- [ ] Clear component organization
-- [ ] Custom hooks for common patterns
-- [ ] No prop drilling >2 levels
-- [ ] State management rules documented
+- [ ] Run `npm test -- --coverage` (record baseline)
+- [ ] Run `npm run build` (record bundle size)
+- [ ] Profile with Chrome DevTools (record FPS, render time)
+- [ ] Git tag: `pre-phase-N-optimization`
 
----
+**After Each Phase:**
 
-## 🎯 FINAL NOTES
-
-### Remember:
-
-1. **One thing at a time** - Don't try to refactor everything at once
-2. **Test after each change** - Keep app working throughout
-3. **Git commits per task** - Easy rollback if needed
-4. **Update PROGRESS.md daily** - Track what's done
-5. **Celebrate milestones** - 16h is a LOT of work!
-
-### If Stuck:
-
-1. Check TECHNICAL_DEBT.md for detailed analysis
-2. Check PHASE1_GUIDE.md for step-by-step instructions
-3. Roll back to last working commit
-4. Take a break, come back fresh
-
-### After Phase 1:
-
-Move to **Phase 2: Component Architecture Redesign**
-- Build out primitive library
-- Implement compound components
-- Create consistent design system
+- [ ] Run same measurements
+- [ ] Compare before/after (document in PROGRESS.md)
+- [ ] If improvement < 80% of target → investigate
+- [ ] Git tag: `post-phase-N-optimization`
 
 ---
 
-**Document Created:** 2025-12-15  
-**Ready for Execution:** ✅ YES  
-**Estimated Completion:** 4-6 weeks  
-**Let's build something amazing! 🚀**
+## ⚠️ Risk Assessment
+
+### Risk Matrix
+
+| Phase                | Risk Level | Mitigation Strategy                            | Rollback Time |
+| -------------------- | ---------- | ---------------------------------------------- | ------------- |
+| 1.1 (Toolbar fix)    | LOW        | Simple substitution, easy to verify            | 2 min         |
+| 1.2 (Undo sync)      | MEDIUM     | Test with 10+ undo/redo cycles                 | 5 min         |
+| 1.4 (Architecture)   | HIGH       | Documentation only, no code changes            | N/A           |
+| 2.1 (Debouncing)     | LOW        | Measure FPS before/after                       | 5 min         |
+| 2.2 (Object cache)   | MEDIUM     | Flag to disable diff detection                 | 10 min        |
+| 2.3 (Canvas pool)    | MEDIUM     | Pool size = 0 disables pooling                 | 10 min        |
+| 3.1 (Memoization)    | LOW        | Remove React.memo if issues                    | 2 min         |
+| 3.2 (Virtual scroll) | LOW        | Conditional rendering (only if > 100 elements) | 10 min        |
+| 3.3 (Extract hook)   | LOW        | Revert to inline logic                         | 5 min         |
+
+### Monitoring Plan
+
+Add to each deployment:
+
+```typescript
+// Log performance metrics to console (dev mode)
+if (process.env.NODE_ENV === "development") {
+  const metrics = CanvasManager.getPerformanceMetrics();
+  console.log("[PERF]", {
+    fps: metrics.fps,
+    elementCount: elements.length,
+    renderTime: metrics.lastRenderTime,
+  });
+}
+```
+
+---
+
+## 🎯 Phase Execution Timeline
+
+### Week 1: Bug Fixes (Phase 1)
+
+```
+Day 1: Fix Toolbar (30 min) → Deploy
+Day 2: Fix Undo/Redo (1 hour) → Test → Deploy
+Day 3: Architecture Decision (2 hours) → Document
+```
+
+### Week 2: Canvas Performance (Phase 2)
+
+```
+Day 1: Debouncing (2 hours) → Measure → Deploy
+Day 2-3: Object Cache (4 hours) → Test → Deploy
+Day 4-5: Canvas Pool (6 hours) → Test → Deploy
+```
+
+### Week 3: Component Optimization (Phase 3)
+
+```
+Day 1: Memoization (2 hours) → Deploy
+Day 2-3: Virtual Scrolling (4 hours) → Deploy
+Day 4: Extract Hook (2 hours) → Deploy
+```
+
+### Week 4: Code Quality (Phase 4 - Ongoing)
+
+```
+Day 1: Remove Dependencies (15 min)
+Day 2-3: JSDoc (3 hours)
+Day 4: Extract Alignment Hook (3 hours)
+```
+
+---
+
+## 📚 Related Documentation
+
+- **WORKFLOW.md** - Zone-based development guide
+- **ARCHITECTURE.md** - System design (31KB)
+- **TECHNICAL_DEBT.md** - Complete issue inventory (27KB)
+- **GITHUB_ISSUES.md** - Active bugs (8KB)
+- **DEPENDENCIES.md** - Package versions (18KB)
+- **PROGRESS.md** - Daily completion log (25KB)
+
+---
+
+**END OF REFACTORING_PLAN.md**
+
+_Update PROGRESS.md after completing each task. Track actual vs estimated time to improve future estimates._
