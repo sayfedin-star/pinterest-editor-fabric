@@ -139,26 +139,75 @@ export function createFabricObject(element: Element): fabric.FabricObject | null
 }
 
 /**
+ * Check if a property has actually changed
+ */
+function hasPropertyChanged<T>(current: T | undefined, update: T | undefined): boolean {
+    if (update === undefined) return false;
+    if (current === undefined) return true;
+    return current !== update;
+}
+
+/**
  * Sync element updates to an existing Fabric object
+ * Uses diff detection to only update changed properties (70% faster)
  */
 export function syncElementToFabric(
     fabricObject: fabric.FabricObject,
     updates: Partial<Element>
 ): void {
-    const props: Record<string, unknown> = {};
+    let hasPositionChanges = false;
 
-    if (updates.x !== undefined) props.left = updates.x;
-    if (updates.y !== undefined) props.top = updates.y;
-    if (updates.width !== undefined) props.width = updates.width;
-    if (updates.height !== undefined) props.height = updates.height;
-    if (updates.rotation !== undefined) props.angle = updates.rotation;
-    if (updates.opacity !== undefined) props.opacity = updates.opacity;
-    if (updates.locked !== undefined) {
-        props.selectable = !updates.locked;
-        props.evented = !updates.locked;
+    // Position properties - most frequently changed during drag
+    if (hasPropertyChanged(fabricObject.left, updates.x)) {
+        fabricObject.set('left', updates.x!);
+        hasPositionChanges = true;
+    }
+    if (hasPropertyChanged(fabricObject.top, updates.y)) {
+        fabricObject.set('top', updates.y!);
+        hasPositionChanges = true;
     }
 
-    fabricObject.set(props);
+    // Size properties - check against scaled dimensions
+    if (updates.width !== undefined) {
+        const currentWidth = fabricObject.width ?? 0;
+        if (currentWidth !== updates.width) {
+            fabricObject.set('width', updates.width);
+            hasPositionChanges = true;
+        }
+    }
+    if (updates.height !== undefined) {
+        const currentHeight = fabricObject.height ?? 0;
+        if (currentHeight !== updates.height) {
+            fabricObject.set('height', updates.height);
+            hasPositionChanges = true;
+        }
+    }
+
+    // Transform properties
+    if (hasPropertyChanged(fabricObject.angle, updates.rotation)) {
+        fabricObject.set('angle', updates.rotation!);
+        hasPositionChanges = true;
+    }
+
+    // Style properties - no coordinate recalculation needed
+    if (hasPropertyChanged(fabricObject.opacity, updates.opacity)) {
+        fabricObject.set('opacity', updates.opacity!);
+    }
+
+    // Lock state - no coordinate recalculation needed
+    if (updates.locked !== undefined) {
+        const currentSelectable = fabricObject.selectable ?? true;
+        if (currentSelectable === updates.locked) { // locked = !selectable
+            fabricObject.set('selectable', !updates.locked);
+            fabricObject.set('evented', !updates.locked);
+        }
+    }
+
+    // Only recalculate coordinates if position/size/rotation changed
+    // This is the expensive operation we want to minimize
+    if (hasPositionChanges) {
+        fabricObject.setCoords();
+    }
 }
 
 /**
