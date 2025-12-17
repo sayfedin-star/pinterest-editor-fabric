@@ -1,0 +1,382 @@
+'use client';
+
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { useRouter } from 'next/navigation';
+import { toast } from 'sonner';
+
+import { TemplateListItem, getTemplatesFiltered, deleteTemplate, duplicateTemplate, updateTemplateMetadata, getTemplate } from '@/lib/db/templates';
+import { extractDynamicData, DynamicDataSummary, DynamicDataFilter, matchesDynamicDataFilter } from '@/lib/utils/extractDynamicData';
+import { useCategoryStore } from '@/stores/categoryStore';
+import { useTagStore } from '@/stores/tagStore';
+import { Element } from '@/types/editor';
+
+import { TemplateToolbar, ViewMode } from './TemplateToolbar';
+import { FilterPanel } from './FilterPanel';
+import { ActiveFilterPills } from './ActiveFilterPills';
+import { TemplateGrid } from './TemplateGrid';
+import { BulkActionToolbar } from './BulkActionToolbar';
+import { QuickEditModal } from './QuickEditModal';
+import { DeleteConfirmModal } from './DeleteConfirmModal';
+
+// Extended template with elements for dynamic data
+interface TemplateWithElements extends TemplateListItem {
+    elements?: Element[];
+}
+
+export function TemplatesPageContainer() {
+    const router = useRouter();
+    
+    // Data state
+    const [templates, setTemplates] = useState<TemplateWithElements[]>([]);
+    const [dynamicDataMap, setDynamicDataMap] = useState<Map<string, DynamicDataSummary>>(new Map());
+    const [isLoading, setIsLoading] = useState(true);
+    
+    // Filter state
+    const [searchQuery, setSearchQuery] = useState('');
+    const [showFilters, setShowFilters] = useState(false);
+    const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(null);
+    const [selectedTagIds, setSelectedTagIds] = useState<string[]>([]);
+    const [isFeatured, setIsFeatured] = useState(false);
+    const [dynamicDataFilter, setDynamicDataFilter] = useState<DynamicDataFilter | null>(null);
+    
+    // View state
+    const [viewMode, setViewMode] = useState<ViewMode>('grid');
+    
+    // Selection state
+    const [selectedIds, setSelectedIds] = useState<string[]>([]);
+    
+    // Modal state
+    const [quickEditTemplate, setQuickEditTemplate] = useState<TemplateListItem | null>(null);
+    const [deleteTemplateId, setDeleteTemplateId] = useState<string | null>(null);
+    const [isDeleting, setIsDeleting] = useState(false);
+    const [bulkDeleteMode, setBulkDeleteMode] = useState(false);
+    
+    // Stores
+    const { categories } = useCategoryStore();
+    const { tags } = useTagStore();
+    
+    // Load view preference from localStorage
+    useEffect(() => {
+        const savedViewMode = localStorage.getItem('template_view_mode');
+        if (savedViewMode === 'grid' || savedViewMode === 'list') {
+            setViewMode(savedViewMode);
+        }
+    }, []);
+    
+    // Fetch templates
+    const fetchTemplates = useCallback(async () => {
+        setIsLoading(true);
+        try {
+            // Fetch filtered templates
+            const data = await getTemplatesFiltered({
+                categoryId: selectedCategoryId || undefined,
+                tagIds: selectedTagIds.length > 0 ? selectedTagIds : undefined,
+                search: searchQuery || undefined,
+                isFeatured: isFeatured || undefined,
+            });
+            
+            // Fetch full templates in parallel (batched) for dynamic data extraction
+            const BATCH_SIZE = 10;
+            const templatesWithElements: TemplateWithElements[] = [];
+            const dataMap = new Map<string, DynamicDataSummary>();
+            
+            // Process in batches to avoid overwhelming the API
+            for (let i = 0; i < data.length; i += BATCH_SIZE) {
+                const batch = data.slice(i, i + BATCH_SIZE);
+                
+                // Fetch batch in parallel
+                const batchResults = await Promise.all(
+                    batch.map(async (template) => {
+                        try {
+                            const fullTemplate = await getTemplate(template.id);
+                            return { template, fullTemplate };
+                        } catch {
+                            return { template, fullTemplate: null };
+                        }
+                    })
+                );
+                
+                // Process batch results
+                for (const { template, fullTemplate } of batchResults) {
+                    if (fullTemplate) {
+                        templatesWithElements.push({
+                            ...template,
+                            elements: fullTemplate.elements,
+                        });
+                        
+                        const dynamicData = extractDynamicData(fullTemplate.elements || []);
+                        dataMap.set(template.id, dynamicData);
+                    } else {
+                        templatesWithElements.push(template);
+                        dataMap.set(template.id, { images: 0, texts: 0, total: 0 });
+                    }
+                }
+            }
+            
+            setTemplates(templatesWithElements);
+            setDynamicDataMap(dataMap);
+        } catch (error) {
+            console.error('Error fetching templates:', error);
+            toast.error('Failed to load templates');
+        } finally {
+            setIsLoading(false);
+        }
+    }, [selectedCategoryId, selectedTagIds, searchQuery, isFeatured]);
+    
+    // Initial fetch
+    useEffect(() => {
+        fetchTemplates();
+    }, [fetchTemplates]);
+    
+    // Apply dynamic data filter client-side
+    const filteredTemplates = useMemo(() => {
+        if (!dynamicDataFilter) return templates;
+        
+        return templates.filter(template => {
+            const dynamicData = dynamicDataMap.get(template.id);
+            if (!dynamicData) return false;
+            return matchesDynamicDataFilter(dynamicData, dynamicDataFilter);
+        });
+    }, [templates, dynamicDataMap, dynamicDataFilter]);
+    
+    // Count active filters
+    const activeFilterCount = useMemo(() => {
+        let count = 0;
+        if (selectedCategoryId) count++;
+        if (selectedTagIds.length > 0) count++;
+        if (isFeatured) count++;
+        if (dynamicDataFilter) count++;
+        return count;
+    }, [selectedCategoryId, selectedTagIds, isFeatured, dynamicDataFilter]);
+    
+    // Clear all filters
+    const clearAllFilters = useCallback(() => {
+        setSearchQuery('');
+        setSelectedCategoryId(null);
+        setSelectedTagIds([]);
+        setIsFeatured(false);
+        setDynamicDataFilter(null);
+    }, []);
+    
+    // Selection handlers
+    const handleSelect = useCallback((id: string, selected: boolean) => {
+        setSelectedIds(prev => 
+            selected 
+                ? [...prev, id]
+                : prev.filter(i => i !== id)
+        );
+    }, []);
+    
+    const handleSelectAll = useCallback(() => {
+        setSelectedIds(filteredTemplates.map(t => t.id));
+    }, [filteredTemplates]);
+    
+    const handleClearSelection = useCallback(() => {
+        setSelectedIds([]);
+    }, []);
+    
+    // Action handlers
+    const handleDuplicate = useCallback(async (id: string) => {
+        try {
+            const duplicated = await duplicateTemplate(id);
+            if (duplicated) {
+                toast.success('Template duplicated successfully');
+                fetchTemplates(); // Refresh
+            } else {
+                toast.error('Failed to duplicate template');
+            }
+        } catch (error) {
+            console.error('Error duplicating template:', error);
+            toast.error('An error occurred');
+        }
+    }, [fetchTemplates]);
+    
+    const handleDelete = useCallback(async () => {
+        if (bulkDeleteMode) {
+            // Bulk delete
+            setIsDeleting(true);
+            try {
+                let successCount = 0;
+                for (const id of selectedIds) {
+                    const success = await deleteTemplate(id);
+                    if (success) successCount++;
+                }
+                toast.success(`Deleted ${successCount} template${successCount !== 1 ? 's' : ''}`);
+                setSelectedIds([]);
+                fetchTemplates();
+            } catch (error) {
+                console.error('Error deleting templates:', error);
+                toast.error('An error occurred');
+            } finally {
+                setIsDeleting(false);
+                setDeleteTemplateId(null);
+                setBulkDeleteMode(false);
+            }
+        } else if (deleteTemplateId) {
+            // Single delete
+            setIsDeleting(true);
+            try {
+                const success = await deleteTemplate(deleteTemplateId);
+                if (success) {
+                    toast.success('Template deleted');
+                    fetchTemplates();
+                } else {
+                    toast.error('Failed to delete template');
+                }
+            } catch (error) {
+                console.error('Error deleting template:', error);
+                toast.error('An error occurred');
+            } finally {
+                setIsDeleting(false);
+                setDeleteTemplateId(null);
+            }
+        }
+    }, [deleteTemplateId, bulkDeleteMode, selectedIds, fetchTemplates]);
+    
+    const handleGenerate = useCallback((id: string) => {
+        router.push(`/dashboard/campaigns/new?templateId=${id}`);
+    }, [router]);
+    
+    // Bulk action handlers
+    const handleBulkGenerate = useCallback(() => {
+        if (selectedIds.length === 0) return;
+        router.push(`/dashboard/campaigns/new?templateIds=${selectedIds.join(',')}`);
+    }, [selectedIds, router]);
+    
+    const handleBulkDelete = useCallback(() => {
+        setBulkDeleteMode(true);
+        setDeleteTemplateId('bulk'); // Trigger modal
+    }, []);
+    
+    const handleBulkSetCategory = useCallback(async () => {
+        // TODO: Implement modal for category selection
+        toast.info('Category selection coming soon');
+    }, []);
+    
+    const handleBulkAddTags = useCallback(async () => {
+        // TODO: Implement modal for tag selection
+        toast.info('Tag selection coming soon');
+    }, []);
+    
+    const handleBulkToggleFeatured = useCallback(async () => {
+        try {
+            let updated = 0;
+            for (const id of selectedIds) {
+                const template = templates.find(t => t.id === id);
+                if (template) {
+                    const success = await updateTemplateMetadata(id, {
+                        isFeatured: !template.is_featured,
+                    });
+                    if (success) updated++;
+                }
+            }
+            toast.success(`Updated ${updated} template${updated !== 1 ? 's' : ''}`);
+            fetchTemplates();
+        } catch (error) {
+            console.error('Error updating templates:', error);
+            toast.error('An error occurred');
+        }
+    }, [selectedIds, templates, fetchTemplates]);
+    
+    return (
+        <div className="space-y-6">
+            {/* Bulk Action Toolbar */}
+            <BulkActionToolbar
+                selectedCount={selectedIds.length}
+                onBulkDelete={handleBulkDelete}
+                onBulkGenerate={handleBulkGenerate}
+                onBulkSetCategory={handleBulkSetCategory}
+                onBulkAddTags={handleBulkAddTags}
+                onBulkToggleFeatured={handleBulkToggleFeatured}
+                onClearSelection={handleClearSelection}
+            />
+            
+            {/* Toolbar */}
+            <TemplateToolbar
+                searchQuery={searchQuery}
+                onSearchChange={setSearchQuery}
+                showFilters={showFilters}
+                onToggleFilters={() => setShowFilters(!showFilters)}
+                activeFilterCount={activeFilterCount}
+                viewMode={viewMode}
+                onViewModeChange={setViewMode}
+                onRefresh={fetchTemplates}
+                isLoading={isLoading}
+                totalCount={filteredTemplates.length}
+                selectedCount={selectedIds.length}
+                onSelectAll={handleSelectAll}
+                onClearSelection={handleClearSelection}
+            />
+            
+            {/* Filter Panel */}
+            <FilterPanel
+                isOpen={showFilters}
+                selectedCategoryId={selectedCategoryId}
+                onCategoryChange={setSelectedCategoryId}
+                selectedTagIds={selectedTagIds}
+                onTagsChange={setSelectedTagIds}
+                isFeatured={isFeatured}
+                onFeaturedChange={setIsFeatured}
+                dynamicDataFilter={dynamicDataFilter}
+                onDynamicDataFilterChange={setDynamicDataFilter}
+                onClearAll={clearAllFilters}
+            />
+            
+            {/* Active Filter Pills */}
+            <ActiveFilterPills
+                selectedCategoryId={selectedCategoryId}
+                categories={categories}
+                onCategoryRemove={() => setSelectedCategoryId(null)}
+                selectedTagIds={selectedTagIds}
+                tags={tags}
+                onTagRemove={(tagId) => setSelectedTagIds(prev => prev.filter(id => id !== tagId))}
+                isFeatured={isFeatured}
+                onFeaturedRemove={() => setIsFeatured(false)}
+                dynamicDataFilter={dynamicDataFilter}
+                onDynamicDataRemove={() => setDynamicDataFilter(null)}
+                onClearAll={clearAllFilters}
+            />
+            
+            {/* Template Grid */}
+            <TemplateGrid
+                templates={filteredTemplates}
+                dynamicDataMap={dynamicDataMap}
+                selectedIds={selectedIds}
+                onSelect={handleSelect}
+                onQuickEdit={setQuickEditTemplate}
+                onDuplicate={handleDuplicate}
+                onDelete={(id) => setDeleteTemplateId(id)}
+                onGenerate={handleGenerate}
+                viewMode={viewMode}
+                isLoading={isLoading}
+                hasFilters={activeFilterCount > 0 || !!searchQuery}
+                onClearFilters={clearAllFilters}
+            />
+            
+            {/* Quick Edit Modal */}
+            <QuickEditModal
+                template={quickEditTemplate}
+                isOpen={!!quickEditTemplate}
+                onClose={() => setQuickEditTemplate(null)}
+                onSave={fetchTemplates}
+            />
+            
+            {/* Delete Confirm Modal */}
+            <DeleteConfirmModal
+                isOpen={!!deleteTemplateId}
+                title={bulkDeleteMode ? 'Delete Templates' : 'Delete Template'}
+                message={bulkDeleteMode 
+                    ? `Are you sure you want to delete ${selectedIds.length} template${selectedIds.length !== 1 ? 's' : ''}?`
+                    : 'Are you sure you want to delete this template?'
+                }
+                itemCount={bulkDeleteMode ? selectedIds.length : 1}
+                isDeleting={isDeleting}
+                onConfirm={handleDelete}
+                onCancel={() => {
+                    setDeleteTemplateId(null);
+                    setBulkDeleteMode(false);
+                }}
+            />
+        </div>
+    );
+}

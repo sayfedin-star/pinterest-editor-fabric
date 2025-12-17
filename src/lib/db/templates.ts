@@ -51,6 +51,7 @@ export interface TemplateFilters {
  * Metadata update for templates
  */
 export interface TemplateMetadata {
+    name?: string;
     categoryId?: string | null;
     tagIds?: string[];
     isFeatured?: boolean;
@@ -357,9 +358,15 @@ export async function duplicateTemplate(templateId: string, newName?: string): P
             return null;
         }
 
-        // Create a duplicate with a new name
+        // Generate unique name if not provided
+        let finalName = newName;
+        if (!finalName) {
+            finalName = await generateUniqueCopyName(original.name);
+        }
+
+        // Create a duplicate with the new name
         const duplicateData: SaveTemplateData = {
-            name: newName || `${original.name} (Copy)`,
+            name: finalName,
             description: original.description || undefined,
             canvas_size: original.canvas_size,
             background_color: original.background_color,
@@ -374,6 +381,39 @@ export async function duplicateTemplate(templateId: string, newName?: string): P
         console.error('Error duplicating template:', error);
         return null;
     }
+}
+
+/**
+ * Generate a unique copy name for a template
+ * Handles name conflicts by appending (Copy), (Copy 2), (Copy 3), etc.
+ * @param originalName - Original template name
+ * @returns Unique name for the copy
+ */
+async function generateUniqueCopyName(originalName: string): Promise<string> {
+    // Try "{Name} (Copy)" first
+    let copyName = `${originalName} (Copy)`;
+    let result = await checkTemplateNameExists(copyName);
+    
+    if (!result.exists) {
+        return copyName;
+    }
+    
+    // Try "{Name} (Copy 2)", "{Name} (Copy 3)", etc.
+    let copyNumber = 2;
+    const maxAttempts = 100; // Prevent infinite loop
+    
+    while (copyNumber <= maxAttempts) {
+        copyName = `${originalName} (Copy ${copyNumber})`;
+        result = await checkTemplateNameExists(copyName);
+        
+        if (!result.exists) {
+            return copyName;
+        }
+        copyNumber++;
+    }
+    
+    // Fallback: append timestamp
+    return `${originalName} (Copy ${Date.now()})`;
 }
 
 // ============================================
@@ -509,6 +549,9 @@ export async function updateTemplateMetadata(
             updated_at: new Date().toISOString(),
         };
 
+        if (metadata.name !== undefined) {
+            updateData.name = metadata.name;
+        }
         if (metadata.categoryId !== undefined) {
             updateData.category_id = metadata.categoryId;
         }

@@ -1,10 +1,12 @@
 'use client';
 
-import React, { useEffect, useRef } from 'react';
-import { useRouter } from 'next/navigation';
+import React, { useEffect, useRef, Suspense } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { X, Loader2 } from 'lucide-react';
 import { useAuth } from '@/lib/auth/AuthContext';
 import { CampaignWizardProvider, useCampaignWizard } from '@/lib/campaigns/CampaignWizardContext';
+import { getTemplate, TemplateListItem } from '@/lib/db/templates';
+import { toast } from 'sonner';
 import { 
     ConfigurationSidebar, 
     TemplateLibrarySection, 
@@ -14,8 +16,57 @@ import {
 
 function SinglePageContent() {
     const router = useRouter();
-    const { selectedTemplate } = useCampaignWizard();
+    const searchParams = useSearchParams();
+    const { selectedTemplate, setSelectedTemplate } = useCampaignWizard();
     const fieldMappingRef = useRef<HTMLDivElement>(null);
+    const hasLoadedFromUrlRef = useRef(false);
+
+    // Load template from URL parameter on mount
+    useEffect(() => {
+        const templateId = searchParams.get('templateId');
+        if (!templateId || hasLoadedFromUrlRef.current) return;
+        
+        hasLoadedFromUrlRef.current = true;
+        
+        const loadTemplateFromUrl = async () => {
+            try {
+                const template = await getTemplate(templateId);
+                if (template) {
+                    // Convert to TemplateListItem format
+                    const templateListItem: TemplateListItem = {
+                        id: template.id,
+                        name: template.name,
+                        thumbnail_url: template.thumbnail_url || null,
+                        is_featured: template.is_featured || false,
+                        category: null,
+                        category_id: template.category_id || null,
+                        category_data: null,
+                        tags: [],
+                        view_count: 0,
+                        created_at: template.created_at || template.updated_at,
+                        updated_at: template.updated_at,
+                    };
+                    setSelectedTemplate(templateListItem);
+                    toast.success(`Template "${template.name}" selected`);
+                    
+                    // Scroll to field mapping
+                    setTimeout(() => {
+                        fieldMappingRef.current?.scrollIntoView({ 
+                            behavior: 'smooth', 
+                            block: 'start' 
+                        });
+                    }, 300);
+                } else {
+                    toast.error('Template not found');
+                }
+            } catch (error) {
+                console.error('Error loading template from URL:', error);
+                toast.error('Failed to load template');
+            }
+        };
+        
+        loadTemplateFromUrl();
+    }, [searchParams, setSelectedTemplate]);
 
     // Scroll to field mapping when template is selected
     const scrollToFieldMapping = () => {
@@ -104,7 +155,13 @@ export default function NewCampaignPage() {
 
     return (
         <CampaignWizardProvider>
-            <SinglePageContent />
+            <Suspense fallback={
+                <div className="min-h-screen flex items-center justify-center bg-gray-50">
+                    <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
+                </div>
+            }>
+                <SinglePageContent />
+            </Suspense>
         </CampaignWizardProvider>
     );
 }

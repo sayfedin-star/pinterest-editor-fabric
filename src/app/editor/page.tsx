@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Suspense } from 'react';
 import { useRouter } from 'next/navigation';
 import { ErrorBoundary } from 'react-error-boundary';
 import { Header } from '@/components/layout/Header';
@@ -15,6 +15,7 @@ import { CanvasErrorBoundary } from '@/components/ui/ErrorBoundary';
 import { ToastContainer } from '@/components/ui/ToastContainer';
 import { ErrorFallback, PanelErrorFallback } from '@/components/errors';
 import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts';
+import { useTemplateFromUrl } from '@/hooks/useTemplateFromUrl';
 import { useAuth } from '@/lib/auth/AuthContext';
 import { Loader2 } from 'lucide-react';
 
@@ -29,13 +30,17 @@ function logError(error: Error, info: { componentStack?: string | null }) {
     // Future: Send to Sentry, LogRocket, etc.
 }
 
-export default function EditorPage() {
+// Inner component that uses useSearchParams (requires Suspense)
+function EditorContent() {
     const router = useRouter();
     const { currentUser, loading } = useAuth();
     const isMobile = useIsMobile();
 
     // Initialize keyboard shortcuts
     useKeyboardShortcuts();
+    
+    // Load template from URL parameter (e.g., ?template=abc123)
+    useTemplateFromUrl();
 
     // Keyboard shortcuts modal
     const { isOpen: isShortcutsOpen, close: closeShortcuts } = useKeyboardShortcutsModal();
@@ -119,3 +124,15 @@ export default function EditorPage() {
     );
 }
 
+// Main export with Suspense for useSearchParams
+export default function EditorPage() {
+    return (
+        <Suspense fallback={
+            <div className="h-screen flex items-center justify-center bg-gray-100">
+                <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
+            </div>
+        }>
+            <EditorContent />
+        </Suspense>
+    );
+}
