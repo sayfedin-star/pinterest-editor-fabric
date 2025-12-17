@@ -751,6 +751,42 @@ Comprehensive context document for AI agents building Workflow and Refactoring f
 2. Implement debounced canvas rendering (Phase 2.1)
 3. Add React.memo to PropertiesPanel sections (Phase 3.1)
 
+---
+
+### 2025-12-17 (Afternoon) ✅ Phase 1.1 Verification
+
+**✅ GitHub Issue #1: Toolbar Store Mismatch - ALREADY FIXED**
+
+Investigated `Toolbar.tsx` to verify Issue #1 from REFACTORING_PLAN.md:
+
+| Aspect                | Expected Issue             | Actual State                |
+| --------------------- | -------------------------- | --------------------------- |
+| **Store used**        | `useHistoryStore` (broken) | `useEditorStore` ✅         |
+| **canUndo/canRedo**   | Reading from wrong store   | Correct store (lines 45-46) |
+| **undo/redo actions** | Calling different store    | Same store (lines 47-48)    |
+
+**Evidence from `src/components/layout/Toolbar.tsx` (lines 44-48):**
+
+```typescript
+// History - use editorStore for both state AND actions (they must match!)
+const canUndo = useEditorStore((s) => s.canUndo());
+const canRedo = useEditorStore((s) => s.canRedo());
+const undo = useEditorStore((s) => s.undo);
+const redo = useEditorStore((s) => s.redo);
+```
+
+**Conclusion:** No `useHistoryStore` exists anywhere in the codebase. Issue was already resolved in a previous session.
+
+**📁 File Updated:**
+
+- `docs/REFACTORING_PLAN.md` - Section 1.1 marked as ✅ ALREADY FIXED
+
+**📋 Updated Next Steps:**
+
+1. ~~Execute Phase 1.1~~ (verified as fixed)
+2. Execute Phase 1.2: Fix Undo/Redo Store Sync (GitHub Issue #2)
+3. Implement debounced canvas rendering (Phase 2.1)
+
 ## 🎯 Success Criteria Checklist
 
 ### Code Quality

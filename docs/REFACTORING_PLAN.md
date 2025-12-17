@@ -122,92 +122,26 @@ canvasStore.ts (85 lines)
 
 ---
 
-### 1.1 Fix Toolbar Store Mismatch
+### 1.1 ~~Fix Toolbar Store Mismatch~~ ✅ ALREADY FIXED
 
-**Priority:** 🔴 CRITICAL  
-**Effort:** 30 minutes  
-**Risk:** LOW  
-**Reference:** GitHub Issue #1 (`docs/GITHUB_ISSUES.md`)
+**Priority:** N/A  
+**Status:** COMPLETE  
+**Reference:** GitHub Issue #1 (verified in current codebase 2025-12-17)
 
-#### Current State
+#### Verification
 
-**File:** `src/components/layout/Toolbar.tsx` (lines 57-62)
-
-```typescript
-// ❌ BROKEN: Reads from historyStore, calls editorStore
-const canUndo = useHistoryStore((s) => s.canUndo()); // historyStore
-const canRedo = useHistoryStore((s) => s.canRedo()); // historyStore
-const undo = useEditorStore((s) => s.undo); // editorStore (DIFFERENT!)
-const redo = useEditorStore((s) => s.redo); // editorStore (DIFFERENT!)
-```
-
-**Problem:**
-
-- `historyStore` doesn't exist (typo or renamed store)
-- Buttons show incorrect enabled/disabled state
-- Clicking undo/redo may fail silently
-
-#### Proposed Solution
+**File:** `src/components/layout/Toolbar.tsx` (lines 44-48)
 
 ```typescript
-// ✅ FIXED: Use same store for state and actions
+// ✅ FIXED: Uses same store for state and actions
+// Comment in code: "History - use editorStore for both state AND actions (they must match!)"
 const canUndo = useEditorStore((s) => s.canUndo());
 const canRedo = useEditorStore((s) => s.canRedo());
 const undo = useEditorStore((s) => s.undo);
 const redo = useEditorStore((s) => s.redo);
 ```
 
-#### Implementation Steps
-
-1. **Locate the file:**
-
-```bash
-# Verify current implementation
-grep -n "useHistoryStore" src/components/layout/Toolbar.tsx
-```
-
-2. **Study existing pattern:**
-
-   - File: `src/stores/editorStore.ts` lines 663-720
-   - Methods: `canUndo()`, `canRedo()`, `undo()`, `redo()`
-   - History stored in: `editorStore.history`, `editorStore.historyIndex`
-
-3. **Apply fix:**
-
-   - Replace `useHistoryStore` with `useEditorStore` (4 lines)
-   - Remove `useHistoryStore` import if unused elsewhere
-
-4. **Test:**
-
-```typescript
-// Manual test script:
-// 1. Open editor
-// 2. Add text element
-// 3. Undo button should enable
-// 4. Click undo → element disappears
-// 5. Redo button should enable
-// 6. Click redo → element reappears
-```
-
-#### Success Criteria
-
-- [ ] Undo button disabled when `historyIndex === 0`
-- [ ] Redo button disabled when at latest state
-- [ ] Clicking undo reverts last action
-- [ ] Clicking redo restores undone action
-- [ ] No console errors
-- [ ] Existing tests pass
-
-#### Rollback Plan
-
-```bash
-# If issue occurs:
-git revert <commit-hash>
-```
-
-Extremely low risk - simple substitution.
-
----
+**This matches the recommended fix exactly!** No `useHistoryStore` exists in the codebase.
 
 ### 1.2 Fix Undo/Redo Store Sync
 
