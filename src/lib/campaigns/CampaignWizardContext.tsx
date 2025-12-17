@@ -26,19 +26,28 @@ export interface CampaignWizardState {
     selectedTemplate: TemplateListItem | null;
     fieldMapping: FieldMapping;
     campaignName: string;
+    campaignDescription: string;
 }
 
 export interface CampaignWizardActions {
+    // Step navigation (kept for backward compatibility)
     setStep: (step: WizardStep) => void;
     nextStep: () => void;
     prevStep: () => void;
+    
+    // Data setters
     setCSVData: (data: CSVData | null) => void;
     setSelectedTemplate: (template: TemplateListItem | null) => void;
     setFieldMapping: (mapping: FieldMapping) => void;
     updateFieldMapping: (field: string, column: string) => void;
     setCampaignName: (name: string) => void;
+    setCampaignDescription: (description: string) => void;
     resetWizard: () => void;
+    
+    // Validation
     canProceed: () => boolean;
+    getValidationErrors: () => string[];
+    isFormValid: () => boolean;
 }
 
 type CampaignWizardContextType = CampaignWizardState & CampaignWizardActions;
@@ -52,6 +61,7 @@ const initialState: CampaignWizardState = {
     selectedTemplate: null,
     fieldMapping: {},
     campaignName: '',
+    campaignDescription: '',
 };
 
 // ============================================
@@ -65,6 +75,7 @@ const CampaignWizardContext = createContext<CampaignWizardContextType | undefine
 export function CampaignWizardProvider({ children }: { children: ReactNode }) {
     const [state, setState] = useState<CampaignWizardState>(initialState);
 
+    // Step navigation (kept for backward compatibility)
     const setStep = useCallback((step: WizardStep) => {
         setState((prev) => ({ ...prev, currentStep: step }));
     }, []);
@@ -87,11 +98,13 @@ export function CampaignWizardProvider({ children }: { children: ReactNode }) {
         });
     }, []);
 
+    // Data setters
     const setCSVData = useCallback((data: CSVData | null) => {
         setState((prev) => ({ ...prev, csvData: data }));
     }, []);
 
     const setSelectedTemplate = useCallback((template: TemplateListItem | null) => {
+        // Clear field mapping when template changes
         setState((prev) => ({ ...prev, selectedTemplate: template, fieldMapping: {} }));
     }, []);
 
@@ -110,10 +123,15 @@ export function CampaignWizardProvider({ children }: { children: ReactNode }) {
         setState((prev) => ({ ...prev, campaignName: name }));
     }, []);
 
+    const setCampaignDescription = useCallback((description: string) => {
+        setState((prev) => ({ ...prev, campaignDescription: description }));
+    }, []);
+
     const resetWizard = useCallback(() => {
         setState(initialState);
     }, []);
 
+    // Step-based validation (kept for backward compatibility)
     const canProceed = useCallback(() => {
         switch (state.currentStep) {
             case 1:
@@ -121,7 +139,6 @@ export function CampaignWizardProvider({ children }: { children: ReactNode }) {
             case 2:
                 return state.selectedTemplate !== null;
             case 3:
-                // All fields must be mapped (simplified - in real app check template fields)
                 return Object.keys(state.fieldMapping).length > 0;
             case 4:
                 return state.campaignName.trim().length > 0;
@@ -129,6 +146,33 @@ export function CampaignWizardProvider({ children }: { children: ReactNode }) {
                 return false;
         }
     }, [state]);
+
+    // Form-wide validation for single-page mode
+    const getValidationErrors = useCallback((): string[] => {
+        const errors: string[] = [];
+        
+        if (!state.campaignName.trim()) {
+            errors.push('Campaign name is required');
+        }
+        
+        if (!state.csvData) {
+            errors.push('CSV file is required');
+        }
+        
+        if (!state.selectedTemplate) {
+            errors.push('Please select a template');
+        }
+        
+        if (state.selectedTemplate && Object.keys(state.fieldMapping).length === 0) {
+            errors.push('Please map at least one field');
+        }
+        
+        return errors;
+    }, [state]);
+
+    const isFormValid = useCallback((): boolean => {
+        return getValidationErrors().length === 0;
+    }, [getValidationErrors]);
 
     const value: CampaignWizardContextType = {
         ...state,
@@ -140,8 +184,11 @@ export function CampaignWizardProvider({ children }: { children: ReactNode }) {
         setFieldMapping,
         updateFieldMapping,
         setCampaignName,
+        setCampaignDescription,
         resetWizard,
         canProceed,
+        getValidationErrors,
+        isFormValid,
     };
 
     return (
@@ -161,3 +208,4 @@ export function useCampaignWizard() {
     }
     return context;
 }
+
