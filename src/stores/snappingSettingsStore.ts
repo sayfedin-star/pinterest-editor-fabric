@@ -20,6 +20,7 @@ export interface SnappingSettings {
     gridSnapping: boolean;
     gridSize: number;
     smartGuides: boolean;
+    showGridOverlay: boolean;
 
     // Magnetic Strength
     magneticSnapping: boolean;
@@ -52,6 +53,7 @@ interface SnappingSettingsStore extends SnappingSettings {
     setGridSnapping: (value: boolean) => void;
     setGridSize: (value: number) => void;
     setSmartGuides: (value: boolean) => void;
+    setShowGridOverlay: (value: boolean) => void;
 
     setMagneticSnapping: (value: boolean) => void;
     setSnapSensitivity: (value: number) => void;
@@ -88,6 +90,7 @@ const defaultSettings: SnappingSettings = {
     gridSnapping: false,
     gridSize: 8,
     smartGuides: true,
+    showGridOverlay: false,
 
     // Magnetic Strength
     magneticSnapping: true,
@@ -186,6 +189,7 @@ export const useSnappingSettingsStore = create<SnappingSettingsStore>()(
             setGridSnapping: (value) => set({ gridSnapping: value }),
             setGridSize: (value) => set({ gridSize: value }),
             setSmartGuides: (value) => set({ smartGuides: value }),
+            setShowGridOverlay: (value) => set({ showGridOverlay: value }),
 
             // Magnetic Strength Actions
             setMagneticSnapping: (value) => set({ magneticSnapping: value }),

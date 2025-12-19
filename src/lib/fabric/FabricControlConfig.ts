@@ -29,6 +29,14 @@ export const CONTROL_SIZES = {
     padding: 0,               // Padding around selection
 };
 
+// P3-1 FIX: Rotation snapping configuration
+export const ROTATION_CONFIG = {
+    /** Snap angle in degrees (hold Shift to snap to multiples of this) */
+    snapAngle: 15,
+    /** Offset from object for rotation handle */
+    handleOffset: -30,
+};
+
 /**
  * Apply Canva-style controls to all Fabric objects
  * Call this once when canvas is initialized

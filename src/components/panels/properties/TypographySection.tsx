@@ -139,6 +139,31 @@ export const TypographySection = memo(function TypographySection({ element }: Ty
                 </div>
             </div>
 
+            {/* Hollow Text Effect */}
+            <div className="flex items-center justify-between py-2">
+                <div className="flex items-center gap-2">
+                    <span 
+                        className="text-lg font-bold"
+                        style={{ 
+                            color: element.hollowText ? 'transparent' : element.fill,
+                            WebkitTextStroke: element.hollowText ? `2px ${element.fill}` : 'none',
+                        }}
+                    >
+                        A
+                    </span>
+                    <label className="text-sm text-gray-700 cursor-pointer" htmlFor="hollow-text-toggle">
+                        Hollow Text
+                    </label>
+                </div>
+                <input
+                    type="checkbox"
+                    id="hollow-text-toggle"
+                    checked={element.hollowText || false}
+                    onChange={(e) => handleChange({ hollowText: e.target.checked })}
+                    className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                />
+            </div>
+
             {/* Text Background Box (Collapsible) */}
             <div className="border border-gray-200 rounded-lg overflow-hidden">
                 <button

@@ -87,8 +87,6 @@ export class AlignmentGuides {
 
     private onScaling(e: fabric.BasicTransformEvent<fabric.TPointerEvent> & { target: fabric.FabricObject }) {
         this.isScaling = true;
-        // Instead of clearing lines, we now show alignment guides during resize too
-        // Call the same alignment logic used for moving
         this.onObjectScaling(e);
     }
 
@@ -256,12 +254,9 @@ export class AlignmentGuides {
     private getMagneticPull(zone: MagneticZone, distance: number): number {
         if (!this.settings.magneticSnapping) return 0;
 
-        switch (zone) {
-            case 'lock': return distance; // Full snap
-            case 'near': return distance * 0.7; // Strong pull
-            case 'far': return distance * 0.3; // Gentle pull
-            default: return 0;
-        }
+        // Only snap in lock zone - no gradual pull to avoid vibration/jitter
+        if (zone === 'lock') return distance;
+        return 0;
     }
 
     // --- Visual Style by Zone ---
@@ -281,9 +276,6 @@ export class AlignmentGuides {
     }
 
     private drawLines() {
-        if (!this.settings.showGuideLines) return;
-        if (!this.verticalLines.length && !this.horizontalLines.length && !this.distanceBadges.length) return;
-
         this.ctx.save();
 
         if (this.viewportTransform) {
@@ -297,7 +289,24 @@ export class AlignmentGuides {
             );
         }
 
-        const scale = this.zoom;
+        const scale = this.zoom || 1;
+        const canvasWidth = this.canvas.width / scale;
+        const canvasHeight = this.canvas.height / scale;
+
+        // Draw grid overlay if enabled
+        if (this.settings.gridSnapping && this.settings.showGridOverlay) {
+            this.drawGrid(canvasWidth, canvasHeight, scale);
+        }
+
+        // Skip guide lines if disabled or nothing to draw
+        if (!this.settings.showGuideLines) {
+            this.ctx.restore();
+            return;
+        }
+        if (!this.verticalLines.length && !this.horizontalLines.length && !this.distanceBadges.length) {
+            this.ctx.restore();
+            return;
+        }
 
         // Draw vertical guide lines
         for (const v of this.verticalLines) {
@@ -366,6 +375,40 @@ export class AlignmentGuides {
         }
 
         this.ctx.restore();
+    }
+
+    /**
+     * Draw grid overlay on canvas
+     */
+    private drawGrid(canvasWidth: number, canvasHeight: number, scale: number) {
+        const gridSize = this.settings.gridSize;
+        if (gridSize <= 0) return;
+
+        this.ctx.beginPath();
+        this.ctx.strokeStyle = 'rgba(200, 200, 200, 0.3)';
+        this.ctx.lineWidth = 0.5 / scale;
+        this.ctx.setLineDash([2 / scale, 2 / scale]);
+
+        // Draw vertical grid lines
+        for (let x = gridSize; x < canvasWidth; x += gridSize) {
+            this.ctx.moveTo(x, 0);
+            this.ctx.lineTo(x, canvasHeight);
+        }
+
+        // Draw horizontal grid lines
+        for (let y = gridSize; y < canvasHeight; y += gridSize) {
+            this.ctx.moveTo(0, y);
+            this.ctx.lineTo(canvasWidth, y);
+        }
+        this.ctx.stroke();
+        this.ctx.setLineDash([]);
+    }
+
+    /**
+     * Get grid visibility state
+     */
+    public getShowGrid(): boolean {
+        return this.settings.showGridOverlay;
     }
 
     private drawBadge(x: number, y: number, text: string, scale: number, zone: MagneticZone) {
@@ -447,23 +490,8 @@ export class AlignmentGuides {
     }
 
     private onObjectMoving(e: fabric.BasicTransformEvent<fabric.TPointerEvent> & { target: fabric.FabricObject }) {
-        // DEBUG: Log entry
-        console.log('[AlignmentGuides] onObjectMoving triggered', {
-            enabled: this.enabled,
-            isScaling: this.isScaling,
-            magneticSnapping: this.settings.magneticSnapping,
-            showGuideLines: this.settings.showGuideLines,
-            snapThreshold: this.settings.magneticSnapThreshold,
-        });
-
-        if (!this.enabled || this.isScaling) {
-            console.log('[AlignmentGuides] Skipped: enabled=' + this.enabled + ', isScaling=' + this.isScaling);
-            return;
-        }
-        if (!this.settings.magneticSnapping && !this.settings.showGuideLines) {
-            console.log('[AlignmentGuides] Skipped: neither magneticSnapping nor showGuideLines enabled');
-            return;
-        }
+        if (!this.enabled || this.isScaling) return;
+        if (!this.settings.magneticSnapping && !this.settings.showGuideLines && !this.settings.gridSnapping) return;
 
         const activeObject = e.target;
         if (!activeObject) return;
@@ -491,13 +519,8 @@ export class AlignmentGuides {
 
         // Canvas Center Lines - Use logical canvas dimensions
         if (this.settings.canvasCenterLines) {
-            // FIXED: Calculate center from logical dimensions, not getCenterPoint()
-            // getCenterPoint() returns viewport center which changes with zoom
             const centerX = canvasWidth / 2;
             const centerY = canvasHeight / 2;
-
-            console.log(`[AlignmentGuides] Canvas Center Lines ENABLED. Center: (${centerX}, ${centerY}), Canvas: ${canvasWidth}x${canvasHeight}`);
-
             verticalCandidates.push({ value: centerX, type: 'center', isBoundary: false });
             horizontalCandidates.push({ value: centerY, type: 'center', isBoundary: false });
         }
@@ -596,25 +619,60 @@ export class AlignmentGuides {
             }
         }
 
-        // --- Apply Snaps (FIXED: Direct position override for lock zone) ---
+        // --- Grid Snapping ---
+        if (this.settings.gridSnapping) {
+            const gridSize = this.settings.gridSize;
+            const threshold = this.settings.magneticSnapThreshold;
+            const activeLeft = activeObject.left!;
+            const activeTop = activeObject.top!;
+            
+            const snappedLeft = Math.round(activeLeft / gridSize) * gridSize;
+            const snappedTop = Math.round(activeTop / gridSize) * gridSize;
+            
+            if (Math.abs(snappedLeft - activeLeft) <= threshold) {
+                activeObject.set({ left: snappedLeft });
+                // Add visual guide for grid snap
+                this.verticalLines.push({
+                    x: snappedLeft,
+                    y1: -5000,
+                    y2: 5000,
+                    zone: 'lock',
+                    isBoundary: false
+                });
+            }
+            if (Math.abs(snappedTop - activeTop) <= threshold) {
+                activeObject.set({ top: snappedTop });
+                this.horizontalLines.push({
+                    y: snappedTop,
+                    x1: -5000,
+                    x2: 5000,
+                    zone: 'lock',
+                    isBoundary: false
+                });
+            }
+        }
+
+        // --- Equal Spacing Detection ---
+        const equalSpacing = this.computeEqualSpacing(activeRect, canvasObjects, activeObject);
+        if (equalSpacing.snapX && !bestSnapX) {
+            activeObject.set({ left: equalSpacing.snapX.target });
+            activeObject.setCoords();
+        }
+        if (equalSpacing.snapY && !bestSnapY) {
+            activeObject.set({ top: equalSpacing.snapY.target });
+            activeObject.setCoords();
+        }
+
+        // --- Apply Object/Boundary Snaps ---
         let didSnapX = false;
         let didSnapY = false;
 
         if (bestSnapX && this.settings.magneticSnapping) {
             if (bestSnapX.zone === 'lock') {
-                // LOCK ZONE: Directly set position to snap target (0px offset)
-                // This is the magnetic "click into place" behavior
                 activeObject.set({ left: activeObject.left! + bestSnapX.diff });
                 didSnapX = true;
-                console.log(`[SNAP-X] LOCKED to ${bestSnapX.target}px (was ${bestSnapX.diff}px away)`);
-            } else {
-                // Other zones: Apply partial pull for visual feedback
-                const pull = this.getMagneticPull(bestSnapX.zone, Math.abs(bestSnapX.diff));
-                if (pull > 0) {
-                    activeObject.set({ left: activeObject.left! + (bestSnapX.diff > 0 ? pull : -pull) });
-                }
             }
-
+            // Show visual guide regardless of snap
             this.verticalLines.push({
                 x: bestSnapX.target,
                 y1: -5000,
@@ -626,18 +684,10 @@ export class AlignmentGuides {
 
         if (bestSnapY && this.settings.magneticSnapping) {
             if (bestSnapY.zone === 'lock') {
-                // LOCK ZONE: Directly set position to snap target (0px offset)
                 activeObject.set({ top: activeObject.top! + bestSnapY.diff });
                 didSnapY = true;
-                console.log(`[SNAP-Y] LOCKED to ${bestSnapY.target}px (was ${bestSnapY.diff}px away)`);
-            } else {
-                // Other zones: Apply partial pull
-                const pull = this.getMagneticPull(bestSnapY.zone, Math.abs(bestSnapY.diff));
-                if (pull > 0) {
-                    activeObject.set({ top: activeObject.top! + (bestSnapY.diff > 0 ? pull : -pull) });
-                }
             }
-
+            // Show visual guide regardless of snap
             this.horizontalLines.push({
                 y: bestSnapY.target,
                 x1: -5000,
@@ -657,7 +707,7 @@ export class AlignmentGuides {
         // --- Distance Measurements ---
         if (this.settings.distanceIndicators) {
             const updatedRect = activeObject.getBoundingRect();
-            this.computeDistanceBadges(updatedRect, canvasObjects, activeObject, canvasWidth, canvasHeight);
+            this.computeDistanceBadges(updatedRect, canvasObjects, activeObject);
         }
 
         // --- Prevent Off-Canvas ---
@@ -701,9 +751,7 @@ export class AlignmentGuides {
     private computeDistanceBadges(
         activeRect: { left: number; top: number; width: number; height: number },
         canvasObjects: fabric.FabricObject[],
-        activeObject: fabric.FabricObject,
-        _canvasWidth: number,
-        _canvasHeight: number
+        activeObject: fabric.FabricObject
     ) {
         const measurementThreshold = 500 / this.zoom;
 
@@ -774,6 +822,158 @@ export class AlignmentGuides {
                     });
                 }
             }
+        }
+    }
+
+    /**
+     * Compute equal spacing guides
+     * Detects when the active object's distance to neighbors matches
+     * the spacing between other object pairs
+     */
+    private computeEqualSpacing(
+        activeRect: { left: number; top: number; width: number; height: number },
+        canvasObjects: fabric.FabricObject[],
+        activeObject: fabric.FabricObject
+    ): { snapX?: { target: number; spacing: number }; snapY?: { target: number; spacing: number } } {
+        if (!this.settings.equalSpacing) return {};
+
+        const threshold = this.settings.magneticSnapThreshold;
+        const result: { snapX?: { target: number; spacing: number }; snapY?: { target: number; spacing: number } } = {};
+
+        // Get all object rects excluding the active object
+        const otherRects: { rect: { left: number; top: number; width: number; height: number }; obj: fabric.FabricObject }[] = [];
+        for (const obj of canvasObjects) {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            if (obj === activeObject || !obj.visible || (obj as any).name?.includes('guide')) continue;
+            otherRects.push({ rect: obj.getBoundingRect(), obj });
+        }
+
+        if (otherRects.length < 2) return {};
+
+        // Sort objects by position for spacing calculations
+        const sortedByX = [...otherRects].sort((a, b) => a.rect.left - b.rect.left);
+        const sortedByY = [...otherRects].sort((a, b) => a.rect.top - b.rect.top);
+
+        // Find horizontal spacings between adjacent objects
+        const horizontalSpacings: { spacing: number; left: number; right: number }[] = [];
+        for (let i = 0; i < sortedByX.length - 1; i++) {
+            const leftRect = sortedByX[i].rect;
+            const rightRect = sortedByX[i + 1].rect;
+            const spacing = rightRect.left - (leftRect.left + leftRect.width);
+            if (spacing > 0 && spacing < 500) {
+                horizontalSpacings.push({
+                    spacing,
+                    left: leftRect.left + leftRect.width,
+                    right: rightRect.left
+                });
+            }
+        }
+
+        // Find vertical spacings between adjacent objects
+        const verticalSpacings: { spacing: number; top: number; bottom: number }[] = [];
+        for (let i = 0; i < sortedByY.length - 1; i++) {
+            const topRect = sortedByY[i].rect;
+            const bottomRect = sortedByY[i + 1].rect;
+            const spacing = bottomRect.top - (topRect.top + topRect.height);
+            if (spacing > 0 && spacing < 500) {
+                verticalSpacings.push({
+                    spacing,
+                    top: topRect.top + topRect.height,
+                    bottom: bottomRect.top
+                });
+            }
+        }
+
+        // Check if active object's spacing to neighbors matches existing spacings
+        for (const other of otherRects) {
+            const otherRect = other.rect;
+
+            // Check horizontal (left/right) spacing
+            // Active object to the left of other
+            const spacingToRight = otherRect.left - (activeRect.left + activeRect.width);
+            // Active object to the right of other
+            const spacingToLeft = activeRect.left - (otherRect.left + otherRect.width);
+
+            for (const hs of horizontalSpacings) {
+                // Check if current spacing is close to an existing spacing
+                if (spacingToRight > 0 && Math.abs(spacingToRight - hs.spacing) <= threshold * 2) {
+                    const targetLeft = otherRect.left - hs.spacing - activeRect.width;
+                    const diff = Math.abs(activeRect.left - targetLeft);
+                    if (diff <= threshold) {
+                        result.snapX = { target: targetLeft, spacing: hs.spacing };
+                        // Add visual guide showing equal spacing
+                        this.addEqualSpacingGuide('x', hs.spacing, activeRect, otherRect);
+                    }
+                }
+                if (spacingToLeft > 0 && Math.abs(spacingToLeft - hs.spacing) <= threshold * 2) {
+                    const targetLeft = otherRect.left + otherRect.width + hs.spacing;
+                    const diff = Math.abs(activeRect.left - targetLeft);
+                    if (diff <= threshold) {
+                        result.snapX = { target: targetLeft, spacing: hs.spacing };
+                        this.addEqualSpacingGuide('x', hs.spacing, activeRect, otherRect);
+                    }
+                }
+            }
+
+            // Check vertical (top/bottom) spacing
+            const spacingBelow = otherRect.top - (activeRect.top + activeRect.height);
+            const spacingAbove = activeRect.top - (otherRect.top + otherRect.height);
+
+            for (const vs of verticalSpacings) {
+                if (spacingBelow > 0 && Math.abs(spacingBelow - vs.spacing) <= threshold * 2) {
+                    const targetTop = otherRect.top - vs.spacing - activeRect.height;
+                    const diff = Math.abs(activeRect.top - targetTop);
+                    if (diff <= threshold) {
+                        result.snapY = { target: targetTop, spacing: vs.spacing };
+                        this.addEqualSpacingGuide('y', vs.spacing, activeRect, otherRect);
+                    }
+                }
+                if (spacingAbove > 0 && Math.abs(spacingAbove - vs.spacing) <= threshold * 2) {
+                    const targetTop = otherRect.top + otherRect.height + vs.spacing;
+                    const diff = Math.abs(activeRect.top - targetTop);
+                    if (diff <= threshold) {
+                        result.snapY = { target: targetTop, spacing: vs.spacing };
+                        this.addEqualSpacingGuide('y', vs.spacing, activeRect, otherRect);
+                    }
+                }
+            }
+        }
+
+        return result;
+    }
+
+    /**
+     * Add visual guide lines for equal spacing
+     */
+    private addEqualSpacingGuide(
+        axis: 'x' | 'y',
+        spacing: number,
+        activeRect: { left: number; top: number; width: number; height: number },
+        otherRect: { left: number; top: number; width: number; height: number }
+    ) {
+        if (axis === 'x') {
+            // Show equal spacing indicator between objects
+            const midY = Math.max(activeRect.top, otherRect.top) + 
+                Math.min(activeRect.height, otherRect.height) / 2;
+            
+            this.distanceBadges.push({
+                x: (activeRect.left + activeRect.width + otherRect.left) / 2,
+                y: midY,
+                text: `=${Math.round(spacing)}`,
+                axis: 'x',
+                zone: 'lock'
+            });
+        } else {
+            const midX = Math.max(activeRect.left, otherRect.left) + 
+                Math.min(activeRect.width, otherRect.width) / 2;
+            
+            this.distanceBadges.push({
+                x: midX,
+                y: (activeRect.top + activeRect.height + otherRect.top) / 2,
+                text: `=${Math.round(spacing)}`,
+                axis: 'y',
+                zone: 'lock'
+            });
         }
     }
 }

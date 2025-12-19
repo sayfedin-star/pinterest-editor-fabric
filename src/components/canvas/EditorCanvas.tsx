@@ -56,7 +56,7 @@ export function EditorCanvasV2({ containerWidth, containerHeight }: EditorCanvas
 
     // Element toolbar state
     const [toolbarVisible, setToolbarVisible] = useState(false);
-    const [toolbarPosition, setToolbarPosition] = useState({ x: 0, y: 0, width: 0 });
+    const [toolbarPosition, setToolbarPosition] = useState({ x: 0, y: 0, width: 0, height: 0 });
     const [isResizing, setIsResizing] = useState(false);
     const [isDragging, setIsDragging] = useState(false); // Track drag state for ghost effect
 
@@ -170,12 +170,20 @@ export function EditorCanvasV2({ containerWidth, containerHeight }: EditorCanvas
         canvasManagerRef.current = manager;
         setIsCanvasReady(true);
 
+        // Register canvas with shared store for thumbnail generation
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { useFabricRefStore } = require('@/hooks/useStageRef');
+        const canvasRef = { current: (manager as any).canvas };
+        useFabricRefStore.getState().setFabricRef(canvasRef);
+
         console.log('[EditorCanvas.v2] CanvasManager initialized');
 
         return () => {
             console.log('[EditorCanvas.v2] Cleaning up CanvasManager');
             manager.destroy();
             canvasManagerRef.current = null;
+            // Clear canvas ref on cleanup
+            useFabricRefStore.getState().setFabricRef({ current: null });
         };
     }, []); // Only run once on mount
 
@@ -195,13 +203,49 @@ export function EditorCanvasV2({ containerWidth, containerHeight }: EditorCanvas
             canvasManagerRef.current.replaceAllElements(elements);
         } else if (change.type === 'properties' && change.modified) {
             console.log('[EditorCanvas.v2] Property changes:', change.modified.length);
+            
+            // Check if any modified elements need full replacement (fitMode or previewText changes)
+            let needsFullSync = false;
             for (const id of change.modified) {
-                const element = elements.find(el => el.id === id);
-                if (element) {
-                    canvasManagerRef.current.updateElement(id, element);
+                const prevEl = prevElementsRef.current.find(el => el.id === id);
+                const currEl = elements.find(el => el.id === id);
+                
+                // Image fitMode changes require full sync
+                if (prevEl?.type === 'image' && currEl?.type === 'image') {
+                    if (prevEl.fitMode !== currEl.fitMode) {
+                        needsFullSync = true;
+                        console.log('[EditorCanvas.v2] fitMode changed for image, needs full sync');
+                        break;
+                    }
+                }
+                
+                // Text changes that require full sync (structure changes)
+                if (prevEl?.type === 'text' && currEl?.type === 'text') {
+                    // previewText, isDynamic, and backgroundEnabled changes require full replacement
+                    // because they change the object structure (Group vs Textbox)
+                    if (prevEl.previewText !== currEl.previewText || 
+                        prevEl.isDynamic !== currEl.isDynamic ||
+                        prevEl.backgroundEnabled !== currEl.backgroundEnabled) {
+                        needsFullSync = true;
+                        console.log('[EditorCanvas.v2] text structure changed, needs full sync');
+                        break;
+                    }
+                }
+
+            }
+            
+            if (needsFullSync) {
+                canvasManagerRef.current.replaceAllElements(elements);
+            } else {
+                for (const id of change.modified) {
+                    const element = elements.find(el => el.id === id);
+                    if (element) {
+                        canvasManagerRef.current.updateElement(id, element);
+                    }
                 }
             }
         }
+
 
         prevElementsRef.current = elements;
 
@@ -384,7 +428,8 @@ export function EditorCanvasV2({ containerWidth, containerHeight }: EditorCanvas
             setToolbarPosition({
                 x: selectedElement.x,
                 y: selectedElement.y,
-                width: selectedElement.width
+                width: selectedElement.width,
+                height: selectedElement.height
             });
         }
     }, [selectedIds, selectedElement]);
@@ -404,7 +449,8 @@ export function EditorCanvasV2({ containerWidth, containerHeight }: EditorCanvas
             setToolbarPosition({
                 x: rect.left / currentZoom,
                 y: rect.top / currentZoom,
-                width: rect.width / currentZoom
+                width: rect.width / currentZoom,
+                height: rect.height / currentZoom
             });
         };
 
@@ -471,11 +517,35 @@ export function EditorCanvasV2({ containerWidth, containerHeight }: EditorCanvas
     //     totalHeight: canvasHeight + CANVAS_PADDING * 2
     // });
 
+    // Handle click on background to deselect
+    const handleBackgroundClick = useCallback((e: React.MouseEvent) => {
+        // Check if clicked on background wrapper (outer div) or target has the background marker
+        const target = e.target as HTMLElement;
+        const isBackgroundClick = 
+            e.target === e.currentTarget || // Direct click on outer wrapper
+            target.dataset?.canvasBackground === 'true'; // Click on marked background element
+        
+        if (isBackgroundClick) {
+            useSelectionStore.getState().clearSelection();
+            setToolbarVisible(false);
+            // Also clear selection in canvas manager if available
+            if (canvasManagerRef.current?.isInitialized()) {
+                const canvas = canvasManagerRef.current as any;
+                if (canvas.canvas) {
+                    canvas.canvas.discardActiveObject();
+                    canvas.canvas.requestRenderAll();
+                }
+            }
+        }
+    }, []);
+
     return (
         <div
+            onClick={handleBackgroundClick}
             onContextMenu={handleContextMenu}
             className="editor-canvas-scroll-container"
             data-testid="editor-canvas"
+            data-canvas-background="true"
             style={{
                 position: 'relative',
                 minWidth: '100%',
@@ -514,6 +584,7 @@ export function EditorCanvasV2({ containerWidth, containerHeight }: EditorCanvas
                         x={toolbarPosition.x}
                         y={toolbarPosition.y}
                         width={toolbarPosition.width}
+                        height={toolbarPosition.height}
                         visible={true}
                         zoom={zoom}
                         isLocked={!!selectedElement.locked}

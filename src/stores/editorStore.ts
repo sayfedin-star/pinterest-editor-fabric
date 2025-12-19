@@ -383,109 +383,118 @@ export const useEditorStore = create(
             },
 
             moveElementForward: (id) => {
-                set((state) => {
-                    const element = state.elements.find((el) => el.id === id);
-                    if (!element) return state;
+                const elements = useElementsStore.getState().elements;
+                const element = elements.find((el) => el.id === id);
+                if (!element) return;
 
-                    const maxZ = Math.max(...state.elements.map((el) => el.zIndex));
-                    if (element.zIndex >= maxZ) return state;
+                const maxZ = Math.max(...elements.map((el) => el.zIndex));
+                if (element.zIndex >= maxZ) return;
 
-                    const targetZ = element.zIndex + 1;
-                    const updatedElements = state.elements.map((el) => {
-                        if (el.id === id) return { ...el, zIndex: targetZ };
-                        if (el.zIndex === targetZ) return { ...el, zIndex: el.zIndex - 1 };
-                        return el;
-                    });
+                const targetZ = element.zIndex + 1;
+                const updatedElements = elements.map((el) => {
+                    if (el.id === id) return { ...el, zIndex: targetZ };
+                    if (el.zIndex === targetZ) return { ...el, zIndex: el.zIndex - 1 };
+                    return el;
+                }) as Element[];
 
-                    return { elements: updatedElements as Element[] };
-                });
+                // Sync to elementsStore (source of truth)
+                useElementsStore.getState().setElements(updatedElements);
+                // Sync back to editorStore for legacy consumers
+                set({ elements: updatedElements });
             },
 
             moveElementBackward: (id) => {
-                set((state) => {
-                    const element = state.elements.find((el) => el.id === id);
-                    if (!element || element.zIndex <= 0) return state;
+                const elements = useElementsStore.getState().elements;
+                const element = elements.find((el) => el.id === id);
+                if (!element || element.zIndex <= 0) return;
 
-                    const targetZ = element.zIndex - 1;
-                    const updatedElements = state.elements.map((el) => {
-                        if (el.id === id) return { ...el, zIndex: targetZ };
-                        if (el.zIndex === targetZ) return { ...el, zIndex: el.zIndex + 1 };
-                        return el;
-                    });
+                const targetZ = element.zIndex - 1;
+                const updatedElements = elements.map((el) => {
+                    if (el.id === id) return { ...el, zIndex: targetZ };
+                    if (el.zIndex === targetZ) return { ...el, zIndex: el.zIndex + 1 };
+                    return el;
+                }) as Element[];
 
-                    return { elements: updatedElements as Element[] };
-                });
+                // Sync to elementsStore (source of truth)
+                useElementsStore.getState().setElements(updatedElements);
+                // Sync back to editorStore for legacy consumers
+                set({ elements: updatedElements });
             },
 
             moveElementToFront: (id) => {
-                set((state) => {
-                    const element = state.elements.find((el) => el.id === id);
-                    if (!element) return state;
+                const elements = useElementsStore.getState().elements;
+                const element = elements.find((el) => el.id === id);
+                if (!element) return;
 
-                    const maxZ = Math.max(...state.elements.map((el) => el.zIndex));
+                const maxZ = Math.max(...elements.map((el) => el.zIndex));
+                const updatedElements = elements.map((el) =>
+                    el.id === id ? { ...el, zIndex: maxZ + 1 } : el
+                ) as Element[];
 
-                    // Use immutable update - create new element object
-                    return {
-                        elements: state.elements.map((el) =>
-                            el.id === id ? { ...el, zIndex: maxZ + 1 } : el
-                        )
-                    };
-                });
+                // Sync to elementsStore (source of truth)
+                useElementsStore.getState().setElements(updatedElements);
+                // Sync back to editorStore for legacy consumers
+                set({ elements: updatedElements });
             },
 
             moveElementToBack: (id) => {
-                set((state) => {
-                    const elements = state.elements.map((el) => ({
-                        ...el,
-                        zIndex: el.id === id ? -1 : el.zIndex + 1
-                    }));
+                const currentElements = useElementsStore.getState().elements;
+                const movedElements = currentElements.map((el) => ({
+                    ...el,
+                    zIndex: el.id === id ? -1 : el.zIndex + 1
+                }));
 
-                    // Normalize zIndex to start from 0
-                    const minZ = Math.min(...elements.map((el) => el.zIndex));
-                    const normalizedElements = elements.map((el) => ({
-                        ...el,
-                        zIndex: el.zIndex - minZ
-                    }));
+                // Normalize zIndex to start from 0
+                const minZ = Math.min(...movedElements.map((el) => el.zIndex));
+                const normalizedElements = movedElements.map((el) => ({
+                    ...el,
+                    zIndex: el.zIndex - minZ
+                })) as Element[];
 
-                    return { elements: normalizedElements };
-                });
+                // Sync to elementsStore (source of truth)
+                useElementsStore.getState().setElements(normalizedElements);
+                // Sync back to editorStore for legacy consumers
+                set({ elements: normalizedElements });
             },
 
             alignElement: (id, alignment) => {
-                set((state) => {
-                    const element = state.elements.find((el) => el.id === id);
-                    if (!element) return state;
+                const state = get();
+                const elements = useElementsStore.getState().elements;
+                const element = elements.find((el) => el.id === id);
+                if (!element) return;
 
-                    let update: Partial<Element> = {};
+                let update: Partial<Element> = {};
 
-                    const { width: cw, height: ch } = state.canvasSize;
-                    switch (alignment) {
-                        case 'left':
-                            update = { x: 0 };
-                            break;
-                        case 'center':
-                            update = { x: (cw - element.width) / 2 };
-                            break;
-                        case 'right':
-                            update = { x: cw - element.width };
-                            break;
-                        case 'top':
-                            update = { y: 0 };
-                            break;
-                        case 'middle':
-                            update = { y: (ch - element.height) / 2 };
-                            break;
-                        case 'bottom':
-                            update = { y: ch - element.height };
-                            break;
-                    }
+                const { width: cw, height: ch } = state.canvasSize;
+                switch (alignment) {
+                    case 'left':
+                        update = { x: 0 };
+                        break;
+                    case 'center':
+                        update = { x: (cw - element.width) / 2 };
+                        break;
+                    case 'right':
+                        update = { x: cw - element.width };
+                        break;
+                    case 'top':
+                        update = { y: 0 };
+                        break;
+                    case 'middle':
+                        update = { y: (ch - element.height) / 2 };
+                        break;
+                    case 'bottom':
+                        update = { y: ch - element.height };
+                        break;
+                }
 
-                    return {
-                        elements: state.elements.map((el) =>
-                            el.id === id ? { ...el, ...update } as Element : el
-                        )
-                    };
-                });
+                const updatedElements = elements.map((el) =>
+                    el.id === id ? { ...el, ...update } as Element : el
+                );
+
+                // Sync to elementsStore (source of truth)
+                useElementsStore.getState().setElements(updatedElements);
+                // Sync back to editorStore for legacy consumers
+                set({ elements: updatedElements });
             },
 
             // Align selected elements relative to selection bounding box

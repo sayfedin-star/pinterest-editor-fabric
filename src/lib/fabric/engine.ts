@@ -140,17 +140,21 @@ async function createFabricObject(
         // Step 2: Apply text transform AFTER field substitution (Phase 1)
         text = applyTextTransform(text, textEl.textTransform);
 
+        // Build textbox WITHOUT position - position is set conditionally
         const textbox = new fabric.Textbox(text, {
-            ...commonOptions,
-            width: textEl.width, fontSize: textEl.fontSize, fontFamily: textEl.fontFamily,
-            fill: textEl.fill, textAlign: textEl.align, lineHeight: textEl.lineHeight,
+            width: textEl.width,
+            fontSize: textEl.fontSize || 16,
+            fontFamily: textEl.fontFamily || 'Arial',
+            // Hollow text: transparent fill, otherwise use specified fill
+            fill: textEl.hollowText ? 'transparent' : (textEl.fill || '#000000'), 
+            textAlign: textEl.align || 'left',
+            lineHeight: textEl.lineHeight || 1.2,
             charSpacing: (textEl.letterSpacing || 0) * 10,
             // Phase 1: Use fontWeight property (100-900), fallback to fontStyle for backward compatibility
             fontWeight: textEl.fontWeight || (textEl.fontStyle?.includes('bold') ? 'bold' : 'normal'),
             fontStyle: textEl.fontStyle?.includes('italic') ? 'italic' : 'normal',
             underline: textEl.textDecoration === 'underline',
             linethrough: textEl.textDecoration === 'line-through',
-            splitByGrapheme: true,
         });
 
         if (textEl.shadowColor) {
@@ -159,8 +163,11 @@ async function createFabricObject(
                 offsetX: textEl.shadowOffsetX || 0, offsetY: textEl.shadowOffsetY || 0,
             });
         }
-        if (textEl.stroke) {
-            textbox.stroke = textEl.stroke; textbox.strokeWidth = textEl.strokeWidth || 1;
+        // Apply stroke/outline (required for hollow text, optional otherwise)
+        if (textEl.stroke || textEl.hollowText) {
+            // For hollow text, use the fill color as stroke if no stroke specified
+            textbox.stroke = textEl.stroke || textEl.fill || '#000000';
+            textbox.strokeWidth = textEl.strokeWidth || (textEl.hollowText ? 2 : 1);
         }
 
         // Phase 2: Apply character-level styles for rich text
@@ -172,18 +179,27 @@ async function createFabricObject(
         // Phase 1: Text background with padding support
         if (textEl.backgroundEnabled) {
             const padding = textEl.backgroundPadding || 0;
+            
+            // For Group: textbox uses relative position (0,0)
+            // The Group provides the absolute position via commonOptions
+            textbox.set('left', 0);
+            textbox.set('top', 0);
+            
             const bgRect = new fabric.Rect({
                 width: textEl.width + padding * 2,
                 height: textEl.height + padding * 2,
                 left: -padding,
                 top: -padding,
                 fill: textEl.backgroundColor,
-                rx: textEl.backgroundCornerRadius, ry: textEl.backgroundCornerRadius,
+                rx: textEl.backgroundCornerRadius || 0, ry: textEl.backgroundCornerRadius || 0,
             });
             fabricObject = new fabric.Group([bgRect, textbox], { ...commonOptions });
         } else {
+            // Standalone textbox: apply position from commonOptions
+            textbox.set(commonOptions);
             fabricObject = textbox;
         }
+
     }
     else if (el.type === 'image') {
         const imageEl = el as ImageElement;
@@ -199,89 +215,113 @@ async function createFabricObject(
         
         if (src) {
             console.log(`[Render] Loading image from: ${src.substring(0, 80)}...`);
-            const img = await loadImageToCanvas(src, commonOptions);
+            const img = await loadImageToCanvas(src, {});
             console.log(`[Render] Image loaded successfully: ${imageEl.name} (${img.width}x${img.height})`);
             
-            // 🔧 CRITICAL FIX: fabric.FabricImage.fromURL ignores left/top options
-            // We must explicitly set position AFTER image loads
-            img.set({
-                left: imageEl.x,
-                top: imageEl.y,
-                angle: imageEl.rotation || 0,
-                opacity: imageEl.opacity ?? 1,
-            });
+            // Get natural image dimensions
+            const naturalWidth = img.width || 100;
+            const naturalHeight = img.height || 100;
             
-            console.log(`[Render] 🔧 Applied position to image: left=${imageEl.x}, top=${imageEl.y}`);
+            // Get target dimensions from template
+            const targetWidth = imageEl.width || naturalWidth;
+            const targetHeight = imageEl.height || naturalHeight;
             
-            // Apply fit mode to respect aspect ratio
-            if (img.width && img.height && imageEl.width && imageEl.height) {
-                const fitMode = imageEl.fitMode || 'fill'; // Default to fill
+            // Determine fit mode:
+            // - For dynamic images: default to 'contain' to show full image without cropping
+            // - For static images: use configured fitMode or 'fill'
+            const fitMode = imageEl.fitMode || (imageEl.isDynamic ? 'contain' : 'fill');
+            
+            console.log(`[Render] Fit mode: ${fitMode}, target: ${targetWidth}x${targetHeight}, natural: ${naturalWidth}x${naturalHeight}`);
+            
+            if (fitMode === 'fill') {
+                // FILL MODE: Stretch image to exactly match template dimensions
+                // No clipPath needed - just scale independently
+                const scaleX = targetWidth / naturalWidth;
+                const scaleY = targetHeight / naturalHeight;
                 
-                const targetWidth = imageEl.width;
-                const targetHeight = imageEl.height;
+                img.set({
+                    left: imageEl.x,
+                    top: imageEl.y,
+                    scaleX: scaleX,
+                    scaleY: scaleY,
+                    angle: imageEl.rotation || 0,
+                    opacity: imageEl.opacity ?? 1,
+                    originX: 'left',
+                    originY: 'top',
+                });
                 
-                let scale: number;
+                console.log(`[Render] Applied FILL: scaleX=${scaleX.toFixed(3)}, scaleY=${scaleY.toFixed(3)}, pos=(${imageEl.x}, ${imageEl.y})`);
                 
-                if (fitMode === 'cover') {
-                    // Scale to cover the entire frame (may crop)
-                    // Use the larger scale to ensure full coverage
-                    scale = Math.max(targetWidth / img.width, targetHeight / img.height);
-                    img.scaleX = scale;
-                    img.scaleY = scale;
-                    
-                    // Create clip path to crop to frame bounds
-                    img.clipPath = new fabric.Rect({
-                        width: targetWidth / scale,
-                        height: targetHeight / scale,
-                        originX: 'center',
-                        originY: 'center',
-                        left: 0,
-                        top: 0,
-                    });
-                    
-                    console.log(`[Render] Applied 'cover' fit: scale=${scale.toFixed(2)}, will crop to ${targetWidth}x${targetHeight}`);
-                    
-                } else if (fitMode === 'contain') {
-                    // Scale to fit within frame (may have empty space)
-                    // Use the smaller scale to fit entirely
-                    scale = Math.min(targetWidth / img.width, targetHeight / img.height);
-                    img.scaleX = scale;
-                    img.scaleY = scale;
-                    
-                    console.log(`[Render] Applied 'contain' fit: scale=${scale.toFixed(2)}, maintains aspect ratio`);
-                    
-                } else {
-                    // 'fill' - stretch to exact dimensions (old behavior)
-                    img.scaleX = targetWidth / img.width;
-                    img.scaleY = targetHeight / img.height;
-                    
-                    console.log(`[Render] Applied 'fill' fit: scaleX=${img.scaleX.toFixed(2)}, scaleY=${img.scaleY.toFixed(2)}`);
-                }
+            } else if (fitMode === 'cover') {
+                // COVER MODE: Scale uniformly to cover, then clip overflow
+                // Use larger scale to ensure full coverage
+                const scale = Math.max(targetWidth / naturalWidth, targetHeight / naturalHeight);
                 
-                // Apply corner radius if specified (after fit mode scaling)
-                if (imageEl.cornerRadius && fitMode !== 'cover') {
-                    img.clipPath = new fabric.Rect({
-                        width: img.width,
-                        height: img.height,
-                        rx: imageEl.cornerRadius / (img.scaleX || 1),
-                        ry: imageEl.cornerRadius / (img.scaleY || 1),
-                        originX: 'center',
-                        originY: 'center',
-                    });
-                } else if (imageEl.cornerRadius && fitMode === 'cover') {
-                    // For cover mode, apply corner radius to the clip path
-                    const scale = Math.max(targetWidth / img.width, targetHeight / img.height);
-                    img.clipPath = new fabric.Rect({
-                        width: targetWidth / scale,
-                        height: targetHeight / scale,
-                        rx: imageEl.cornerRadius / scale,
-                        ry: imageEl.cornerRadius / scale,
-                        originX: 'center',
-                        originY: 'center',
-                        left: 0,
-                        top: 0,
-                    });
-                }
+                // Calculate how much of the scaled image fits in target frame
+                const scaledWidth = naturalWidth * scale;
+                const scaledHeight = naturalHeight * scale;
+                
+                // Center the excess on both axes
+                const offsetX = (scaledWidth - targetWidth) / 2;
+                const offsetY = (scaledHeight - targetHeight) / 2;
+                
+                img.set({
+                    // Adjust position to account for clipping offset
+                    left: imageEl.x - offsetX,
+                    top: imageEl.y - offsetY,
+                    scaleX: scale,
+                    scaleY: scale,
+                    angle: imageEl.rotation || 0,
+                    opacity: imageEl.opacity ?? 1,
+                    originX: 'left',
+                    originY: 'top',
+                    // Use absolutePositioned clipPath so it clips in canvas coordinates
+                    clipPath: new fabric.Rect({
+                        left: imageEl.x,
+                        top: imageEl.y,
+                        width: targetWidth,
+                        height: targetHeight,
+                        absolutePositioned: true,  // CRITICAL: Clip in canvas space, not image space
+                    }),
+                });
+                
+                console.log(`[Render] Applied COVER: scale=${scale.toFixed(3)}, offset=(${offsetX.toFixed(1)}, ${offsetY.toFixed(1)})`);
+                
+            } else if (fitMode === 'contain') {
+                // CONTAIN MODE: Scale uniformly to fit within frame
+                const scale = Math.min(targetWidth / naturalWidth, targetHeight / naturalHeight);
+                
+                // Center the image within the target frame
+                const scaledWidth = naturalWidth * scale;
+                const scaledHeight = naturalHeight * scale;
+                const offsetX = (targetWidth - scaledWidth) / 2;
+                const offsetY = (targetHeight - scaledHeight) / 2;
+                
+                img.set({
+                    left: imageEl.x + offsetX,
+                    top: imageEl.y + offsetY,
+                    scaleX: scale,
+                    scaleY: scale,
+                    angle: imageEl.rotation || 0,
+                    opacity: imageEl.opacity ?? 1,
+                    originX: 'left',
+                    originY: 'top',
+                });
+                
+                console.log(`[Render] Applied CONTAIN: scale=${scale.toFixed(3)}, centered with offset (${offsetX.toFixed(1)}, ${offsetY.toFixed(1)})`);
+            }
+            
+            // Apply corner radius if specified (only for fill/contain, cover uses clipPath already)
+            if (imageEl.cornerRadius && fitMode !== 'cover') {
+                img.clipPath = new fabric.Rect({
+                    left: imageEl.x,
+                    top: imageEl.y,
+                    width: targetWidth,
+                    height: targetHeight,
+                    rx: imageEl.cornerRadius,
+                    ry: imageEl.cornerRadius,
+                    absolutePositioned: true,
+                });
             }
             
             fabricObject = img;

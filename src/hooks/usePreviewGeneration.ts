@@ -195,6 +195,13 @@ export function usePreviewGeneration({
         // Pre-warm canvas pool
         canvasPoolRef.current.prewarm(2, canvasSize.width, canvasSize.height);
         
+        // Preload fonts used in template before rendering
+        const fontLoader = await import('@/lib/fonts/fontLoader');
+        const fontResult = await fontLoader.preloadTemplateFonts(templateElements);
+        if (fontResult.failed.length > 0) {
+            console.warn('[PreviewGen] Some fonts failed to load:', fontResult.failed);
+        }
+        
         try {
             // Generate each preview pin
             for (let i = 0; i < count; i++) {

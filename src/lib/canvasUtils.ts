@@ -11,9 +11,9 @@ export interface ThumbnailOptions {
 }
 
 const DEFAULT_THUMBNAIL_OPTIONS: ThumbnailOptions = {
-    maxWidth: 300,
-    maxHeight: 450,
-    quality: 0.9,
+    maxWidth: 400,  // Increased for better quality
+    maxHeight: 600, // Better aspect ratio for Pinterest pins
+    quality: 0.95,  // Higher quality
     format: 'png',
 };
 
@@ -35,24 +35,54 @@ export function generateThumbnail(
 
         const opts = { ...DEFAULT_THUMBNAIL_OPTIONS, ...options };
 
+        // Force render all objects to ensure thumbnail includes everything
+        canvas.renderAll();
+
         // Get original dimensions
         const originalWidth = canvas.getWidth();
         const originalHeight = canvas.getHeight();
 
-        // Calculate scale to fit thumbnail dimensions
-        const scaleX = (opts.maxWidth || 300) / originalWidth;
-        const scaleY = (opts.maxHeight || 450) / originalHeight;
-        const scale = Math.min(scaleX, scaleY);
+        if (originalWidth === 0 || originalHeight === 0) {
+            console.warn('generateThumbnail: Canvas has zero dimensions');
+            return null;
+        }
 
-        // Calculate multiplier for quality (cap at 1 for thumbnails to save space)
-        const multiplier = Math.min(scale * 2, 1);
+        // Calculate scale to fit thumbnail dimensions while maintaining aspect ratio
+        const scaleX = (opts.maxWidth || 400) / originalWidth;
+        const scaleY = (opts.maxHeight || 600) / originalHeight;
+        const scale = Math.min(scaleX, scaleY, 1); // Never scale up, only down
 
-        // Generate data URL using Fabric's toDataURL
+        // Use higher multiplier for crisp thumbnails (min 1.5 for retina)
+        const multiplier = Math.max(scale * 2, 1);
+
+        // Generate data URL using Fabric's toDataURL with white background
         const format = opts.format === 'jpeg' ? 'jpeg' : 'png';
+        
+        // Ensure canvas has a background color for thumbnail
+        const originalBg = canvas.backgroundColor;
+        if (!originalBg || originalBg === 'transparent') {
+            canvas.backgroundColor = '#ffffff';
+            canvas.renderAll();
+        }
+        
         const dataUrl = canvas.toDataURL({
             format,
             quality: opts.quality,
             multiplier,
+            enableRetinaScaling: true,
+        });
+
+        // Restore original background
+        if (!originalBg || originalBg === 'transparent') {
+            canvas.backgroundColor = originalBg;
+            canvas.renderAll();
+        }
+
+        console.log('[canvasUtils] Thumbnail generated:', {
+            originalSize: `${originalWidth}x${originalHeight}`,
+            multiplier,
+            format,
+            dataUrlLength: dataUrl?.length || 0
         });
 
         return dataUrl;

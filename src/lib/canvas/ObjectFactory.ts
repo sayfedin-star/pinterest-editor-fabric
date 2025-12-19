@@ -21,6 +21,8 @@ interface ExtendedFabricObject extends fabric.FabricObject {
     _element?: Element;
     /** Original untransformed text for text elements (Phase 1) */
     _originalText?: string;
+    /** Flag for image placeholder groups */
+    _isImagePlaceholder?: boolean;
 }
 
 /**
@@ -54,37 +56,97 @@ export function createFabricObject(element: Element): fabric.FabricObject | null
         case 'text': {
             const textEl = element as TextElement;
             
-            // Apply text transform if specified
+            // For dynamic text elements, use previewText for canvas display if available
+            // This shows custom preview while keeping the {{placeholder}} stored
             let displayText = textEl.text || '';
+            if (textEl.isDynamic && textEl.previewText) {
+                displayText = textEl.previewText;
+            }
+            
+            // Apply text transform if specified
             if (textEl.textTransform) {
                 displayText = applyTextTransform(displayText, textEl.textTransform);
             }
             
-            // Build textbox options
-            const textboxOptions: Record<string, unknown> = {
-                left: element.x,
-                top: element.y,
+            // Build textbox with ALL styling properties (matching engine.ts)
+            // NOTE: Position is set conditionally - for Group, use relative (0,0)
+            // For standalone textbox, use absolute element.x/y
+            const textbox = new fabric.Textbox(displayText, {
                 width: element.width,
                 fontSize: textEl.fontSize || 16,
                 fontFamily: textEl.fontFamily || 'Arial',
-                fontWeight: textEl.fontWeight || 400,
-                fill: textEl.fill || '#000000',
+                // Font weight: use fontWeight property (100-900), fallback to fontStyle for backward compatibility
+                fontWeight: textEl.fontWeight || (textEl.fontStyle?.includes('bold') ? 'bold' : 'normal'),
+                fontStyle: textEl.fontStyle?.includes('italic') ? 'italic' : 'normal',
+                // Hollow text: transparent fill, otherwise use specified fill
+                fill: textEl.hollowText ? 'transparent' : (textEl.fill || '#000000'),
                 textAlign: textEl.align || 'left',
-            };
+                lineHeight: textEl.lineHeight || 1.2,
+                charSpacing: (textEl.letterSpacing || 0) * 10, // Fabric.js uses 1/1000 of em
+                underline: textEl.textDecoration === 'underline',
+                linethrough: textEl.textDecoration === 'line-through',
+            });
+            
+            // Apply shadow effect
+            if (textEl.shadowColor && (textEl.shadowBlur || textEl.shadowOffsetX || textEl.shadowOffsetY)) {
+                textbox.shadow = new fabric.Shadow({
+                    color: textEl.shadowColor,
+                    blur: textEl.shadowBlur || 0,
+                    offsetX: textEl.shadowOffsetX || 0,
+                    offsetY: textEl.shadowOffsetY || 0,
+                });
+            }
+            
+            // Apply stroke/outline (required for hollow text, optional otherwise)
+            if (textEl.stroke || textEl.hollowText) {
+                // For hollow text, use the fill color as stroke if no stroke specified
+                textbox.stroke = textEl.stroke || textEl.fill || '#000000';
+                textbox.strokeWidth = textEl.strokeWidth || (textEl.hollowText ? 2 : 1);
+            }
             
             // Apply character styles if rich text mode is enabled
             if (textEl.richTextEnabled && textEl.characterStyles && textEl.characterStyles.length > 0) {
-                textboxOptions.styles = convertToFabricStyles(
-                    displayText,
-                    textEl.characterStyles
-                );
+                textbox.set('styles', convertToFabricStyles(displayText, textEl.characterStyles));
             }
             
-            obj = new fabric.Textbox(displayText, textboxOptions);
-            // Store original text for text transform switching (Phase 1)
+            // Text background with padding support (matching engine.ts)
+            if (textEl.backgroundEnabled && textEl.backgroundColor) {
+                const padding = textEl.backgroundPadding || 0;
+                
+                // For Group: textbox uses relative position (0,0), bgRect with negative padding
+                // The Group provides the absolute position
+                textbox.set('left', 0);
+                textbox.set('top', 0);
+                
+                const bgRect = new fabric.Rect({
+                    width: textEl.width + padding * 2,
+                    height: textEl.height + padding * 2,
+                    left: -padding,
+                    top: -padding,
+                    fill: textEl.backgroundColor,
+                    rx: textEl.backgroundCornerRadius || 0,
+                    ry: textEl.backgroundCornerRadius || 0,
+                });
+                obj = new fabric.Group([bgRect, textbox], {
+                    left: element.x,
+                    top: element.y,
+                    angle: element.rotation || 0,
+                    opacity: element.opacity ?? 1,
+                });
+            } else {
+                // Standalone textbox: set absolute position
+                textbox.set('left', element.x);
+                textbox.set('top', element.y);
+                textbox.set('angle', element.rotation || 0);
+                textbox.set('opacity', element.opacity ?? 1);
+                obj = textbox;
+            }
+            
+            // Store original text for text transform switching
             (obj as ExtendedFabricObject)._originalText = textEl.text || '';
             break;
         }
+
 
         case 'image': {
             const imageEl = element as ImageElement;
@@ -107,17 +169,23 @@ export function createFabricObject(element: Element): fabric.FabricObject | null
                 (obj as ExtendedFabricObject)._imageUrl = imageUrl;
                 (obj as ExtendedFabricObject)._element = element;
             } else {
-                // No URL - show empty placeholder
+                // No URL - create simple placeholder rect
+                // Note: Using simple Rect instead of Group to avoid position sync issues
                 obj = new fabric.Rect({
                     left: element.x,
                     top: element.y,
                     width: element.width,
                     height: element.height,
-                    fill: '#f3f4f6',
-                    stroke: '#d1d5db',
+                    fill: '#f8fafc', // Very light slate
+                    stroke: '#94a3b8', // Slate-400
                     strokeWidth: 2,
-                    strokeDashArray: [8, 4],
+                    strokeDashArray: [10, 5],
+                    rx: 8,
+                    ry: 8,
                 });
+                
+                // Mark this as an image placeholder for proper detection
+                (obj as ExtendedFabricObject)._isImagePlaceholder = true;
             }
             break;
         }
@@ -193,6 +261,8 @@ export function createFabricObject(element: Element): fabric.FabricObject | null
             opacity: element.opacity ?? 1,
             selectable: !element.locked,
             evented: !element.locked,
+            // P2-1 FIX: Enable object caching for better render performance
+            objectCaching: true,
         });
     }
 
@@ -295,27 +365,153 @@ export function syncElementToFabric(
     }
 
     // Text-specific property handling
+    // Handle both direct Textbox and Group (when backgroundEnabled creates a group)
+    let targetTextbox: fabric.Textbox | null = null;
+    
     if (fabricObject instanceof fabric.Textbox) {
+        targetTextbox = fabricObject;
+    } else if (fabricObject instanceof fabric.Group) {
+        // Text with background is a Group containing [bgRect, textbox]
+        const objects = fabricObject.getObjects();
+        const textboxInGroup = objects.find(o => o instanceof fabric.Textbox) as fabric.Textbox | undefined;
+        if (textboxInGroup) {
+            targetTextbox = textboxInGroup;
+        }
+    }
+    
+    if (targetTextbox) {
         const textUpdates = updates as Partial<TextElement>;
+        const storedEl = extFabric._element as TextElement | undefined;
+
+        // P1-3 FIX: Build updates object for single batched set() call
+        // Reduces ~15 individual set() calls to 1, saving ~30% on dirty checks
+        const batchedUpdates: Record<string, unknown> = {};
         
-        // Font weight
+        // Font properties
         if (textUpdates.fontWeight !== undefined) {
-            fabricObject.set('fontWeight', textUpdates.fontWeight);
+            batchedUpdates.fontWeight = textUpdates.fontWeight;
+        }
+        if (textUpdates.fontFamily !== undefined) {
+            batchedUpdates.fontFamily = textUpdates.fontFamily;
+        }
+        if (textUpdates.fontSize !== undefined) {
+            batchedUpdates.fontSize = textUpdates.fontSize;
+        }
+        if (textUpdates.fontStyle !== undefined) {
+            const isItalic = textUpdates.fontStyle?.includes('italic');
+            batchedUpdates.fontStyle = isItalic ? 'italic' : 'normal';
         }
         
-        // Font family
-        if (textUpdates.fontFamily !== undefined) {
-            fabricObject.set('fontFamily', textUpdates.fontFamily);
+        // Text color
+        if (textUpdates.fill !== undefined) {
+            batchedUpdates.fill = textUpdates.fill;
+        }
+        
+        // Alignment
+        if (textUpdates.align !== undefined) {
+            batchedUpdates.textAlign = textUpdates.align;
+        }
+        
+        // Spacing
+        if (textUpdates.lineHeight !== undefined) {
+            batchedUpdates.lineHeight = textUpdates.lineHeight;
+        }
+        if (textUpdates.letterSpacing !== undefined) {
+            // Fabric.js uses charSpacing (in 1/1000 of em units)
+            batchedUpdates.charSpacing = textUpdates.letterSpacing * 10;
+        }
+        
+        // Text decoration
+        if (textUpdates.textDecoration !== undefined) {
+            batchedUpdates.underline = textUpdates.textDecoration === 'underline';
+            batchedUpdates.linethrough = textUpdates.textDecoration === 'line-through';
+        }
+        
+        // Shadow effect (special case - needs Shadow object)
+        if (textUpdates.shadowColor !== undefined || 
+            textUpdates.shadowBlur !== undefined || 
+            textUpdates.shadowOffsetX !== undefined || 
+            textUpdates.shadowOffsetY !== undefined) {
+            const shadowColor = textUpdates.shadowColor ?? storedEl?.shadowColor ?? 'rgba(0,0,0,0.5)';
+            const shadowBlur = textUpdates.shadowBlur ?? storedEl?.shadowBlur ?? 5;
+            const shadowOffsetX = textUpdates.shadowOffsetX ?? storedEl?.shadowOffsetX ?? 2;
+            const shadowOffsetY = textUpdates.shadowOffsetY ?? storedEl?.shadowOffsetY ?? 2;
+            
+            if (shadowBlur > 0 || shadowOffsetX !== 0 || shadowOffsetY !== 0) {
+                batchedUpdates.shadow = new fabric.Shadow({
+                    color: shadowColor,
+                    blur: shadowBlur,
+                    offsetX: shadowOffsetX,
+                    offsetY: shadowOffsetY,
+                });
+            } else {
+                batchedUpdates.shadow = null;
+            }
+        }
+        
+        // Stroke/outline effect
+        if (textUpdates.stroke !== undefined) {
+            batchedUpdates.stroke = textUpdates.stroke;
+        }
+        if (textUpdates.strokeWidth !== undefined) {
+            batchedUpdates.strokeWidth = textUpdates.strokeWidth;
+        }
+        
+        // Hollow text effect - transparent fill with stroke
+        if (textUpdates.hollowText !== undefined) {
+            const isHollow = textUpdates.hollowText ?? storedEl?.hollowText ?? false;
+            const fillColor = textUpdates.fill ?? storedEl?.fill ?? '#000000';
+            
+            if (isHollow) {
+                batchedUpdates.fill = 'transparent';
+                const strokeColor = storedEl?.stroke || fillColor;
+                batchedUpdates.stroke = strokeColor;
+                batchedUpdates.strokeWidth = storedEl?.strokeWidth || 2;
+            } else {
+                batchedUpdates.fill = fillColor;
+                if (!storedEl?.stroke) {
+                    batchedUpdates.stroke = undefined;
+                    batchedUpdates.strokeWidth = 0;
+                }
+            }
+        }
+        
+        // Background box
+        if (textUpdates.backgroundEnabled !== undefined || textUpdates.backgroundColor !== undefined) {
+            const bgEnabled = textUpdates.backgroundEnabled ?? storedEl?.backgroundEnabled ?? false;
+            const bgColor = textUpdates.backgroundColor ?? storedEl?.backgroundColor ?? 'transparent';
+            
+            if (bgEnabled && bgColor) {
+                batchedUpdates.textBackgroundColor = bgColor;
+            } else {
+                batchedUpdates.textBackgroundColor = '';
+            }
+        }
+        
+        // Apply all batched updates in a single set() call
+        if (Object.keys(batchedUpdates).length > 0) {
+            targetTextbox.set(batchedUpdates);
         }
         
         // Text transform - requires re-applying to display text
-        // Use stored original text to properly switch transforms (Phase 1 fix)
-        if (textUpdates.textTransform !== undefined || textUpdates.text !== undefined) {
-            // Get original untransformed text: prefer update, then stored original, then fabric text
-            const originalText = textUpdates.text ?? extFabric._originalText ?? fabricObject.text ?? '';
-            const transform = textUpdates.textTransform ?? 'none';
+        // Use stored original text to properly switch transforms
+        // For dynamic elements, use previewText for display if available
+        if (textUpdates.textTransform !== undefined || textUpdates.text !== undefined || textUpdates.previewText !== undefined || textUpdates.isDynamic !== undefined) {
+            const storedEl = extFabric._element as TextElement | undefined;
+            const isDynamic = textUpdates.isDynamic ?? storedEl?.isDynamic ?? false;
+            const previewText = textUpdates.previewText ?? storedEl?.previewText;
+            
+            // Determine what text to display
+            let originalText: string;
+            if (isDynamic && previewText) {
+                originalText = previewText;
+            } else {
+                originalText = textUpdates.text ?? extFabric._originalText ?? targetTextbox.text ?? '';
+            }
+            
+            const transform = textUpdates.textTransform ?? (storedEl?.textTransform) ?? 'none';
             const displayText = applyTextTransform(originalText, transform);
-            fabricObject.set('text', displayText);
+            targetTextbox.set('text', displayText);
             
             // Update stored original if text changed
             if (textUpdates.text !== undefined) {
@@ -326,15 +522,16 @@ export function syncElementToFabric(
         // Character styles - apply per-character formatting
         if (textUpdates.characterStyles !== undefined || textUpdates.richTextEnabled !== undefined) {
             if (textUpdates.richTextEnabled && textUpdates.characterStyles && textUpdates.characterStyles.length > 0) {
-                const currentText = fabricObject.text || '';
+                const currentText = targetTextbox.text || '';
                 const styles = convertToFabricStyles(currentText, textUpdates.characterStyles);
-                fabricObject.set('styles', styles);
+                targetTextbox.set('styles', styles);
             } else {
                 // Clear styles when rich text is disabled
-                fabricObject.set('styles', {});
+                targetTextbox.set('styles', {});
             }
         }
     }
+
 
     // Only recalculate coordinates if position/size/rotation changed
     // This is the expensive operation we want to minimize

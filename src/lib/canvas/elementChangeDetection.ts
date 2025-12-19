@@ -99,13 +99,41 @@ function hasPropertiesChanged(prev: Element, curr: Element): boolean {
 
     // Check type-specific properties
     if (prev.type === 'text' && curr.type === 'text') {
+        // Core text properties
         if (prev.text !== curr.text ||
             prev.fontSize !== curr.fontSize ||
             prev.fontFamily !== curr.fontFamily ||
-            prev.fill !== curr.fill) {
+            prev.fontWeight !== curr.fontWeight ||
+            prev.fontStyle !== curr.fontStyle ||
+            prev.fill !== curr.fill ||
+            prev.align !== curr.align ||
+            prev.lineHeight !== curr.lineHeight ||
+            prev.letterSpacing !== curr.letterSpacing ||
+            prev.textDecoration !== curr.textDecoration ||
+            prev.textTransform !== curr.textTransform ||
+            // Dynamic/preview
+            prev.previewText !== curr.previewText ||
+            prev.isDynamic !== curr.isDynamic ||
+            // Background
+            prev.backgroundEnabled !== curr.backgroundEnabled ||
+            prev.backgroundColor !== curr.backgroundColor ||
+            prev.backgroundCornerRadius !== curr.backgroundCornerRadius ||
+            prev.backgroundPadding !== curr.backgroundPadding ||
+            // Effects
+            prev.shadowColor !== curr.shadowColor ||
+            prev.shadowBlur !== curr.shadowBlur ||
+            prev.shadowOffsetX !== curr.shadowOffsetX ||
+            prev.shadowOffsetY !== curr.shadowOffsetY ||
+            prev.stroke !== curr.stroke ||
+            prev.strokeWidth !== curr.strokeWidth ||
+            prev.hollowText !== curr.hollowText ||
+            // Rich text
+            prev.richTextEnabled !== curr.richTextEnabled ||
+            prev.autoFitText !== curr.autoFitText) {
             return true;
         }
     }
+
 
     if (prev.type === 'shape' && curr.type === 'shape') {
         if (prev.fill !== curr.fill ||
@@ -115,7 +143,14 @@ function hasPropertiesChanged(prev: Element, curr: Element): boolean {
         }
     }
 
-    // Note: ImageElement doesn't have mutable source - images are immutable once created
+    // Image-specific properties
+    if (prev.type === 'image' && curr.type === 'image') {
+        if (prev.fitMode !== curr.fitMode ||
+            prev.cornerRadius !== curr.cornerRadius ||
+            prev.imageUrl !== curr.imageUrl) {
+            return true;
+        }
+    }
 
     return false;
 }

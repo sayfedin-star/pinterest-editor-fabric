@@ -115,6 +115,8 @@ export interface TextElement extends BaseElement {
     shadowOpacity?: number;
     stroke?: string;
     strokeWidth?: number;
+    /** Hollow text - transparent fill with stroke outline */
+    hollowText?: boolean;
     // Background box
     backgroundEnabled?: boolean;
     backgroundColor?: string;
@@ -128,6 +130,9 @@ export interface TextElement extends BaseElement {
     // Dynamic field - now supports any field name (text1, text2, etc.)
     isDynamic: boolean;
     dynamicField?: string;
+    /** Preview text - shown on canvas for visualization while keeping placeholder stored */
+    previewText?: string;
+
     
     // Typography enhancements (Phase 1)
     /** Text case transformation */

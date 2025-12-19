@@ -216,14 +216,22 @@ export function SnappingControlsPanel() {
                     disabled={!store.magneticSnapping}
                 />
                 {store.gridSnapping && (
-                    <Slider
-                        label="Grid Size"
-                        value={store.gridSize}
-                        min={4}
-                        max={32}
-                        onChange={store.setGridSize}
-                        disabled={!store.magneticSnapping || !store.gridSnapping}
-                    />
+                    <>
+                        <Slider
+                            label="Grid Size"
+                            value={store.gridSize}
+                            min={4}
+                            max={32}
+                            onChange={store.setGridSize}
+                            disabled={!store.magneticSnapping || !store.gridSnapping}
+                        />
+                        <Toggle
+                            label="Show Grid Overlay"
+                            checked={store.showGridOverlay}
+                            onChange={store.setShowGridOverlay}
+                            indent
+                        />
+                    </>
                 )}
                 <Toggle
                     label="Smart Guides"

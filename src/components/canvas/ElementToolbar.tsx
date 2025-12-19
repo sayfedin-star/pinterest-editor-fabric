@@ -10,6 +10,7 @@ interface ElementToolbarProps {
     x: number;
     y: number;
     width: number;
+    height: number;
     visible: boolean;
     zoom: number;
     isLocked: boolean;
@@ -36,6 +37,7 @@ export function ElementToolbar({
     x,
     y,
     width,
+    height,
     visible,
     zoom,
     isLocked,
@@ -74,9 +76,21 @@ export function ElementToolbar({
 
     if (!visible) return null;
 
-    // Position toolbar centered above element
-    // y position: minimum 100px from top OR above element with gap, whichever is higher
-    const yPos = Math.max(100, (y - 52) * zoom);
+    // Position toolbar BELOW element for better UX (doesn't obscure element)
+    const toolbarHeight = 44; // Approximate toolbar height
+    const gap = 24; // Gap between toolbar and element (doubled from 12)
+    
+    // Use actual element height (passed from EditorCanvas)
+    const elementHeight = height || 100; // Fallback if height not provided
+    
+    // Position BELOW the element
+    const calculatedTop = (y + elementHeight) * zoom + gap;
+    
+    // If toolbar would go off the bottom (past 85% of viewport), position above instead
+    const shouldPositionAbove = calculatedTop > window.innerHeight * 0.85;
+    const yPos = shouldPositionAbove 
+        ? Math.max(10, (y * zoom) - toolbarHeight - gap)
+        : calculatedTop;
     
     const style: React.CSSProperties = {
         position: 'absolute',
@@ -86,6 +100,7 @@ export function ElementToolbar({
         zIndex: 1001,
         animation: 'fadeIn 150ms ease-out',
     };
+
 
     const buttonClass = `
         w-8 h-8 rounded-md flex items-center justify-center

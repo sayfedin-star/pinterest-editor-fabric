@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react';
 import { CanvasManager } from '@/lib/canvas/CanvasManager';
 import { useEditorStore } from '@/stores/editorStore';
 import { useSelectionStore } from '@/stores/selectionStore';
+import { useElementsStore } from '@/stores/elementsStore';
 import { Element } from '@/types/editor';
 
 // Set to true for debugging sync issues
@@ -17,9 +18,9 @@ const DEBUG_SYNC = false;
  */
 export function useSynchronizationBridge(canvasManager: CanvasManager | null) {
     const isUpdatingRef = useRef({ fromCanvas: false });
-    const updateElement = useEditorStore((state) => state.updateElement);
+    const prevZIndexesRef = useRef<Map<string, number>>(new Map());
 
-    // Direction 1: Canvas  React State
+    // Direction 1: Canvas -> React State (position/size changes from dragging)
     useEffect(() => {
         if (!canvasManager) return;
         if (DEBUG_SYNC) console.log('[SynchronizationBridge] Setting up Canvas → React sync');
@@ -33,8 +34,10 @@ export function useSynchronizationBridge(canvasManager: CanvasManager | null) {
             isUpdatingRef.current.fromCanvas = true;
 
             try {
+                // CRITICAL FIX: Update elementsStore (source of truth), not editorStore
+                const elementsStoreUpdate = useElementsStore.getState().updateElement;
                 for (const element of updatedElements) {
-                    updateElement(element.id, {
+                    elementsStoreUpdate(element.id, {
                         x: element.x,
                         y: element.y,
                         width: element.width,
@@ -51,7 +54,7 @@ export function useSynchronizationBridge(canvasManager: CanvasManager | null) {
 
         canvasManager.onElementsChanged(handleElementsChanged);
         return () => { };
-    }, [canvasManager, updateElement]);
+    }, [canvasManager]);
 
     // Direction 2: Selection Sync
     useEffect(() => {
@@ -94,9 +97,51 @@ export function useSynchronizationBridge(canvasManager: CanvasManager | null) {
                     magneticSnapping: state.snappingEnabled,
                     showGuideLines: state.snappingEnabled,
                     magneticSnapThreshold: 5,
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
                 } as any);
             }
         });
+
+        return () => unsubscribe();
+    }, [canvasManager]);
+
+    // Direction 5: zIndex/Layer Order Sync
+    useEffect(() => {
+        if (!canvasManager) return;
+
+        const unsubscribe = useElementsStore.subscribe((state) => {
+            if (isUpdatingRef.current.fromCanvas) return;
+
+            const elements = state.elements;
+            let hasZIndexChange = false;
+
+            // Check if any zIndex values changed
+            for (const element of elements) {
+                const prevZIndex = prevZIndexesRef.current.get(element.id);
+                if (prevZIndex !== undefined && prevZIndex !== element.zIndex) {
+                    hasZIndexChange = true;
+                    break;
+                }
+            }
+
+            // Also check if element count changed (might affect z-order)
+            if (prevZIndexesRef.current.size !== elements.length) {
+                hasZIndexChange = true;
+            }
+
+            // Update previous zIndex map
+            prevZIndexesRef.current = new Map(elements.map(el => [el.id, el.zIndex]));
+
+            // Trigger reorder if zIndex changed
+            if (hasZIndexChange) {
+                if (DEBUG_SYNC) console.log('[SynchronizationBridge] zIndex changed, reordering');
+                canvasManager.reorderElementsByZIndex(elements);
+            }
+        });
+
+        // Initialize previous zIndex map
+        const initialElements = useElementsStore.getState().elements;
+        prevZIndexesRef.current = new Map(initialElements.map(el => [el.id, el.zIndex]));
 
         return () => unsubscribe();
     }, [canvasManager]);
