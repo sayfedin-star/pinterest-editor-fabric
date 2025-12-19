@@ -5,7 +5,7 @@ import dynamic from 'next/dynamic';
 import { useEditorStore } from '@/stores/editorStore';
 import { Hand } from 'lucide-react';
 import { EmptyCanvasState } from '@/components/canvas/EmptyCanvasState';
-import { ZoomControls } from '@/components/canvas/ZoomControls';
+import { FloatingToolbar } from '@/components/canvas/FloatingToolbar';
 
 // EditorCanvas is now the v2 architecture (renamed from EditorCanvas.v2)
 const EditorCanvas = dynamic(
@@ -20,28 +20,6 @@ function CanvasLoading() {
         </div>
     );
 }
-
-// Ruler marker component
-const RulerMarkers = ({ direction, size }: { direction: 'horizontal' | 'vertical'; size: number }) => {
-    const markers = [];
-    const step = 100;
-
-    for (let i = 0; i <= Math.max(size, 2000); i += step) {
-        markers.push(
-            <div
-                key={i}
-                className="absolute text-[9px] text-gray-500 font-mono"
-                style={direction === 'horizontal'
-                    ? { left: i, top: 2 }
-                    : { top: i, left: 2, writingMode: 'vertical-rl', transform: 'rotate(180deg)' }
-                }
-            >
-                {i}
-            </div>
-        );
-    }
-    return <>{markers}</>;
-};
 
 export function CanvasArea() {
     const containerRef = useRef<HTMLDivElement>(null);
@@ -119,7 +97,7 @@ export function CanvasArea() {
 
     // Calculate auto-fit zoom
     const calculateFitZoom = useCallback((viewportWidth: number, viewportHeight: number) => {
-        const padding = 200; // 100px on each side
+        const padding = 100; // Reduced padding since no rulers
         const availableWidth = viewportWidth - padding;
         const availableHeight = viewportHeight - padding;
 
@@ -127,8 +105,6 @@ export function CanvasArea() {
         const scaleY = availableHeight / canvasSize.height;
         const fitZoom = Math.min(scaleX, scaleY);
 
-        // Never zoom in beyond 100%, can zoom out as needed
-        // Minimum 10%, maximum 100%
         return Math.min(1, Math.max(0.1, fitZoom));
     }, [canvasSize.width, canvasSize.height]);
 
@@ -145,9 +121,8 @@ export function CanvasArea() {
 
         const rect = updateDimensions();
 
-        // Auto-fit zoom on first mount
         if (rect && !hasAutoFitted.current) {
-            const fitZoom = calculateFitZoom(rect.width - 24, rect.height - 48);
+            const fitZoom = calculateFitZoom(rect.width, rect.height);
             setZoom(fitZoom);
             hasAutoFitted.current = true;
         }
@@ -159,7 +134,6 @@ export function CanvasArea() {
     // Center the canvas on initial load
     useEffect(() => {
         if (scrollRef.current && dimensions.width > 0 && dimensions.height > 0) {
-            // Small delay to ensure canvas is rendered
             const timer = setTimeout(() => {
                 if (scrollRef.current) {
                     const CANVAS_PADDING = 100;
@@ -167,12 +141,10 @@ export function CanvasArea() {
                     const canvasHeight = canvasSize.height * zoom;
                     const totalWidth = canvasWidth + CANVAS_PADDING * 2;
                     const totalHeight = canvasHeight + CANVAS_PADDING * 2;
-                    const viewportWidth = dimensions.width - 24; // minus rulers
-                    const viewportHeight = dimensions.height - 48; // minus rulers
-
-                    // Center horizontally and vertically
-                    const scrollLeft = Math.max(0, (totalWidth - viewportWidth) / 2);
-                    const scrollTop = Math.max(0, (totalHeight - viewportHeight) / 2);
+                    
+                    // Center explicitly
+                    const scrollLeft = Math.max(0, (totalWidth - dimensions.width) / 2);
+                    const scrollTop = Math.max(0, (totalHeight - dimensions.height) / 2);
 
                     scrollRef.current.scrollLeft = scrollLeft;
                     scrollRef.current.scrollTop = scrollTop;
@@ -184,11 +156,6 @@ export function CanvasArea() {
         return undefined;
     }, [dimensions, canvasSize, zoom]);
 
-    // Note: We intentionally don't auto-recalculate zoom when canvas size changes
-    // This preserves the user's manual zoom setting. The user can use "Fit to Screen" 
-    // button if they want to reset zoom after changing canvas size.
-
-    // Cursor style based on pan mode
     const getCursorStyle = () => {
         if (isPanning) return 'grabbing';
         if (isPanMode) return 'grab';
@@ -197,58 +164,25 @@ export function CanvasArea() {
 
     return (
         <div className="flex-1 bg-gray-100 relative overflow-hidden flex flex-col" ref={containerRef}>
-            {/* Current Dimensions Display + Pan Mode Hint */}
-            <div className="h-6 bg-gray-100 border-b border-gray-300 flex items-center justify-center z-10 gap-4">
-                <span className="text-xs text-gray-500 font-mono">
-                    {canvasSize.width} × {canvasSize.height} px ({Math.round(zoom * 100)}%)
-                </span>
-                {zoom > 0.5 && (
-                    <span className="text-xs text-gray-400 flex items-center gap-1">
-                        <Hand className="w-3 h-3" /> Hold Space to pan
-                    </span>
-                )}
-                {isPanMode && (
-                    <span className="text-xs bg-blue-100 text-blue-600 px-2 py-0.5 rounded font-medium">
-                        Pan Mode
-                    </span>
-                )}
-            </div>
+            
+            {/* Top Toolbar (Floating Pill) */}
+            <FloatingToolbar />
 
             {/* Main Canvas Container */}
             <div className="flex-1 relative">
-                {/* Empty Canvas State - show when no elements */}
+                {/* Empty Canvas State */}
                 {elements.length === 0 && (
                     <EmptyCanvasState
                         onAddText={addText}
                         onAddImage={addImage}
                     />
                 )}
-                {/* Horizontal Ruler */}
-                <div className="absolute top-0 left-6 right-0 h-6 bg-gray-50 border-b border-gray-300 z-10 overflow-hidden">
-                    <div className="relative h-full" style={{ width: 2000 }}>
-                        <RulerMarkers direction="horizontal" size={2000} />
-                    </div>
-                </div>
-
-                {/* Vertical Ruler */}
-                <div className="absolute top-6 left-0 w-6 bottom-0 bg-gray-50 border-r border-gray-300 z-10 overflow-hidden">
-                    <div className="relative w-full" style={{ height: 2000 }}>
-                        <RulerMarkers direction="vertical" size={2000} />
-                    </div>
-                </div>
-
-                {/* Ruler Corner */}
-                <div className="absolute top-0 left-0 w-6 h-6 bg-gray-200 border-b border-r border-gray-300 z-20" />
-
-                {/* Canvas Scroll Container with Pan Mode */}
+                
+                {/* Canvas Scroll Container */}
                 <div
                     ref={scrollRef}
                     className="absolute inset-0 overflow-auto bg-gray-200"
-                    style={{
-                        cursor: getCursorStyle(),
-                        top: '24px',
-                        left: '24px'
-                    }}
+                    style={{ cursor: getCursorStyle() }}
                     onMouseDown={handlePanMouseDown}
                     onMouseMove={handlePanMouseMove}
                     onMouseUp={handlePanMouseUp}
@@ -256,15 +190,20 @@ export function CanvasArea() {
                 >
                     {dimensions.width > 0 && (
                         <EditorCanvas
-                            containerWidth={dimensions.width - 24}
-                            containerHeight={dimensions.height - 48}
+                            containerWidth={dimensions.width}
+                            containerHeight={dimensions.height}
                         />
                     )}
                 </div>
-
-                {/* Floating Zoom Controls - Bottom Right */}
-                <ZoomControls />
             </div>
+            
+            {/* Pan Mode Indicator (Bottom Right) */}
+            {isPanMode && (
+                 <div className="absolute bottom-4 right-4 z-50 bg-blue-600 text-white px-3 py-1.5 rounded-full shadow-lg text-xs font-medium flex items-center gap-2 animate-in fade-in slide-in-from-bottom-2">
+                    <Hand className="w-3 h-3" />
+                    Pan Mode Active
+                </div>
+            )}
         </div>
     );
 }

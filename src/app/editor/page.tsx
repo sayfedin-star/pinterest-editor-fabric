@@ -4,6 +4,7 @@ import { useState, useEffect, Suspense } from 'react';
 import { useRouter } from 'next/navigation';
 import { ErrorBoundary } from 'react-error-boundary';
 import { Header } from '@/components/layout/Header';
+import { CollapsibleSidebar } from '@/components/layout/CollapsibleSidebar';
 import { LeftSidebar } from '@/components/layout/LeftSidebar';
 import { Toolbar } from '@/components/layout/Toolbar';
 import { CanvasArea } from '@/components/layout/CanvasArea';
@@ -79,39 +80,45 @@ function EditorContent() {
 
     return (
         <ErrorBoundary FallbackComponent={ErrorFallback} onError={logError}>
-            <div className="h-screen flex flex-col overflow-hidden bg-gray-100">
-                {/* Header */}
-                <Header />
+            <div className="h-screen flex overflow-hidden bg-gray-100">
+                {/* Main Dashboard Sidebar */}
+                <CollapsibleSidebar />
 
-                {/* Main Content */}
-                <div className="flex-1 flex overflow-hidden">
-                    {/* Left Sidebar - Wrapped for isolation */}
-                    <ErrorBoundary FallbackComponent={PanelErrorFallback} onError={logError}>
-                        <div className="relative">
-                            <LeftSidebar />
-                            {/* Font Library Panel - slides over left sidebar */}
-                            <FontLibraryPanel
-                                isOpen={isFontLibraryOpen}
-                                onClose={() => setFontLibraryOpen(false)}
-                            />
+                {/* Main Content Area */}
+                <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
+                    {/* Header */}
+                    <Header />
+
+                    {/* Editor Workspace */}
+                    <div className="flex-1 flex overflow-hidden">
+                        {/* Left Sidebar - Wrapped for isolation */}
+                        <ErrorBoundary FallbackComponent={PanelErrorFallback} onError={logError}>
+                            <div className="relative">
+                                <LeftSidebar />
+                                {/* Font Library Panel - slides over left sidebar */}
+                                <FontLibraryPanel
+                                    isOpen={isFontLibraryOpen}
+                                    onClose={() => setFontLibraryOpen(false)}
+                                />
+                            </div>
+                        </ErrorBoundary>
+
+                        {/* Center Area */}
+                        <div className="flex-1 flex flex-col overflow-hidden">
+                            {/* Toolbar with font library toggle */}
+                            <Toolbar onOpenFontLibrary={() => setFontLibraryOpen(true)} />
+
+                            {/* Canvas - Wrapped with Error Boundary */}
+                            <CanvasErrorBoundary>
+                                <CanvasArea />
+                            </CanvasErrorBoundary>
                         </div>
-                    </ErrorBoundary>
 
-                    {/* Center Area */}
-                    <div className="flex-1 flex flex-col overflow-hidden">
-                        {/* Toolbar with font library toggle */}
-                        <Toolbar onOpenFontLibrary={() => setFontLibraryOpen(true)} />
-
-                        {/* Canvas - Wrapped with Error Boundary */}
-                        <CanvasErrorBoundary>
-                            <CanvasArea />
-                        </CanvasErrorBoundary>
+                        {/* Right Panel - Wrapped for isolation */}
+                        <ErrorBoundary FallbackComponent={PanelErrorFallback} onError={logError}>
+                            <RightPanel />
+                        </ErrorBoundary>
                     </div>
-
-                    {/* Right Panel - Wrapped for isolation */}
-                    <ErrorBoundary FallbackComponent={PanelErrorFallback} onError={logError}>
-                        <RightPanel />
-                    </ErrorBoundary>
                 </div>
 
                 {/* Keyboard Shortcuts Modal */}

@@ -175,111 +175,92 @@ export function Header() {
 
     return (
         <>
-            <header className="h-14 bg-white border-b border-gray-200 flex items-center gap-6 px-6 z-50 flex-shrink-0">
-                {/* Logo */}
-                <a
-                    href="/dashboard"
-                    className="flex items-center gap-2 text-lg font-bold text-gray-900 hover:text-blue-600 transition-colors"
-                    title="Back to Dashboard"
-                >
-                    <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-600 to-blue-700 flex items-center justify-center">
-                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" className="text-white">
-                            <path d="M8 12L11 15L16 10" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
-                        </svg>
-                    </div>
-                    <span className="hidden md:inline">Editor</span>
-                </a>
+            <header className="h-16 px-6 border-b border-gray-100 dark:border-gray-800 bg-white/80 dark:bg-gray-900/80 backdrop-blur-md flex items-center justify-between z-50 flex-shrink-0 transition-all">
+                {/* Left: Back & Title */}
+                <div className="flex items-center gap-4 flex-1">
+                    <a
+                        href="/dashboard"
+                        className="group flex items-center justify-center w-10 h-10 rounded-full bg-gray-50 dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+                        title="Back to Dashboard"
+                    >
+                        <span className="material-symbols-outlined text-gray-500 group-hover:text-gray-900 dark:text-gray-400 dark:group-hover:text-white transition-colors">arrow_back</span>
+                    </a>
 
-                {/* Template Name */}
-                <div className="flex-1 max-w-md">
-                    <input
-                        ref={nameInputRef}
-                        type="text"
-                        value={templateName}
-                        onChange={(e) => {
-                            setTemplateName(e.target.value);
-                            if (nameError) setNameError(false);
-                        }}
-                        maxLength={50}
-                        className={cn(
-                            "w-full text-base font-semibold px-3 py-2 rounded-lg outline-none transition-all duration-200",
-                            nameError && "animate-[shake_0.5s_ease-in-out] border-2 border-red-500 bg-red-50",
-                            !nameError && templateName && templateName !== 'Untitled Template'
-                                ? "border-2 border-transparent bg-white hover:border-gray-200 focus:border-blue-500"
-                                : "border-2 border-dashed border-gray-300 bg-gray-50 hover:bg-white"
-                        )}
-                        placeholder="Untitled Template"
-                    />
+                    <div className="h-8 w-px bg-gray-200 dark:bg-gray-700 mx-2 hidden md:block"></div>
+
+                    <div className="flex-1 max-w-md">
+                        <input
+                            ref={nameInputRef}
+                            type="text"
+                            value={templateName}
+                            onChange={(e) => {
+                                setTemplateName(e.target.value);
+                                if (nameError) setNameError(false);
+                            }}
+                            maxLength={50}
+                            className={cn(
+                                "w-full text-lg font-bold bg-transparent px-2 py-1 -ml-2 rounded-lg outline-none transition-all duration-200 placeholder-gray-400",
+                                "focus:bg-gray-100 dark:focus:bg-gray-800 focus:ring-2 focus:ring-primary-creative/20",
+                                nameError ? "text-red-500" : "text-gray-900 dark:text-white"
+                            )}
+                            placeholder="Untitled Template"
+                        />
+                    </div>
                 </div>
 
-                {/* Import Canva Button */}
-                <button
-                    onClick={() => setIsCanvaImportOpen(true)}
-                    className="flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg transition-all hover:opacity-90 shadow-sm"
-                    style={{
-                        background: 'linear-gradient(135deg, #8B3DFF, #00C4CC)',
-                        color: 'white'
-                    }}
-                    title="Import your Canva design"
-                >
-                    <Upload className="w-4 h-4" />
-                    <span className="hidden md:inline">Import Canva</span>
-                </button>
+                {/* Right: Actions */}
+                <div className="flex items-center gap-3">
+                     {/* Preview Toggle */}
+                     <label className="hidden lg:flex items-center gap-2 cursor-pointer select-none px-3 py-1.5 rounded-full hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
+                        <input
+                            type="checkbox"
+                            checked={previewMode}
+                            onChange={(e) => setPreviewMode(e.target.checked)}
+                            className="sr-only peer"
+                        />
+                         <span className="material-symbols-outlined text-gray-400 peer-checked:text-primary-creative transition-colors text-xl">visibility</span>
+                        <span className={cn("text-sm font-medium transition-colors", previewMode ? "text-primary-creative" : "text-gray-500")}>Preview</span>
+                    </label>
 
-                {/* Preview Toggle */}
-                <label className="hidden lg:flex items-center gap-2 cursor-pointer select-none">
-                    <input
-                        type="checkbox"
-                        checked={previewMode}
-                        onChange={(e) => setPreviewMode(e.target.checked)}
-                        className="sr-only peer"
-                    />
-                    <div className="w-10 h-6 bg-gray-200 peer-checked:bg-blue-600 rounded-full relative transition-colors">
-                        <div className="absolute top-1 left-1 w-4 h-4 bg-white rounded-full transition-transform peer-checked:translate-x-4"></div>
-                    </div>
-                    <span className="text-sm text-gray-700">Preview</span>
-                </label>
-
-                {/* Auto-save indicator */}
-                <AutoSaveIndicator
-                    status={autoSave.status}
-                    lastSavedAt={autoSave.lastSavedAt}
-                    isDirty={autoSave.isDirty}
-                    errorMessage={autoSave.errorMessage}
-                />
-
-                {/* Spacer */}
-                <div className="flex-1" />
-
-                {/* Action Buttons */}
-                <div className="flex items-center gap-2">
+                    {/* Import Canva */}
                     <button
+                        onClick={() => setIsCanvaImportOpen(true)}
+                        className="hidden md:flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium text-gray-700 dark:text-gray-200 bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
+                    >
+                        <Upload className="w-4 h-4" />
+                        <span>Import</span>
+                    </button>
+
+                    {/* Auto-save indicator */}
+                    <div className="hidden xl:block">
+                        <AutoSaveIndicator
+                            status={autoSave.status}
+                            lastSavedAt={autoSave.lastSavedAt}
+                            isDirty={autoSave.isDirty}
+                            errorMessage={autoSave.errorMessage}
+                        />
+                    </div>
+
+                    <div className="h-8 w-px bg-gray-200 dark:bg-gray-700 mx-1 hidden sm:block"></div>
+
+                    {/* Save Button */}
+                     <button
                         onClick={handleSave}
                         disabled={isSaving}
                         className={cn(
-                            "flex items-center gap-2 px-5 py-2 rounded-lg font-medium text-sm transition-all shadow-sm",
-                            "bg-blue-600 text-white hover:bg-blue-700 active:scale-95",
-                            isSaving && "opacity-50 cursor-not-allowed"
+                            "flex items-center gap-2 px-6 py-2.5 rounded-full font-heading font-medium text-sm transition-all shadow-lg shadow-purple-500/20 active:scale-95",
+                            "bg-gradient-to-r from-primary-creative to-secondary-creative text-white hover:opacity-90",
+                            isSaving && "opacity-70 cursor-not-allowed"
                         )}
                     >
                         <Save className="w-4 h-4" />
-                        {isSaving ? 'Saving...' : 'Save'}
+                        {isSaving ? 'Saving...' : 'Save Template'}
                     </button>
 
                     {/* User Menu */}
-                    <div className="flex items-center gap-2 pl-2 ml-2 border-l border-gray-200">
-                        <div className="hidden md:flex items-center gap-2 text-sm text-gray-600">
-                            <User className="w-4 h-4" />
-                            <span className="max-w-[120px] truncate">
-                                {currentUser?.email?.split('@')[0] || 'Guest'}
-                            </span>
-                        </div>
-                        <button
-                            onClick={handleLogout}
-                            className="p-2 text-gray-600 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                            title="Logout"
-                        >
-                            <LogOut className="w-4 h-4" />
+                     <div className="pl-1">
+                        <button className="w-9 h-9 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 border-2 border-white dark:border-gray-900 shadow-sm cursor-pointer flex items-center justify-center text-white font-bold text-xs transition-transform hover:scale-105 active:scale-95">
+                                {currentUser?.email?.[0].toUpperCase() || 'G'}
                         </button>
                     </div>
                 </div>

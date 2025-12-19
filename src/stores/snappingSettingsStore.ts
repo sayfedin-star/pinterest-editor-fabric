@@ -97,7 +97,7 @@ const defaultSettings: SnappingSettings = {
     snapSensitivity: 10,
     magneticStrength: 'medium',
     precisionLock: true,
-    magneticSnapThreshold: 3, // Auto-snap when within 3px
+    magneticSnapThreshold: 10, // Auto-snap when within 10px - balanced, not too sticky
 
     // Visual Feedback
     guideAnimations: true,
