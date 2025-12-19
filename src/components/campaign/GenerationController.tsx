@@ -206,11 +206,20 @@ export function GenerationController({
 
             // Export to blob
             const multiplier = QUALITY_MAP[settings.quality];
-            const blob = await exportToBlob(canvas, { multiplier });
+            // Fix Vercel 413: Check size and optimize
+            // First try PNG
+            let blob = await exportToBlob(canvas, { multiplier, format: 'png' });
+            
+            // If > 4MB (Vercel limit is 4.5MB), switching to JPEG 0.9 usually reduces size by 10x
+            if (blob.size > 4 * 1024 * 1024) {
+                console.log(`[Render] Blob size ${(blob.size / 1024 / 1024).toFixed(2)}MB exceeds 4MB limit. Optimizing as JPEG 0.9...`);
+                blob = await exportToBlob(canvas, { multiplier, format: 'jpeg', quality: 0.9 });
+                console.log(`[Render] Optimized size: ${(blob.size / 1024 / 1024).toFixed(2)}MB`);
+            }
 
             return {
                 blob,
-                fileName: `pin-${rowIndex + 1}.png`,
+                fileName: `pin-${rowIndex + 1}.${blob.type === 'image/jpeg' ? 'jpg' : 'png'}`,
                 rowIndex,
             };
         } finally {
@@ -323,8 +332,15 @@ export function GenerationController({
     // Start Generation (Hybrid Logic)
     // ============================================
     const startGeneration = useCallback(async (startIndex: number = 0) => {
-        if (status === 'processing') return;
-        if (!isMountedRef.current) return;
+        console.log('[GenerationController] startGeneration called', { startIndex, status, mounted: isMountedRef.current });
+        if (status === 'processing') {
+            console.log('[GenerationController] Blocked: already processing');
+            return;
+        }
+        if (!isMountedRef.current) {
+            console.log('[GenerationController] Blocked: component unmounted');
+            return;
+        }
 
         setStatus('processing');
         onStatusChange('processing');
@@ -657,13 +673,16 @@ export function GenerationController({
                     </div>
                 )}
 
-            {/* Action Buttons */}
-            <div className="flex items-center gap-3">
+            {/* Action Buttons - Added relative/z-index to fix overlapping issues */}
+            <div className="flex items-center gap-3 relative z-10">
                 {/* Start Button - only when idle */}
                 {(status === 'pending' || status === 'failed') && (
                     <button
-                        onClick={() => startGeneration(0)}
-                        className="flex items-center gap-2 px-6 py-3 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition-colors"
+                        onClick={() => {
+                            console.log('[GenerationController] Start button clicked via UI');
+                            startGeneration(0);
+                        }}
+                        className="flex items-center gap-2 px-6 py-3 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition-colors shadow-sm active:scale-95"
                     >
                         <Play className="w-5 h-5" />
                         Start Generation

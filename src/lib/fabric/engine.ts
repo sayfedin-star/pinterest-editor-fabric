@@ -518,7 +518,23 @@ export function exportToDataURL(canvas: fabric.StaticCanvas | fabric.Canvas, opt
 }
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export async function exportToBlob(canvas: fabric.StaticCanvas | fabric.Canvas, options: any = {}) {
-    const dataUrl = exportToDataURL(canvas, options);
+    // Default to PNG if not specified
+    const format = options.format || 'png';
+    const quality = options.quality || 1;
+    const multiplier = options.multiplier || 1;
+    
+    // For JPEG, we need to ensure background color is set (no transparency)
+    if (format === 'jpeg' && !canvas.backgroundColor) {
+        canvas.backgroundColor = '#ffffff';
+    }
+    
+    const dataUrl = canvas.toDataURL({
+        format,
+        quality,
+        multiplier,
+        enableRetinaScaling: true
+    });
+    
     const response = await fetch(dataUrl);
     return response.blob();
 }
