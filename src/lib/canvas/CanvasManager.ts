@@ -109,9 +109,8 @@ export class CanvasManager {
             configHeight: config.height,
         });
 
-        // Initialize alignment guides
+        // Initialize alignment guides (constructor calls init() internally)
         this.guides = new AlignmentGuides(this.canvas);
-        this.guides.init();
 
         // Initialize ViewportManager with canvas, config, and guides
         this.viewportManager.initialize(this.canvas, config, this.guides);

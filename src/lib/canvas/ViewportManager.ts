@@ -52,11 +52,6 @@ export class ViewportManager {
         });
 
         this.canvas.renderAll();
-
-        // Re-initialize guides for new zoom
-        if (this.guides) {
-            this.guides.init();
-        }
     }
 
     /**
@@ -83,11 +78,6 @@ export class ViewportManager {
         });
 
         this.canvas.renderAll();
-
-        // Re-initialize guides for new size
-        if (this.guides) {
-            this.guides.init();
-        }
     }
 
     /**
