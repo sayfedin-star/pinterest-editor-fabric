@@ -5,6 +5,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { cookies, headers } from 'next/headers';
 import { deleteFromS3, getThumbnailKey, getCampaignPinsPrefix, isTebiConfigured } from '@/lib/s3';
 import { S3Client, ListObjectsV2Command, DeleteObjectsCommand } from '@aws-sdk/client-s3';
 
@@ -14,23 +15,41 @@ interface DeleteAssetsRequest {
     campaignId?: string;  // Required for campaign
 }
 
-// SECURITY: Get authenticated Supabase client using request auth header
-function getAuthenticatedSupabase(request: NextRequest) {
+// SECURITY: Get authenticated Supabase client using auth header OR cookies
+async function getAuthenticatedSupabase() {
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
     const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-    const authHeader = request.headers.get('Authorization');
 
     if (!supabaseUrl || !supabaseAnonKey) {
         return null;
     }
 
-    return createClient(supabaseUrl, supabaseAnonKey, {
+    // Get auth token from cookies or Authorization header
+    const cookieStore = await cookies();
+    const headersStore = await headers();
+    
+    // Check for Authorization header (Bearer token)
+    const authHeader = headersStore.get('authorization');
+    
+    const options: any = {
         global: {
-            headers: {
-                Authorization: authHeader || '',
-            },
-        },
-    });
+            headers: {}
+        }
+    };
+
+    if (authHeader) {
+        // Use explicitly provided token
+        options.global.headers['Authorization'] = authHeader;
+    } else {
+        // Fallback to cookies
+        const allCookies = cookieStore.getAll();
+        
+        if (allCookies.length > 0) {
+             options.global.headers['Cookie'] = allCookies.map(c => `${c.name}=${c.value}`).join('; ');
+        }
+    }
+
+    return createClient(supabaseUrl, supabaseAnonKey, options);
 }
 
 // Helper to create S3 client for batch operations
@@ -104,7 +123,7 @@ export async function DELETE(request: NextRequest) {
         }
 
         // SECURITY: Verify user session
-        const supabase = getAuthenticatedSupabase(request);
+        const supabase = await getAuthenticatedSupabase();
         if (!supabase) {
             return NextResponse.json(
                 { error: 'Server configuration error' },

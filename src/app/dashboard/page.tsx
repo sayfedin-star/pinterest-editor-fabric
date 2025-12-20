@@ -4,242 +4,31 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { useAuth } from '@/lib/auth/AuthContext';
 import { cn } from '@/lib/utils';
+import { useDashboardData } from '@/hooks/useDashboardData';
+import { StatCard } from '@/components/dashboard/StatCard';
+import { QuickActionCard } from '@/components/dashboard/QuickActionCard';
+import { ProjectCard } from '@/components/dashboard/ProjectCard';
 import { DashboardEmptyState } from '@/components/ui/EmptyStates';
-
-// --- MOCK DATA ---
-const STATS = {
-  templates: 12,
-  activeCampaigns: 5,
-  pinsGenerated: 847,
-  thisMonth: 234
-};
-
-const PROJECTS = [
-  {
-    id: '1',
-    title: 'Summer Products 2025',
-    status: 'completed',
-    progress: 100,
-    generated: 50,
-    total: 50,
-    color: 'blue',
-    icon: 'layers'
-  },
-  {
-    id: '2',
-    title: 'Recipe Cards Batch',
-    status: 'in_progress',
-    progress: 40,
-    generated: 10,
-    total: 25,
-    color: 'purple',
-    icon: 'restaurant_menu'
-  },
-  {
-    id: '3',
-    title: 'Blog Post Headers',
-    status: 'pending',
-    progress: 0,
-    generated: 0,
-    total: 30,
-    color: 'orange',
-    icon: 'article'
-  },
-  {
-    id: '4',
-    title: 'Holiday Collection \'24',
-    status: 'paused',
-    progress: 20,
-    generated: 5,
-    total: 25,
-    color: 'green',
-    icon: 'shopping_bag'
-  }
-];
-
-// --- COLOR MAPS ---
-const STAT_VARIANTS = {
-  blue: { bg: "bg-accent-1 dark:bg-accent-1/20", text: "text-primary-creative dark:text-accent-1" },
-  purple: { bg: "bg-accent-3 dark:bg-accent-3/20", text: "text-purple-600 dark:text-accent-3" },
-  teal: { bg: "bg-tertiary-creative/20 dark:bg-tertiary-creative/20", text: "text-tertiary-creative" },
-  orange: { bg: "bg-accent-2 dark:bg-accent-2/20", text: "text-orange-600 dark:text-accent-2" },
-};
-
-const ACTION_VARIANTS = {
-  purple: {
-     cardBg: "bg-gradient-to-br from-purple-50 to-blue-50 dark:from-surface-dark dark:to-surface-dark/90",
-     iconBg: "bg-gradient-to-br from-primary-creative to-accent-1",
-     shadow: "shadow-purple-500/30"
-  },
-  pink: {
-     cardBg: "bg-gradient-to-br from-pink-50 to-orange-50 dark:from-surface-dark dark:to-surface-dark/90",
-     iconBg: "bg-gradient-to-br from-secondary-creative to-accent-2",
-     shadow: "shadow-pink-500/30"
-  },
-  green: {
-     cardBg: "bg-gradient-to-br from-green-50 to-teal-50 dark:from-surface-dark dark:to-surface-dark/90",
-     iconBg: "bg-gradient-to-br from-tertiary-creative to-green-300",
-     shadow: "shadow-green-500/30"
-  }
-};
-
-const PROJECT_VARIANTS: Record<string, any> = {
-  blue: {
-    overlay: "bg-gradient-to-br from-blue-300/30 to-blue-500/30 dark:from-blue-600/30 dark:to-blue-800/30",
-    iconBg: "bg-blue-100 dark:bg-blue-900/30",
-    iconText: "text-blue-600 dark:text-blue-400",
-    badgeBg: "bg-blue-100 dark:bg-blue-900/40",
-    badgeText: "text-blue-700 dark:text-blue-300",
-    barBg: "bg-blue-500",
-    statusText: "text-blue-600 dark:text-blue-400"
-  },
-  purple: {
-    overlay: "bg-gradient-to-br from-purple-300/30 to-purple-500/30 dark:from-purple-600/30 dark:to-purple-800/30",
-    iconBg: "bg-purple-100 dark:bg-purple-900/30",
-    iconText: "text-purple-600 dark:text-purple-400",
-    badgeBg: "bg-purple-100 dark:bg-purple-900/40",
-    badgeText: "text-purple-700 dark:text-purple-300",
-    barBg: "bg-purple-500",
-    statusText: "text-purple-600 dark:text-purple-400"
-  },
-  orange: {
-    overlay: "bg-gradient-to-br from-orange-300/30 to-orange-500/30 dark:from-orange-600/30 dark:to-orange-800/30",
-    iconBg: "bg-orange-100 dark:bg-orange-900/30",
-    iconText: "text-orange-600 dark:text-orange-400",
-    badgeBg: "bg-orange-100 dark:bg-orange-900/40",
-    badgeText: "text-orange-700 dark:text-orange-300",
-    barBg: "bg-orange-500",
-    statusText: "text-orange-600 dark:text-orange-400"
-  },
-  green: {
-    overlay: "bg-gradient-to-br from-green-300/30 to-green-500/30 dark:from-green-600/30 dark:to-green-800/30",
-    iconBg: "bg-green-100 dark:bg-green-900/30",
-    iconText: "text-green-600 dark:text-green-400",
-    badgeBg: "bg-green-100 dark:bg-green-900/40",
-    badgeText: "text-green-700 dark:text-green-300",
-    barBg: "bg-green-500",
-    statusText: "text-green-600 dark:text-green-400"
-  },
-   gray: { // Fallback/Pending
-    overlay: "bg-gradient-to-br from-gray-300/30 to-gray-500/30 dark:from-gray-600/30 dark:to-gray-800/30",
-    iconBg: "bg-gray-100 dark:bg-gray-900/30",
-    iconText: "text-gray-600 dark:text-gray-400",
-    badgeBg: "bg-gray-100 dark:bg-gray-900/40",
-    badgeText: "text-gray-700 dark:text-gray-300",
-    barBg: "bg-gray-500",
-    statusText: "text-gray-600 dark:text-gray-400"
-  }
-};
-
-
-// --- COMPONENTS ---
-
-function StatCard({ label, value, icon, trend, variant }: { label: string, value: any, icon: string, trend?: string, variant: keyof typeof STAT_VARIANTS }) {
-  const styles = STAT_VARIANTS[variant];
-  return (
-    <div className="bg-surface-light dark:bg-surface-dark p-8 rounded-xl shadow-creative-md flex flex-col justify-between transform transition-transform hover:scale-105 duration-200 group">
-      <div className="flex items-start justify-between">
-        <div>
-          <p className="text-sm font-medium text-gray-500 dark:text-gray-400 font-body">{label}</p>
-          <p className="text-4xl font-heading font-bold text-gray-900 dark:text-white mt-2">{value}</p>
-          {trend && (
-             <p className="text-sm font-medium text-green-500 mt-2 flex items-center">
-                <span className="material-symbols-outlined text-base mr-1">trending_up</span> {trend}
-            </p>
-          )}
-        </div>
-        <div className={cn("h-12 w-12 rounded-lg flex items-center justify-center group-hover:rotate-6 transition-transform", styles.bg, styles.text)}>
-          <span className="material-symbols-outlined text-3xl">{icon}</span>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function QuickActionCard({ title, description, icon, variant, href }: { title: string, description: string, icon: string, variant: keyof typeof ACTION_VARIANTS, href: string }) {
-  const styles = ACTION_VARIANTS[variant];
-  return (
-    <Link href={href} className={cn(
-        "group block p-8 rounded-2xl shadow-creative-md hover:shadow-creative-lg transition-all duration-300 transform hover:-translate-y-1",
-        styles.cardBg
-    )}>
-      <div className="flex flex-col items-center text-center">
-        <div className={cn(
-            "h-16 w-16 rounded-xl flex items-center justify-center text-white shadow-lg mb-5 group-hover:scale-110 transition-transform duration-300",
-            styles.iconBg,
-            styles.shadow
-        )}>
-          <span className="material-symbols-outlined text-4xl">{icon}</span>
-        </div>
-        <h4 className="text-xl font-heading font-semibold text-gray-900 dark:text-white mb-2">{title}</h4>
-        <p className="text-md text-gray-500 dark:text-gray-400 font-body">{description}</p>
-        <span className={cn(
-            "mt-4 material-symbols-outlined transition-colors text-3xl",
-            "text-gray-400 group-hover:text-primary-creative dark:group-hover:text-accent-1"
-        )}>arrow_right_alt</span>
-      </div>
-    </Link>
-  );
-}
-
-function ProjectCard({ project }: { project: typeof PROJECTS[0] }) {
-  const statusConfig = {
-    completed: { text: "Completed", icon: "check_circle" },
-    in_progress: { text: "In Progress", icon: "play_arrow" },
-    pending: { text: "Pending", icon: "pause" },
-    paused: { text: "Paused", icon: "error" }
-  };
-
-  const statusInfo = statusConfig[project.status as keyof typeof statusConfig];
-  const styles = PROJECT_VARIANTS[project.color] || PROJECT_VARIANTS['gray'];
-
-  return (
-    <div className="bg-surface-light dark:bg-surface-dark p-6 rounded-2xl shadow-creative-md relative overflow-hidden group hover:shadow-creative-lg transition-all duration-300">
-      <div className={cn(
-          "absolute inset-0 opacity-20 group-hover:opacity-30 transition-opacity",
-           styles.overlay
-      )}></div>
-      
-      <div className="relative z-10">
-        <div className="flex items-start justify-between mb-5">
-          <div className="flex items-center gap-4">
-            <div className={cn(
-                "h-12 w-12 rounded-lg flex items-center justify-center",
-                styles.iconBg, styles.iconText
-            )}>
-              <span className="material-symbols-outlined text-3xl">{project.icon}</span>
-            </div>
-            <div>
-              <h4 className="text-lg font-heading font-bold text-gray-900 dark:text-white">{project.title}</h4>
-              <p className={cn("text-sm flex items-center mt-1", styles.statusText)}>
-                <span className="material-symbols-outlined text-base mr-1">{statusInfo.icon}</span> {statusInfo.text}
-              </p>
-            </div>
-          </div>
-          <span className={cn(
-              "text-sm font-heading font-bold px-3 py-1 rounded-md",
-              styles.badgeBg, styles.badgeText
-          )}>{project.progress}%</span>
-        </div>
-
-        <div className="w-full bg-gray-100 dark:bg-gray-700 rounded-full h-2 mb-4">
-          <div className={cn("h-2 rounded-full", styles.barBg)} style={{ width: `${project.progress}%` }}></div>
-        </div>
-
-        <div className="flex items-center justify-between text-sm text-gray-500 dark:text-gray-400 pt-3 border-t border-gray-100 dark:border-gray-700">
-          <span className="font-body"><strong className="text-gray-900 dark:text-gray-200">{project.generated}</strong> of {project.total} pins</span>
-          <span className="material-symbols-outlined text-lg cursor-pointer hover:text-primary-creative dark:hover:text-accent-1 transition-colors">arrow_right_alt</span>
-        </div>
-      </div>
-    </div>
-  );
-}
 
 export default function DashboardPage() {
   const { currentUser } = useAuth();
-  const [hasData, setHasData] = useState(true);
+  const { stats, projects, loading } = useDashboardData();
 
-  if (!hasData) {
+  if (loading) {
+      return (
+        <div className="flex-1 flex items-center justify-center p-8 bg-canvas-light dark:bg-canvas-dark">
+            <div className="flex flex-col items-center gap-4">
+                <div className="w-12 h-12 border-4 border-primary-creative/30 border-t-primary-creative rounded-full animate-spin"></div>
+                <p className="text-gray-500 font-medium">Loading your creative space...</p>
+            </div>
+        </div>
+      );
+  }
+
+  // If no data loaded (and not loading), show empty state?
+  // Actually, we might have 0 stats but that's valid data.
+  // Empty state should be more specific, e.g. if no templates AND no campaigns.
+  if (!loading && stats.templates === 0 && stats.activeCampaigns === 0 && projects.length === 0) {
       return <DashboardEmptyState />;
   }
 
@@ -264,26 +53,26 @@ export default function DashboardPage() {
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8 mb-12">
           <StatCard 
             label="Total Templates" 
-            value={STATS.templates} 
+            value={stats.templates} 
             icon="layers" 
             variant="blue"
           />
           <StatCard 
             label="Active Campaigns" 
-            value={STATS.activeCampaigns} 
+            value={stats.activeCampaigns} 
             icon="folder" 
             variant="purple"
           />
           <StatCard 
             label="Pins Generated" 
-            value={STATS.pinsGenerated} 
+            value={stats.pinsGenerated} 
             icon="image" 
-            trend="+234 this month"
+            trend={stats.thisMonthPins > 0 ? `+${stats.thisMonthPins} this month` : undefined}
             variant="teal"
           />
           <StatCard 
             label="This Month" 
-            value={STATS.thisMonth} 
+            value={stats.thisMonthPins} 
             icon="auto_awesome" 
             variant="orange"
           />
@@ -327,11 +116,18 @@ export default function DashboardPage() {
           </Link>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8">
-          {PROJECTS.map(project => (
-            <ProjectCard key={project.id} project={project} />
-          ))}
-        </div>
+        {projects.length > 0 ? (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8">
+            {projects.map(project => (
+              <ProjectCard key={project.id} project={project} />
+            ))}
+          </div>
+        ) : (
+          <div className="text-center py-12 bg-gray-50 dark:bg-surface-dark/30 rounded-2xl border-2 border-dashed border-gray-200 dark:border-gray-700">
+             <span className="material-symbols-outlined text-4xl text-gray-300 mb-2">folder_off</span>
+             <p className="text-gray-500">No recent campaigns found. Start your first generation!</p>
+          </div>
+        )}
         
         <div className="h-10"></div>
       </div>

@@ -2,6 +2,7 @@
 // Works with Fabric Canvas to generate thumbnails and export images
 
 import * as fabric from 'fabric';
+import { supabase } from './supabase';
 
 export interface ThumbnailOptions {
     maxWidth?: number;
@@ -180,11 +181,21 @@ export async function uploadThumbnail(
     dataUrl: string
 ): Promise<string | null> {
     try {
+        // Get current session token
+        const { data: { session } } = await supabase.auth.getSession();
+        const token = session?.access_token;
+        
+        const headers: Record<string, string> = {
+            'Content-Type': 'application/json',
+        };
+        
+        if (token) {
+            headers['Authorization'] = `Bearer ${token}`;
+        }
+
         const response = await fetch('/api/upload-thumbnail', {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
+            headers,
             body: JSON.stringify({
                 templateId,
                 userId,
@@ -217,11 +228,21 @@ export async function deleteTemplateAssets(
     userId: string
 ): Promise<boolean> {
     try {
+        // Get current session token
+        const { data: { session } } = await supabase.auth.getSession();
+        const token = session?.access_token;
+        
+        const headers: Record<string, string> = {
+            'Content-Type': 'application/json',
+        };
+        
+        if (token) {
+            headers['Authorization'] = `Bearer ${token}`;
+        }
+
         const response = await fetch('/api/delete-assets', {
             method: 'DELETE',
-            headers: {
-                'Content-Type': 'application/json',
-            },
+            headers,
             body: JSON.stringify({
                 type: 'thumbnail',
                 userId,

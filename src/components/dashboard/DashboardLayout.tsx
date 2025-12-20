@@ -14,14 +14,13 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
             <CollapsibleSidebar />
 
             {/* Main Content Area */}
-            <div className="flex-1 flex flex-col min-w-0 transition-all duration-300">
+            <div className="flex-1 flex flex-col min-w-0 transition-all duration-300 bg-canvas-light dark:bg-canvas-dark">
                 <PageHeader />
                 
-                <main className="flex-1 p-6 md:p-8">
-                    <div className="max-w-7xl mx-auto space-y-6">
-                        {children}
-                    </div>
-                </main>
+                {/* Main allows full width/height for children like DashboardPage */}
+                <div className="flex-1 flex flex-col min-h-0">
+                    {children}
+                </div>
             </div>
 
             {/* Onboarding Checklist - Fixed/Absolute usually, keeping it */}

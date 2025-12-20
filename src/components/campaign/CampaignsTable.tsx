@@ -24,6 +24,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { deleteCampaigns, deleteCampaign } from "@/lib/db/campaigns";
 
 // Types
 export interface Campaign {
@@ -37,9 +38,10 @@ export interface Campaign {
 
 interface CampaignsTableProps {
   campaigns: Campaign[];
+  onRefresh?: () => void;
 }
 
-export function CampaignsTable({ campaigns }: CampaignsTableProps) {
+export function CampaignsTable({ campaigns, onRefresh }: CampaignsTableProps) {
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [bulkAction, setBulkAction] = useState<string>('');
   const [isProcessing, setIsProcessing] = useState(false);
@@ -76,7 +78,13 @@ export function CampaignsTable({ campaigns }: CampaignsTableProps) {
         toast.success(`Exported ${selectedIds.length} campaigns to CSV`);
         break;
       case 'delete':
-        toast.success(`Deleted ${selectedIds.length} campaigns`);
+        const success = await deleteCampaigns(selectedIds);
+        if (success) {
+            toast.success(`Deleted ${selectedIds.length} campaigns`);
+            onRefresh?.();
+        } else {
+            toast.error('Failed to delete campaigns');
+        }
         break;
       default:
         toast.info(`Action ${bulkAction} applied to ${selectedIds.length} items`);
@@ -185,6 +193,7 @@ export function CampaignsTable({ campaigns }: CampaignsTableProps) {
                     setSelectedIds(selectedIds.filter(id => id !== campaign.id));
                 }
                 }}
+                onRefresh={onRefresh}
             />
             ))
         )}
@@ -197,10 +206,26 @@ interface CampaignRowProps {
   campaign: Campaign;
   isSelected: boolean;
   onSelect: (checked: boolean) => void;
+  onRefresh?: () => void;
 }
 
 // Campaign Row Component
-function CampaignRow({ campaign, isSelected, onSelect }: CampaignRowProps) {
+function CampaignRow({ campaign, isSelected, onSelect, onRefresh }: CampaignRowProps) {
+    const handleDelete = async () => {
+        if (!confirm('Are you sure you want to delete this campaign?')) return;
+        
+        try {
+            const success = await deleteCampaign(campaign.id);
+            if (success) {
+                toast.success('Campaign deleted');
+                onRefresh?.();
+            } else {
+                toast.error('Failed to delete campaign');
+            }
+        } catch (error) {
+            toast.error('Error deleting campaign');
+        }
+    };
   return (
     <div
       className={cn(
@@ -299,7 +324,10 @@ function CampaignRow({ campaign, isSelected, onSelect }: CampaignRowProps) {
               Export
             </DropdownMenuItem>
             <DropdownMenuSeparator />
-            <DropdownMenuItem className="text-red-600 focus:text-red-600 focus:bg-red-50 cursor-pointer">
+            <DropdownMenuItem 
+                onClick={handleDelete}
+                className="text-red-600 focus:text-red-600 focus:bg-red-50 cursor-pointer"
+            >
               <Trash2 className="w-4 h-4 mr-2" />
               Delete
             </DropdownMenuItem>

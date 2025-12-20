@@ -288,7 +288,7 @@ export function GenerationController({
 
             if (uploadResult.url) {
                 // Save to database - CRITICAL: include credentials for auth
-                await fetch('/api/generated-pins', {
+                const dbResponse = await fetch('/api/generated-pins', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     credentials: 'include', // Required for cookie-based auth
@@ -300,6 +300,11 @@ export function GenerationController({
                         status: 'completed',
                     }),
                 });
+
+                if (!dbResponse.ok) {
+                    const error = await dbResponse.json();
+                    throw new Error(`Failed to save record to database: ${error.error || dbResponse.statusText}`);
+                }
 
                 return {
                     success: true,

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
-import { cookies } from 'next/headers';
+import { cookies, headers } from 'next/headers';
 import { CreateGeneratedPinSchema, validateRequest } from '@/lib/validations';
 
 // Debug logging - only in development
@@ -23,7 +23,7 @@ function getServiceSupabase(): SupabaseClient | null {
     });
 }
 
-// Initialize Supabase client with cookie-based auth (for GET/DELETE which need user context)
+// Initialize Supabase client with cookie-based or header-based auth
 async function getAuthenticatedSupabase(): Promise<SupabaseClient | null> {
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
     const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
@@ -33,21 +33,33 @@ async function getAuthenticatedSupabase(): Promise<SupabaseClient | null> {
         return null;
     }
 
-    // Get cookies from the request
+    // Get auth token from cookies or Authorization header
     const cookieStore = await cookies();
-    const allCookies = cookieStore.getAll();
-
-    // Find the Supabase auth token from cookies
-    const authCookie = allCookies.find(c => c.name.includes('auth-token') || c.name.includes('sb-'));
-
-    // Create client with the auth token if available
-    return createClient(supabaseUrl, supabaseAnonKey, {
+    const headersStore = await headers();
+    
+    // Check for Authorization header (Bearer token)
+    const authHeader = headersStore.get('authorization');
+    
+    const options: any = {
         global: {
-            headers: authCookie ? {
-                Cookie: allCookies.map(c => `${c.name}=${c.value}`).join('; '),
-            } : {},
-        },
-    });
+            headers: {}
+        }
+    };
+
+    if (authHeader) {
+        // Use explicitly provided token
+        options.global.headers['Authorization'] = authHeader;
+    } else {
+        // Fallback to cookies
+        const allCookies = cookieStore.getAll();
+        
+        if (allCookies.length > 0) {
+             options.global.headers['Cookie'] = allCookies.map(c => `${c.name}=${c.value}`).join('; ');
+        }
+    }
+
+    // Create client
+    return createClient(supabaseUrl, supabaseAnonKey, options);
 }
 
 // ============================================
@@ -163,15 +175,17 @@ export async function POST(request: NextRequest) {
                 log('[generated-pins] RPC not available, using fallback');
                 const { data: campaignData } = await supabase
                     .from('campaigns')
-                    .select('generated_pins')
+                    .select('generated_pins, current_index')
                     .eq('id', campaign_id)
                     .single();
 
                 if (campaignData) {
+                    const newCount = (campaignData.generated_pins as number || 0) + 1;
                     await supabase
                         .from('campaigns')
                         .update({
-                            generated_pins: (campaignData.generated_pins as number || 0) + 1,
+                            generated_pins: newCount,
+                            current_index: newCount, // Keep both in sync
                             updated_at: new Date().toISOString()
                         })
                         .eq('id', campaign_id);
@@ -223,13 +237,18 @@ export async function GET(request: NextRequest) {
             );
         }
 
+        const page = parseInt(searchParams.get('page') || '1');
+        const limit = parseInt(searchParams.get('limit') || '50');
+        const offset = (page - 1) * limit;
+
         // RLS will automatically filter to user's own data
-        log('[generated-pins] Fetching pins...');
-        const { data, error } = await supabase
+        log(`[generated-pins] Fetching pins (page ${page}, limit ${limit})...`);
+        const { data, error, count } = await supabase
             .from('generated_pins')
-            .select('*')
+            .select('*', { count: 'exact' })
             .eq('campaign_id', campaignId)
-            .order('created_at', { ascending: true });
+            .order('created_at', { ascending: true })
+            .range(offset, offset + limit - 1);
 
         if (error) {
             console.error('[generated-pins] Fetch error:', error);
@@ -239,8 +258,13 @@ export async function GET(request: NextRequest) {
             );
         }
 
-        log('[generated-pins] Found', data?.length || 0, 'pins');
-        return NextResponse.json({ success: true, data: data || [] });
+        log('[generated-pins] Found', data?.length || 0, 'pins (total:', count, ')');
+        return NextResponse.json({ success: true, data: data || [], meta: {
+            page,
+            limit,
+            total: count || 0,
+            hasMore: (count || 0) > (page * limit)
+        }});
     } catch (error) {
         console.error('[generated-pins] GET error:', error);
         return NextResponse.json(
@@ -303,6 +327,7 @@ export async function DELETE(request: NextRequest) {
             .from('campaigns')
             .update({
                 generated_pins: 0,
+                current_index: 0, // CRITICAL: Reset both counters
                 status: 'pending',
                 updated_at: new Date().toISOString()
             })

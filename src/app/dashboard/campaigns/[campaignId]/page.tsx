@@ -4,14 +4,15 @@
 const DEBUG = process.env.NODE_ENV === 'development';
 const log = (...args: unknown[]) => DEBUG && console.log(...args);
 
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { ArrowLeft, Loader2, Settings } from 'lucide-react';
+import { ArrowLeft, Loader2, Settings, RefreshCw } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/lib/auth/AuthContext';
 import { getCampaign, updateCampaign, CampaignWithDetails } from '@/lib/db/campaigns';
 import { getTemplate } from '@/lib/db/templates';
+import { supabase } from '@/lib/supabase';
 import { GenerationController, GenerationSettings, GenerationProgress, DEFAULT_GENERATION_SETTINGS } from '@/components/campaign/GenerationController';
 import { GenerationSettingsPanel } from '@/components/campaign/GenerationSettings';
 import { PinsGrid, PinCardData } from '@/components/campaign/PinCard';
@@ -49,6 +50,7 @@ export default function CampaignDetailPage() {
     const [showDeleteModal, setShowDeleteModal] = useState(false);
     const [isDeleting, setIsDeleting] = useState(false);
     const [deleteProgress, setDeleteProgress] = useState({ current: 0, total: 0 });
+    const [pagination, setPagination] = useState({ page: 1, limit: 50, hasMore: true, total: 0, isLoading: false });
     const [pinToDelete, setPinToDelete] = useState<PinCardData | null>(null);
 
     // Redirect if not authenticated
@@ -93,8 +95,7 @@ export default function CampaignDetailPage() {
                     });
                 }
 
-                // Load existing generated pins
-                await loadGeneratedPins();
+                // Pins will be loaded by a separate effect after campaign is set
             } catch (error) {
                 console.error('Error loading campaign:', error);
                 toast.error('Failed to load campaign');
@@ -107,47 +108,126 @@ export default function CampaignDetailPage() {
     }, [campaignId, router]);
 
     // Function to load generated pins
-    const loadGeneratedPins = useCallback(async () => {
+    const loadGeneratedPins = useCallback(async (reset = false) => {
         if (!campaignId) return;
+        // Allow reset to override loading state
+        if (pagination.isLoading && !reset) return;
+
+        const currentPage = reset ? 1 : pagination.page;
 
         try {
-            log('Loading generated pins for campaign:', campaignId);
-            const pinsResponse = await fetch(`/api/generated-pins?campaign_id=${campaignId}`, {
-                credentials: 'include'
-            });
+            setPagination(prev => ({ ...prev, isLoading: true }));
+            log(`Loading pins page ${currentPage}...`);
+            
+            // Get current session token for robust auth (bypass cookie issues)
+            const { data: { session } } = await supabase.auth.getSession();
+            const token = session?.access_token;
+
+            const headers: Record<string, string> = {
+                'Cache-Control': 'no-store'
+            };
+            if (token) {
+                headers['Authorization'] = `Bearer ${token}`;
+            }
+
+            const pinsResponse = await fetch(
+                `/api/generated-pins?campaign_id=${campaignId}&page=${currentPage}&limit=${pagination.limit}&t=${Date.now()}`, 
+                { 
+                    credentials: 'include',
+                    headers
+                }
+            );
+            
+            // Handle non-200 responses
+            if (!pinsResponse.ok) {
+                const errorData = await pinsResponse.json();
+                throw new Error(errorData.error || `Server error: ${pinsResponse.status}`);
+            }
+
             const pinsResult = await pinsResponse.json();
 
-            log('Pins API response:', pinsResult);
-
-            if (pinsResult.data && Array.isArray(pinsResult.data)) {
+            if (pinsResult.success && pinsResult.data) {
                 const mappedPins: PinCardData[] = pinsResult.data
-                    .filter((pin: Record<string, unknown>) => pin.image_url) // Only include pins with valid image URL
+                    .filter((pin: Record<string, unknown>) => pin.image_url)
                     .map((pin: Record<string, unknown>, index: number) => ({
                         id: (pin.id as string) || `pin-${index}`,
-                        rowIndex: index,
+                        rowIndex: pin.data_row ? (pin.data_row as any).rowIndex ?? index : index, 
                         imageUrl: pin.image_url as string,
-                        status: (pin.status as 'completed' | 'failed' | 'pending') || 'completed',
+                        status: (pin.status as any) || 'completed',
                         errorMessage: pin.error_message as string | undefined,
                         csvData: pin.data_row as Record<string, string>,
                     }));
 
-                log('Mapped pins:', mappedPins.length, 'pins');
-                setGeneratedPins(mappedPins);
+                setGeneratedPins(prev => {
+                    const newPins = reset ? mappedPins : [...prev, ...mappedPins];
+                    // Remove duplicates
+                    const unique = new Map(newPins.map(p => [p.id, p]));
+                    return Array.from(unique.values()).sort((a, b) => a.rowIndex - b.rowIndex);
+                });
+
+                if (pinsResult.meta) {
+                    setPagination(prev => ({
+                        ...prev,
+                        page: currentPage + 1,
+                        hasMore: pinsResult.meta.hasMore,
+                        total: pinsResult.meta.total,
+                    }));
+                }
             } else {
-                log('No pins data found');
+                 console.warn('Pins API returned success=false', pinsResult);
+                 toast.error(`Failed to load pins: ${pinsResult.error || 'Unknown error'}`);
             }
         } catch (error) {
-            console.error('Error loading generated pins:', error);
+            console.error('Error loading pins:', error);
+            const msg = error instanceof Error ? error.message : String(error);
+            toast.error(`Load error: ${msg}`);
+        } finally {
+            setPagination(prev => ({ ...prev, isLoading: false }));
         }
-    }, [campaignId]);
+    }, [campaignId, pagination.page, pagination.limit, pagination.isLoading]);
+
+    // Dedicated Sync Effect - Ensures fresh campaign state
+    useEffect(() => {
+        if (!campaign || pagination.isLoading) return;
+
+        // Sync campaign progress if mismatch detected
+        if (pagination.total > 0 && campaign.generated_pins !== pagination.total) {
+            log(`Syncing campaign progress: ${campaign.generated_pins} -> ${pagination.total}`);
+            updateCampaign(campaign.id, {
+                generated_pins: pagination.total,
+                current_index: pagination.total
+            }).then((success) => {
+                if (success) {
+                    setCampaign(prev => prev ? { ...prev, generated_pins: pagination.total, current_index: pagination.total } : null);
+                    // Force a reload if we have total but no pins locally (edge case)
+                    if (generatedPins.length === 0) {
+                        loadGeneratedPins(true);
+                    }
+                }
+            });
+        }
+    }, [campaign, pagination.total, pagination.isLoading, generatedPins.length, loadGeneratedPins]);
 
     // Reload pins when campaign status changes to completed
     useEffect(() => {
         if (campaign?.status === 'completed' && generatedPins.length === 0) {
             log('Campaign completed but no pins - reloading...');
-            loadGeneratedPins();
+            loadGeneratedPins(true);
         }
     }, [campaign?.status, generatedPins.length, loadGeneratedPins]);
+
+    // Track if we have performed the initial load
+    const initialLoadRef = useRef(false);
+
+    // Load pins when campaign is first loaded
+    useEffect(() => {
+        // If campaign is loaded and we haven't tried loading pins yet
+        if (campaign && !isLoading && !initialLoadRef.current) {
+            log('Initial pin load triggered');
+            initialLoadRef.current = true;
+            loadGeneratedPins(true);
+        }
+    }, [campaign, isLoading, loadGeneratedPins]);
 
     // Handle pin generated
     const handlePinGenerated = useCallback((pin: PinCardData) => {
@@ -393,6 +473,19 @@ export default function CampaignDetailPage() {
                             onStatusChange={handleStatusChange}
                         />
 
+                        {/* Sync Controls */}
+                        <div className="flex justify-end">
+                            <button
+                                onClick={() => loadGeneratedPins(true)}
+                                disabled={pagination.isLoading}
+                                className="flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-gray-600 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+                                title="Force reload pins from database"
+                            >
+                                <RefreshCw className={`w-4 h-4 ${pagination.isLoading ? 'animate-spin' : ''}`} />
+                                {pagination.isLoading ? 'Syncing...' : 'Sync Pins'}
+                            </button>
+                        </div>
+
                         {/* Export Toolbar */}
                         {generatedPins.length > 0 && (
                             <ExportToolbar
@@ -427,6 +520,20 @@ export default function CampaignDetailPage() {
                         )}
                     </div>
                 </div>
+
+                {/* Pagination / Load More */}
+                {generatedPins.length > 0 && pagination.hasMore && (
+                    <div className="flex justify-center mt-8 pb-12">
+                        <button
+                            onClick={() => loadGeneratedPins(false)}
+                            disabled={pagination.isLoading}
+                            className="bg-white border border-gray-300 text-gray-700 font-medium py-2 px-6 rounded-full shadow-sm hover:bg-gray-50 disabled:opacity-50 transition-all flex items-center gap-2"
+                        >
+                            {pagination.isLoading && <Loader2 className="w-4 h-4 animate-spin" />}
+                            {pagination.isLoading ? 'Loading...' : `Load More (${generatedPins.length} of ${pagination.total})`}
+                        </button>
+                    </div>
+                )}
             </main>
 
             {/* Bulk Selection Action Bar */}

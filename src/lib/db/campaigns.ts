@@ -279,6 +279,42 @@ export async function deleteCampaign(campaignId: string): Promise<boolean> {
 }
 
 /**
+ * Delete multiple campaigns
+ * @param campaignIds Array of Campaign IDs to delete
+ * @returns true on success, false on error
+ */
+export async function deleteCampaigns(campaignIds: string[]): Promise<boolean> {
+    if (!isSupabaseConfigured()) {
+        console.warn('Supabase not configured');
+        return false;
+    }
+
+    const userId = await getCurrentUserId();
+    if (!userId) {
+        console.error('User not authenticated');
+        return false;
+    }
+
+    try {
+        const { error } = await supabase
+            .from('campaigns')
+            .delete()
+            .in('id', campaignIds)
+            .eq('user_id', userId);
+
+        if (error) {
+            console.error('Error deleting campaigns:', error);
+            return false;
+        }
+
+        return true;
+    } catch (error) {
+        console.error('Error deleting campaigns:', error);
+        return false;
+    }
+}
+
+/**
  * Update a campaign with arbitrary fields
  * @param campaignId Campaign ID
  * @param updates Fields to update

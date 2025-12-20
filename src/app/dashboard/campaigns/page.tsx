@@ -82,28 +82,28 @@ export default function CampaignsPage() {
     }, [authLoading, currentUser, router]);
 
     // Fetch campaigns
-    useEffect(() => {
-        const fetchCampaigns = async () => {
-            if (!currentUser) return;
+    const fetchCampaigns = React.useCallback(async () => {
+        if (!currentUser) return;
 
-            setIsLoading(true);
-            try {
-                if (isSupabaseConfigured()) {
-                    const data = await getCampaigns();
-                    setCampaigns(data);
-                } else {
-                    setCampaigns(demoCampaigns);
-                }
-            } catch (error) {
-                console.error('Error fetching campaigns:', error);
+        setIsLoading(true);
+        try {
+            if (isSupabaseConfigured()) {
+                const data = await getCampaigns();
+                setCampaigns(data);
+            } else {
                 setCampaigns(demoCampaigns);
-            } finally {
-                setIsLoading(false);
             }
-        };
-
-        fetchCampaigns();
+        } catch (error) {
+            console.error('Error fetching campaigns:', error);
+            setCampaigns(demoCampaigns);
+        } finally {
+            setIsLoading(false);
+        }
     }, [currentUser]);
+
+    useEffect(() => {
+        fetchCampaigns();
+    }, [fetchCampaigns]);
 
     if (authLoading || !currentUser) {
         return (
@@ -183,7 +183,7 @@ export default function CampaignsPage() {
                     </div>
                 ) : (
                     /* Campaigns Table */
-                    <CampaignsTable campaigns={tableData} />
+                    <CampaignsTable campaigns={tableData} onRefresh={fetchCampaigns} />
                 )}
             </div>
         </div>
