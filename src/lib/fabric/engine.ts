@@ -69,8 +69,17 @@ async function loadImageToCanvas(url: string, options: Partial<fabric.ImageProps
                 }
             }
             
-            const response = await fetch(fetchUrl);
+            // Add browser-like headers to bypass CDN restrictions (403 errors)
+            const response = await fetch(fetchUrl, {
+                headers: {
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                    'Accept': 'image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8',
+                    'Accept-Language': 'en-US,en;q=0.9',
+                    'Referer': 'https://www.midjourney.com/',
+                },
+            });
             if (!response.ok) {
+                console.warn(`[Engine] Image fetch failed (${response.status}): ${fetchUrl.substring(0, 80)}`);
                 throw new Error(`Failed to fetch image: ${response.status}`);
             }
             const arrayBuffer = await response.arrayBuffer();
