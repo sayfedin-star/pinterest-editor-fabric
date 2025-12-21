@@ -6,7 +6,6 @@ const log = (...args: unknown[]) => DEBUG && console.log('[HybridController]', .
 
 import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { Play, RotateCcw, RefreshCw, Server, Monitor } from 'lucide-react';
-import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import { throttle } from 'lodash';
 // fabric is used within the pool, not directly here
@@ -15,6 +14,7 @@ import { renderTemplate, exportToBlob, FieldMapping } from '@/lib/fabric/engine'
 import { Element, CanvasSize } from '@/types/editor';
 import { PinCardData } from './PinCard';
 import { getCanvasPool } from '@/lib/canvas/CanvasPool';
+import { getImageCache, extractImageUrls } from '@/lib/canvas/ImagePreloadCache';
 import { EnhancedProgressTracker } from './EnhancedProgressTracker';
 import { calculateProgressMetrics, formatDuration } from '@/hooks/useProgressMetrics';
 
@@ -128,6 +128,27 @@ export function GenerationController({
     });
     const [isPausing, setIsPausing] = useState(false);
     const [activeMode, setActiveMode] = useState<'client' | 'server' | null>(null);
+    
+    // Render mode selection with localStorage persistence (defaults to 'server' for bulk)
+    const [renderMode, setRenderModeState] = useState<'client' | 'server'>('server');
+    
+    // Load renderMode from localStorage on mount
+    useEffect(() => {
+        if (typeof window !== 'undefined') {
+            const saved = localStorage.getItem('pinGeneratorRenderMode');
+            if (saved === 'client' || saved === 'server') {
+                setRenderModeState(saved);
+            }
+        }
+    }, []);
+    
+    // Save renderMode to localStorage when changed
+    const setRenderMode = (mode: 'client' | 'server') => {
+        setRenderModeState(mode);
+        if (typeof window !== 'undefined') {
+            localStorage.setItem('pinGeneratorRenderMode', mode);
+        }
+    };
 
     // Generation resume store integration
     const { state: savedState, canResume, save: saveProgress, clear: clearProgress, isStale } = useCampaignGeneration(campaignId);
@@ -135,10 +156,10 @@ export function GenerationController({
     // Refs
     const shouldPauseRef = useRef(false);
     const isMountedRef = useRef(true);
-    const activeUploadsRef = useRef<Set<Promise<void>>>(new Set());
     
     // Canvas pool for reuse (Phase 2.3 optimization)
-    const canvasPoolRef = useRef(getCanvasPool({ maxSize: 5 }));
+    // Increased to 12 to support batch rendering of 10 pins + buffer
+    const canvasPoolRef = useRef(getCanvasPool({ maxSize: 12 }));
     
     // Timing refs for ETA calculation
     const startTimeRef = useRef<number | null>(null);
@@ -205,22 +226,18 @@ export function GenerationController({
                 fieldMapping as FieldMapping
             );
 
-            // Export to blob
+            // Export to blob - OPTIMIZED: Use JPEG directly (faster, smaller)
+            // JPEG 0.9 is visually equivalent to PNG but 5-10x smaller
             const multiplier = QUALITY_MAP[settings.quality];
-            // Fix Vercel 413: Check size and optimize
-            // First try PNG
-            let blob = await exportToBlob(canvas, { multiplier, format: 'png' });
-            
-            // If > 4MB (Vercel limit is 4.5MB), switching to JPEG 0.9 usually reduces size by 10x
-            if (blob.size > 4 * 1024 * 1024) {
-                console.log(`[Render] Blob size ${(blob.size / 1024 / 1024).toFixed(2)}MB exceeds 4MB limit. Optimizing as JPEG 0.9...`);
-                blob = await exportToBlob(canvas, { multiplier, format: 'jpeg', quality: 0.9 });
-                console.log(`[Render] Optimized size: ${(blob.size / 1024 / 1024).toFixed(2)}MB`);
-            }
+            const blob = await exportToBlob(canvas, { 
+                multiplier, 
+                format: 'jpeg', 
+                quality: 0.9 
+            });
 
             return {
                 blob,
-                fileName: `pin-${rowIndex + 1}.${blob.type === 'image/jpeg' ? 'jpg' : 'png'}`,
+                fileName: `pin-${rowIndex + 1}.jpg`,
                 rowIndex,
             };
         } finally {
@@ -270,8 +287,9 @@ export function GenerationController({
     }, [templateElements, canvasSize, backgroundColor, fieldMapping, settings.quality]);
 
     // ============================================
-    // Upload Single Pin
+    // Upload Single Pin (LEGACY - kept for fallback, not used in batch mode)
     // ============================================
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const uploadSinglePin = useCallback(async (pin: { blob: Blob; fileName: string; rowIndex: number }) => {
         const formData = new FormData();
         formData.append('file', pin.blob, pin.fileName);
@@ -335,7 +353,7 @@ export function GenerationController({
     }, [campaignId, userId, csvData]);
 
     // ============================================
-    // Start Generation (Hybrid Logic)
+    // Start Generation (BATCH Processing - 10x Faster)
     // ============================================
     const startGeneration = useCallback(async (startIndex: number = 0) => {
         if (status === 'processing') return;
@@ -356,131 +374,342 @@ export function GenerationController({
             pausedAtRef.current = null;
         }
 
-        // Determine render mode
-        // CHANGED: Default to 'client' even in auto mode for reliability
-        // Server mode was causing 500 errors on large batches
-        const mode = settings.renderMode === 'server' ? 'server' : 'client';
+        // Determine render mode from user selection (not settings)
+        setActiveMode(renderMode);
+        log(`Starting BATCH generation in ${renderMode} mode from index ${startIndex}`);
 
-        setActiveMode(mode);
-        log(`Starting generation in ${mode} mode from index ${startIndex}`);
+        // BATCH_SIZE: Number of pins to render and upload together
+        const BATCH_SIZE = 10;
 
-        // Pre-warm canvas pool for better performance (Phase 2.3)
-        canvasPoolRef.current.prewarm(3, canvasSize.width, canvasSize.height);
+        // Pre-warm canvas pool for batch processing
+        canvasPoolRef.current.prewarm(Math.min(BATCH_SIZE, 10), canvasSize.width, canvasSize.height);
+
+        // ============================================
+        // FIX #4: Preload ALL unique images before rendering
+        // This eliminates repeated CDN fetches during batch processing
+        // IMPORTANT: Run on EVERY start, not just startIndex === 0 (handles resume)
+        // ============================================
+        const imageCache = getImageCache();
+        
+        // Only preload if cache is empty (first run or after clear)
+        if (imageCache.getStats().cached === 0) {
+            console.log('[ImageCache] Starting image preload...');
+            const preloadStartTime = Date.now();
+            
+            // Extract all unique image URLs from template and CSV data
+            const imageUrls = extractImageUrls(
+                templateElements,
+                csvData,
+                fieldMapping
+            );
+            
+            if (imageUrls.length > 0) {
+                console.log(`[ImageCache] Found ${imageUrls.length} unique images to preload`);
+                await imageCache.preloadAll(imageUrls);
+                const stats = imageCache.getStats();
+                console.log(`[ImageCache] Preload completed in ${Date.now() - preloadStartTime}ms`, stats);
+            } else {
+                console.warn('[ImageCache] No image URLs found to preload!');
+            }
+        } else {
+            console.log('[ImageCache] Using existing cache with', imageCache.getStats().cached, 'images');
+        }
 
         const errors: Array<{ rowIndex: number; error: string }> = [];
         let current = startIndex;
 
         try {
-            // REDUCED: Concurrency from 5 to 3 to prevent memory pressure and slowdown
-            const CONCURRENCY_LIMIT = 3;
-            const DELAY_BETWEEN_RENDERS_MS = 100; // Add delay to prevent overwhelming the browser
-
+            // Process pins in batches
             while (current < csvData.length && !shouldPauseRef.current) {
                 if (!isMountedRef.current) return;
 
-                const rowData = csvData[current];
-                const rowIndex = current;
+                const batchStart = current;
+                const batchEnd = Math.min(current + BATCH_SIZE, csvData.length);
+                const batchSize = batchEnd - batchStart;
+                const batchStartTime = Date.now();
 
-                try {
-                    let pin: { blob: Blob; fileName: string; rowIndex: number };
+                log(`[Batch] Rendering pins ${batchStart}-${batchEnd - 1} (${batchSize} pins)`);
 
-                    if (mode === 'server') {
-                        try {
-                            // Try server-side rendering first
-                            pin = await renderPinServer(rowData, rowIndex);
-                        } catch (serverError) {
-                            // SMART FALLBACK: If server fails, use client-side rendering
-                            log(`Server failed for row ${rowIndex}, falling back to client:`, serverError);
-                            pin = await renderPinClient(rowData, rowIndex);
-                        }
-                    } else {
-                        // Client-side rendering using Fabric
-                        pin = await renderPinClient(rowData, rowIndex);
-                    }
+                // ============================================
+                // Step 1: Render pins - SERVER or CLIENT mode
+                // ============================================
+                let renderResults: Array<{
+                    success: boolean;
+                    pinNumber: number;
+                    blob?: Blob;
+                    fileName?: string;
+                    url?: string;
+                    error?: string;
+                    rowData: Record<string, string>;
+                }> = [];
 
-                    // Create upload promise
-                    const uploadPromise = uploadSinglePin(pin).then((uploadResult) => {
-                        activeUploadsRef.current.delete(uploadPromise);
-
-                        if (!isMountedRef.current) return;
-
-                        if (uploadResult.pin) {
-                            onPinGenerated(uploadResult.pin);
-
-                            // Throttled save
-                            throttledSaveProgressRef.current({
+                if (renderMode === 'server') {
+                    // SERVER MODE: Send entire batch to /api/render-batch
+                    try {
+                        console.log(`[Server Mode] Sending batch ${batchStart}-${batchEnd - 1} to server...`);
+                        
+                        const response = await fetch('/api/render-batch', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
                                 campaignId,
-                                lastCompletedIndex: uploadResult.pin.rowIndex,
-                                totalPins: csvData.length,
-                                status: 'processing'
+                                elements: templateElements,
+                                canvasSize,
+                                backgroundColor,
+                                fieldMapping,
+                                csvRows: csvData.slice(batchStart, batchEnd),
+                                startIndex: batchStart,
+                            }),
+                        });
+
+                        if (!response.ok) {
+                            throw new Error(`Server returned ${response.status}`);
+                        }
+
+                        const result = await response.json();
+                        
+                        if (!result.success) {
+                            throw new Error(result.error || 'Server rendering failed');
+                        }
+
+                        console.log(`[Server Mode] Batch completed:`, result.stats);
+
+                        // Convert server results to renderResults format
+                        renderResults = result.results.map((r: { index: number; success: boolean; url?: string; error?: string }) => ({
+                            success: r.success,
+                            pinNumber: r.index,
+                            url: r.url,
+                            error: r.error,
+                            rowData: csvData[r.index],
+                        }));
+                    } catch (serverError) {
+                        console.error(`[Server Mode] Batch failed, falling back to client:`, serverError);
+                        toast.error('Server rendering failed, falling back to client...');
+                        
+                        // Fall back to client rendering for this batch
+                        const clientResults = await Promise.all(
+                            csvData.slice(batchStart, batchEnd).map(async (rowData, i) => {
+                                const rowIndex = batchStart + i;
+                                try {
+                                    const pin = await renderPinClient(rowData, rowIndex);
+                                    return { success: true, pinNumber: rowIndex, blob: pin.blob, fileName: pin.fileName, rowData };
+                                } catch (error) {
+                                    return { success: false, pinNumber: rowIndex, error: String(error), rowData };
+                                }
+                            })
+                        );
+                        renderResults = clientResults;
+                    }
+                } else {
+                    // CLIENT MODE: Render all pins in parallel
+                    const renderPromises = csvData.slice(batchStart, batchEnd).map(async (rowData, i) => {
+                        const rowIndex = batchStart + i;
+                        try {
+                            const pin = await renderPinClient(rowData, rowIndex);
+                            return {
+                                success: true,
+                                pinNumber: rowIndex,
+                                blob: pin.blob,
+                                fileName: pin.fileName,
+                                rowData,
+                            };
+                        } catch (error) {
+                            console.error(`[Batch] Failed to render pin ${rowIndex}:`, error);
+                            const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+                            errors.push({ rowIndex, error: errorMessage });
+                            return {
+                                success: false,
+                                pinNumber: rowIndex,
+                                error: errorMessage,
+                                rowData,
+                            };
+                        }
+                    });
+                    renderResults = await Promise.all(renderPromises);
+                }
+
+                if (!isMountedRef.current) return;
+                if (shouldPauseRef.current) break;
+
+                // ============================================
+                // Step 2: Handle results based on mode
+                // - Server mode: Results already have URLs (skip upload, just save to DB)  
+                // - Client mode: Results have blobs (need upload, then save to DB)
+                // ============================================
+                
+                // Separate server results (already have URLs) from client results (need upload)
+                const serverResults = renderResults.filter(r => r.success && r.url);
+                const clientRenders = renderResults.filter(r => r.success && r.blob);
+                
+                // Handle server results - already uploaded, just save to DB
+                if (serverResults.length > 0) {
+                    const dbPromises = serverResults.map(async (result) => {
+                        try {
+                            await fetch('/api/generated-pins', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                credentials: 'include',
+                                body: JSON.stringify({
+                                    campaign_id: campaignId,
+                                    user_id: userId,
+                                    image_url: result.url,
+                                    data_row: result.rowData,
+                                    status: 'completed',
+                                }),
+                            });
+                            onPinGenerated({
+                                id: `${campaignId}-${result.pinNumber}`,
+                                rowIndex: result.pinNumber,
+                                imageUrl: result.url!,
+                                status: 'completed',
+                                csvData: result.rowData,
+                            });
+                        } catch (dbError) {
+                            console.error(`[Server Mode] DB save failed for pin ${result.pinNumber}:`, dbError);
+                        }
+                    });
+                    await Promise.all(dbPromises);
+                }
+
+                // Handle client results - need to upload first
+                const successfulRenders = clientRenders;
+
+                if (successfulRenders.length > 0) {
+                    // Upload all pins in parallel using FormData (avoids slow base64 conversion)
+                    const uploadPromises = successfulRenders.map(async (render) => {
+                        const formData = new FormData();
+                        formData.append('file', render.blob!, render.fileName);
+                        formData.append('campaign_id', campaignId);
+                        formData.append('row_index', render.pinNumber.toString());
+
+                        try {
+                            const uploadResponse = await fetch('/api/upload-pin', {
+                                method: 'POST',
+                                body: formData,
+                            });
+                            const uploadResult = await uploadResponse.json();
+                            return {
+                                pinNumber: render.pinNumber,
+                                success: !!uploadResult.url,
+                                url: uploadResult.url,
+                                error: uploadResult.error,
+                            };
+                        } catch (error) {
+                            return {
+                                pinNumber: render.pinNumber,
+                                success: false,
+                                error: error instanceof Error ? error.message : 'Upload failed',
+                            };
+                        }
+                    });
+
+                    const uploadResults = await Promise.all(uploadPromises);
+
+                    // Process each upload result - save to DB in parallel
+                    const dbSavePromises = uploadResults.map(async (uploadResult) => {
+                        if (uploadResult.success && uploadResult.url) {
+                            // Save to database
+                            try {
+                                await fetch('/api/generated-pins', {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    credentials: 'include',
+                                    body: JSON.stringify({
+                                        campaign_id: campaignId,
+                                        user_id: userId,
+                                        image_url: uploadResult.url,
+                                        data_row: csvData[uploadResult.pinNumber],
+                                        status: 'completed',
+                                    }),
+                                });
+
+                                // Report successful pin to UI
+                                onPinGenerated({
+                                    id: `${campaignId}-${uploadResult.pinNumber}`,
+                                    rowIndex: uploadResult.pinNumber,
+                                    imageUrl: uploadResult.url,
+                                    status: 'completed',
+                                    csvData: csvData[uploadResult.pinNumber],
+                                });
+                            } catch (dbError) {
+                                console.error(`[Batch] Failed to save pin ${uploadResult.pinNumber} to DB:`, dbError);
+                            }
+                        } else {
+                            // Upload failed for this pin
+                            errors.push({ rowIndex: uploadResult.pinNumber, error: uploadResult.error || 'Upload failed' });
+                            onPinGenerated({
+                                id: `${campaignId}-${uploadResult.pinNumber}`,
+                                rowIndex: uploadResult.pinNumber,
+                                imageUrl: '',
+                                status: 'failed',
+                                errorMessage: uploadResult.error || 'Upload failed',
+                                csvData: csvData[uploadResult.pinNumber],
                             });
                         }
                     });
 
-                    activeUploadsRef.current.add(uploadPromise);
+                    await Promise.all(dbSavePromises);
+                }
 
-                    // Concurrency control
-                    if (activeUploadsRef.current.size >= CONCURRENCY_LIMIT) {
-                        await Promise.race(activeUploadsRef.current);
-                    }
-
-                    // Add small delay between renders to prevent memory pressure
-                    if (DELAY_BETWEEN_RENDERS_MS > 0) {
-                        await new Promise(resolve => setTimeout(resolve, DELAY_BETWEEN_RENDERS_MS));
-                    }
-
-                } catch (error) {
-                    // FAIL-SAFE: Log error, mark pin as failed, and CONTINUE to next pin
-                    console.error(`[Generation] Failed to render pin ${rowIndex}:`, error);
-                    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-                    errors.push({ rowIndex, error: errorMessage });
-
-                    // CRITICAL: Persist failed pin to DATABASE (not just UI state)
-                    // This ensures the failure record survives page refresh/pause
+                // ============================================
+                // Step 3: Handle failed renders
+                // ============================================
+                const failedRenders = renderResults.filter(r => !r.success);
+                for (const failed of failedRenders) {
+                    // Persist failed pin to database
                     try {
                         await fetch('/api/generated-pins', {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
-                            credentials: 'include', // Required for cookie-based auth
+                            credentials: 'include',
                             body: JSON.stringify({
                                 campaign_id: campaignId,
                                 user_id: userId,
-                                image_url: '', // Empty for failed pins
-                                data_row: csvData[rowIndex],
+                                image_url: '',
+                                data_row: csvData[failed.pinNumber],
                                 status: 'failed',
-                                error_message: errorMessage,
+                                error_message: failed.error,
                             }),
                         });
-                        console.log(`[Generation] Persisted failed pin ${rowIndex} to database`);
                     } catch (persistError) {
-                        console.error(`[Generation] Failed to persist error state for pin ${rowIndex}:`, persistError);
+                        console.error(`[Batch] Failed to persist error for pin ${failed.pinNumber}:`, persistError);
                     }
 
-                    // Report failed pin to UI immediately so it appears in the list
+                    // Report failed pin to UI
                     onPinGenerated({
-                        id: `${campaignId}-${rowIndex}`,
-                        rowIndex,
+                        id: `${campaignId}-${failed.pinNumber}`,
+                        rowIndex: failed.pinNumber,
                         imageUrl: '',
                         status: 'failed',
-                        errorMessage,
-                        csvData: csvData[rowIndex],
+                        errorMessage: failed.error,
+                        csvData: csvData[failed.pinNumber],
                     });
-
-                    // Save progress even for failures
-                    throttledSaveProgressRef.current({
-                        campaignId,
-                        lastCompletedIndex: rowIndex,
-                        totalPins: csvData.length,
-                        status: 'processing'
-                    });
-
-                    // Loop continues to next pin - no crash
                 }
 
-                current++;
+                // ============================================
+                // Step 4: Update progress after batch
+                // ============================================
+                current = batchEnd;
+                const batchDuration = Date.now() - batchStartTime;
+                log(`[Batch] Completed ${batchSize} pins in ${batchDuration}ms (${(batchSize / batchDuration * 1000).toFixed(1)} pins/sec)`);
+                
+                // FIX #7: Memory logging for monitoring (Chrome only)
+                if (typeof performance !== 'undefined' && 'memory' in performance) {
+                    const memory = (performance as { memory: { usedJSHeapSize: number } }).memory;
+                    log(`[Batch ${Math.floor(batchEnd / BATCH_SIZE)}] Memory: ${Math.round(memory.usedJSHeapSize / 1024 / 1024)}MB`);
+                }
+
+                // Save progress
+                throttledSaveProgressRef.current({
+                    campaignId,
+                    lastCompletedIndex: batchEnd - 1,
+                    totalPins: csvData.length,
+                    status: 'processing'
+                });
 
                 // Calculate timing metrics for ETA
-                const currentPinTitle = rowData.title || rowData.name || rowData.product_name || `Row ${rowIndex + 1}`;
+                const lastRowData = csvData[batchEnd - 1] || {};
+                const currentPinTitle = lastRowData.title || lastRowData.name || lastRowData.product_name || `Row ${batchEnd}`;
                 const metrics = calculateProgressMetrics({
                     completed: current,
                     total: csvData.length,
@@ -497,7 +726,6 @@ export function GenerationController({
                     percentage: Math.round((current / csvData.length) * 100),
                     status: 'generating',
                     errors,
-                    // Timing metrics
                     startTime: startTimeRef.current,
                     elapsedTime: metrics.elapsedTimeMs,
                     pausedDuration: totalPausedDurationRef.current,
@@ -508,16 +736,21 @@ export function GenerationController({
                 };
                 setProgress(newProgress);
                 onProgressUpdate(newProgress);
-            }
 
-            // Wait for remaining uploads
-            await Promise.all(activeUploadsRef.current);
+                // Memory monitoring - log every batch (only in development)
+                if (DEBUG) {
+                    const memoryInfo = (performance as unknown as { memory?: { usedJSHeapSize: number } }).memory;
+                    if (memoryInfo) {
+                        const memoryMB = memoryInfo.usedJSHeapSize / 1024 / 1024;
+                        log(`[Batch ${Math.floor(batchStart / BATCH_SIZE)}] Memory: ${memoryMB.toFixed(0)}MB`);
+                    }
+                }
+            }
 
             if (!isMountedRef.current) return;
 
             // Final status
             if (shouldPauseRef.current) {
-                // Record pause timestamp for duration calculation on resume
                 pausedAtRef.current = Date.now();
                 setStatus('paused');
                 onStatusChange('paused');
@@ -547,8 +780,8 @@ export function GenerationController({
         }
     }, [
         status, templateElements, canvasSize, backgroundColor, csvData,
-        fieldMapping, settings, campaignId, onPinGenerated, onProgressUpdate,
-        onStatusChange, clearProgress, renderPinClient, renderPinServer, uploadSinglePin
+        fieldMapping, campaignId, userId, onPinGenerated, onProgressUpdate,
+        onStatusChange, clearProgress, renderPinClient, renderMode
     ]);
 
     // Pause generation
@@ -671,6 +904,67 @@ export function GenerationController({
                         </button>
                     </div>
                 )}
+
+            {/* Render Mode Selector - Only show when not processing */}
+            {(status === 'pending' || status === 'failed' || status === 'completed' || status === 'paused') && (
+                <div className="p-4 bg-gray-50 rounded-lg border">
+                    <div className="text-sm font-medium mb-3 text-gray-700">Render Mode</div>
+                    <div className="space-y-2">
+                        {/* Client Mode Option */}
+                        <label 
+                            className={`flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition-colors
+                                ${renderMode === 'client' 
+                                    ? 'border-blue-300 bg-blue-50' 
+                                    : 'border-gray-200 hover:bg-gray-100'}`}
+                        >
+                            <input 
+                                type="radio" 
+                                name="renderMode"
+                                checked={renderMode === 'client'} 
+                                onChange={() => setRenderMode('client')}
+                                className="mt-1"
+                            />
+                            <div className="flex-1">
+                                <div className="font-medium text-gray-900 flex items-center gap-2">
+                                    <Monitor className="w-4 h-4" />
+                                    Client-Side
+                                </div>
+                                <div className="text-xs text-gray-500 mt-0.5">
+                                    Fast preview for 1-10 pins. Runs in your browser.
+                                </div>
+                            </div>
+                        </label>
+                        
+                        {/* Server Mode Option (Recommended) */}
+                        <label 
+                            className={`flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition-colors
+                                ${renderMode === 'server' 
+                                    ? 'border-blue-300 bg-blue-50' 
+                                    : 'border-gray-200 hover:bg-gray-100'}`}
+                        >
+                            <input 
+                                type="radio" 
+                                name="renderMode"
+                                checked={renderMode === 'server'} 
+                                onChange={() => setRenderMode('server')}
+                                className="mt-1"
+                            />
+                            <div className="flex-1">
+                                <div className="font-medium text-gray-900 flex items-center gap-2">
+                                    <Server className="w-4 h-4" />
+                                    Server-Side
+                                    <span className="text-xs bg-green-500 text-white px-1.5 py-0.5 rounded font-normal">
+                                        Recommended
+                                    </span>
+                                </div>
+                                <div className="text-xs text-gray-500 mt-0.5">
+                                    10x faster for bulk generation (100+ pins). Uses Vercel functions.
+                                </div>
+                            </div>
+                        </label>
+                    </div>
+                </div>
+            )}
 
             {/* Action Buttons - Added relative/z-index to fix overlapping issues */}
             <div className="flex items-center gap-3 relative z-10">

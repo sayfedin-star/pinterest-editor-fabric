@@ -1,6 +1,7 @@
 import * as fabric from 'fabric';
 import { Element, TextElement, ImageElement, ShapeElement, FrameElement } from '@/types/editor';
 import { convertToFabricStyles } from '@/lib/text/characterStyles';
+import { getImageCache } from '@/lib/canvas/ImagePreloadCache';
 
 export interface RenderConfig {
     width: number;
@@ -34,15 +35,52 @@ async function loadImageToCanvas(url: string, options: Partial<fabric.ImageProps
         return img;
     };
 
-    // Node/Server Logic
+    // OPTIMIZATION: Check image cache first (for batch rendering)
+    if (isBrowser) {
+        const cache = getImageCache();
+        const cachedImage = cache.get(url);
+        if (cachedImage && cachedImage.complete && cachedImage.naturalWidth > 0) {
+            try {
+                // Create fabric image from cached HTMLImageElement
+                const img = new fabric.FabricImage(cachedImage, { ...options });
+                // Ensure the image is properly initialized
+                if (img && img.width && img.width > 0) {
+                    return img;
+                }
+            } catch (error) {
+                console.warn(`[Engine] Failed to create FabricImage from cache for ${url.substring(0, 60)}:`, error);
+                // Fall through to normal loading
+            }
+        }
+    }
+
+    // Node/Server Logic - fetch images directly (no CORS restrictions on server)
     if (!isBrowser) {
         try {
-            const response = await fetch(url);
+            // Handle proxy URLs on server - extract the original URL and fetch directly
+            // Server doesn't have CORS restrictions, so we can fetch external images directly
+            let fetchUrl = url;
+            if (url.startsWith('/api/proxy-image')) {
+                // Extract the original URL from the proxy URL
+                const urlParams = new URLSearchParams(url.split('?')[1] || '');
+                const originalUrl = urlParams.get('url');
+                if (originalUrl) {
+                    fetchUrl = decodeURIComponent(originalUrl);
+                }
+            }
+            
+            const response = await fetch(fetchUrl);
+            if (!response.ok) {
+                throw new Error(`Failed to fetch image: ${response.status}`);
+            }
             const arrayBuffer = await response.arrayBuffer();
             const base64 = Buffer.from(arrayBuffer).toString('base64');
             const dataUrl = `data:${response.headers.get('content-type') || 'image/png'};base64,${base64}`;
             return await tryLoad(dataUrl);
-        } catch { return createErrorPlaceholder(options.width as number, options.height as number); }
+        } catch (error) {
+            console.error(`[Engine] Server image load failed for ${url.substring(0, 60)}:`, error);
+            return createErrorPlaceholder(options.width as number, options.height as number);
+        }
     }
 
     // Browser Proxy Logic

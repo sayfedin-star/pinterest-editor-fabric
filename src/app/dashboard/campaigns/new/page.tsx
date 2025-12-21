@@ -2,7 +2,7 @@
 
 import React, { useEffect, useRef, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { X, Loader2, Check, ChevronRight } from 'lucide-react';
+import { X, Loader2, Check } from 'lucide-react';
 import { useAuth } from '@/lib/auth/AuthContext';
 import { CampaignWizardProvider, useCampaignWizard } from '@/lib/campaigns/CampaignWizardContext';
 import { getTemplate, TemplateListItem } from '@/lib/db/templates';

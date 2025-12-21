@@ -111,6 +111,7 @@ export function LeftSidebar() {
             <aside
                 className="w-[72px] bg-white/80 backdrop-blur-xl border-r border-white/40 flex flex-col h-full shadow-creative-sm z-30"
                 aria-label="Editor tools"
+                data-testid="left-sidebar"
             >
                 {/* Tools Section */}
                 <div className="flex-1 flex flex-col items-center py-6 gap-3">

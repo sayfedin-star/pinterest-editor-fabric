@@ -3,8 +3,7 @@ import {
     getTemplates,
     getTemplate,
     deleteTemplate,
-    duplicateTemplate,
-    TemplateListItem
+    duplicateTemplate
 } from '@/lib/db/templates';
 import { isSupabaseConfigured } from '@/lib/supabase';
 import { toast } from 'sonner';

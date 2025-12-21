@@ -21,6 +21,7 @@
 import { useEffect, useRef, useCallback, useState } from 'react';
 import { useTemplateStore } from '@/stores/templateStore';
 import { useEditorStore } from '@/stores/editorStore';
+import { useSettingsStore } from '@/stores/settingsStore';
 import { saveTemplate as saveTemplateToDb } from '@/lib/db/templates';
 import { isSupabaseConfigured, supabase } from '@/lib/supabase';
 
@@ -40,16 +41,21 @@ interface AutoSaveState {
     lastSavedAt: Date | null;
     isDirty: boolean;
     errorMessage: string | null;
+    /** Whether auto-save is enabled in settings */
+    autoSaveEnabled: boolean;
 }
-
-const DEFAULT_DEBOUNCE_MS = 30000; // 30 seconds
 
 export function useAutoSave(options: AutoSaveOptions = {}): AutoSaveState & {
     forceSave: () => Promise<void>;
 } {
+    // Read user settings (these take precedence over options)
+    const settingsEnabled = useSettingsStore((s) => s.autoSaveEnabled);
+    const settingsIntervalSec = useSettingsStore((s) => s.autoSaveInterval);
+
     const {
-        debounceMs = DEFAULT_DEBOUNCE_MS,
-        enabled = true,
+        // Settings store values override defaults, but options can still override
+        debounceMs = settingsIntervalSec * 1000,
+        enabled = settingsEnabled,
         onStatusChange,
     } = options;
 
@@ -59,11 +65,11 @@ export function useAutoSave(options: AutoSaveOptions = {}): AutoSaveState & {
     const [isDirty, setIsDirty] = useState(false);
     const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-    // Refs for tracking
     const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
     const lastStateRef = useRef<string>('');
     const retryCountRef = useRef(0);
     const isSavingRef = useRef(false); // Prevent concurrent saves
+    const saveCompletionTimeRef = useRef(0); // Timestamp of last successful save
     const maxRetries = 3;
 
     // Get state from templateStore (FIX: use templateStore, not editorStore)
@@ -84,16 +90,17 @@ export function useAutoSave(options: AutoSaveOptions = {}): AutoSaveState & {
         onStatusChange?.(newStatus);
     }, [onStatusChange]);
 
-    // Compute state hash for change detection
-    const computeStateHash = useCallback(() => {
+    // Compute content-only hash for change detection and race condition fix
+    // Excludes templateId which legitimately changes during save (undefined → savedId)
+    // Uses JSON.stringify directly to ensure consistent serialization matching what goes to DB
+    const computeContentHash = useCallback(() => {
         return JSON.stringify({
-            templateId,
             templateName,
-            elements: elements.map(e => ({ ...e })), // Shallow copy for comparison
+            elements, // Direct serialization ensures we catch exactly what changes (excluding undefined/funcs)
             canvasSize,
             backgroundColor,
         });
-    }, [templateId, templateName, elements, canvasSize, backgroundColor]);
+    }, [templateName, elements, canvasSize, backgroundColor]);
 
     // Perform the actual save
     const performSave = useCallback(async (): Promise<boolean> => {
@@ -131,6 +138,9 @@ export function useAutoSave(options: AutoSaveOptions = {}): AutoSaveState & {
 
         isSavingRef.current = true;
         updateStatus('saving');
+
+        // FIX: Capture CONTENT hash BEFORE save (excludes templateId which changes during save)
+        const preSaveContentHash = computeContentHash();
 
         try {
             // FIX: If new template has same name as existing, SKIP auto-save
@@ -174,10 +184,29 @@ export function useAutoSave(options: AutoSaveOptions = {}): AutoSaveState & {
                 }
 
                 setLastSavedAt(new Date());
-                setIsDirty(false);
                 setErrorMessage(null);
                 retryCountRef.current = 0;
-                lastStateRef.current = computeStateHash();
+                
+                // FIX: Check if CONTENT changed DURING save (race condition fix)
+                // Use content hash (not state hash) because templateId legitimately changes during save
+                const postSaveContentHash = computeContentHash();
+                if (postSaveContentHash !== preSaveContentHash) {
+                    // Content changed during save - still dirty, need another save
+                    setIsDirty(true);
+                    lastStateRef.current = postSaveContentHash; // Mark what we just processed
+                    updateStatus('pending');
+                    // Schedule another save for the changes made during this save
+                    if (saveTimeoutRef.current) {
+                        clearTimeout(saveTimeoutRef.current);
+                    }
+                    saveTimeoutRef.current = setTimeout(() => performSave(), debounceMs);
+                    return true; // This save succeeded, but more work to do
+                }
+                
+                // No concurrent changes - we're clean
+                lastStateRef.current = postSaveContentHash;
+                setIsDirty(false);
+                saveCompletionTimeRef.current = Date.now(); // Start grace period
                 updateStatus('saved');
                 return true;
             } else {
@@ -200,8 +229,9 @@ export function useAutoSave(options: AutoSaveOptions = {}): AutoSaveState & {
         backgroundColor,
         setTemplateId,
         setIsNewTemplate,
-        computeStateHash,
+        computeContentHash,
         updateStatus,
+        debounceMs,
     ]);
 
     // Force save (public API)
@@ -239,8 +269,15 @@ export function useAutoSave(options: AutoSaveOptions = {}): AutoSaveState & {
     }, [enabled, performSave, debounceMs, updateStatus]);
 
     // Detect changes and trigger auto-save
+    // FIX: Use content hash (excludes templateId) to avoid false positives when templateId changes after save
     useEffect(() => {
-        const currentHash = computeStateHash();
+        // Skip detection for a grace period (1s) after save to prevent false positives
+        // from the cascade of re-renders that happen when store IDs update
+        if (Date.now() - saveCompletionTimeRef.current < 1000) {
+            return;
+        }
+
+        const currentHash = computeContentHash();
 
         // Skip if no change
         if (currentHash === lastStateRef.current) {
@@ -256,12 +293,18 @@ export function useAutoSave(options: AutoSaveOptions = {}): AutoSaveState & {
         // Mark as dirty and schedule save
         setIsDirty(true);
         scheduleAutoSave();
-    }, [computeStateHash, scheduleAutoSave]);
+    }, [computeContentHash, scheduleAutoSave]);
 
-    // Warn on unload when dirty
+    // Warn on unload when there are actual unsaved changes
+    // FIX: Check actual hash difference instead of trusting isDirty flag
+    // This is more reliable because it checks content at the moment of navigation
     useEffect(() => {
         const handleBeforeUnload = (e: BeforeUnloadEvent) => {
-            if (isDirty) {
+            // Only warn if content has actually changed from last saved state
+            const currentHash = computeContentHash();
+            const hasRealChanges = lastStateRef.current !== '' && currentHash !== lastStateRef.current;
+            
+            if (hasRealChanges) {
                 e.preventDefault();
                 e.returnValue = 'You have unsaved changes. Are you sure you want to leave?';
                 return e.returnValue;
@@ -270,7 +313,7 @@ export function useAutoSave(options: AutoSaveOptions = {}): AutoSaveState & {
 
         window.addEventListener('beforeunload', handleBeforeUnload);
         return () => window.removeEventListener('beforeunload', handleBeforeUnload);
-    }, [isDirty]);
+    }, [computeContentHash]);
 
     // Cleanup on unmount
     useEffect(() => {
@@ -287,6 +330,7 @@ export function useAutoSave(options: AutoSaveOptions = {}): AutoSaveState & {
         isDirty,
         errorMessage,
         forceSave,
+        autoSaveEnabled: enabled,
     };
 }
 

@@ -16,9 +16,7 @@ import {
     Link2,
     Type,
     Image,
-    Layers,
-    Trash2,
-    Copy
+    Layers
 } from 'lucide-react';
 import { useEditorStore } from '@/stores/editorStore';
 import { ImageElement, TextElement } from '@/types/editor';
@@ -32,8 +30,6 @@ export function LayersList() {
     // All state from consolidated editorStore
     const elements = useEditorStore((s) => s.elements);
     const updateElement = useEditorStore((s) => s.updateElement);
-    const deleteElement = useEditorStore((s) => s.deleteElement);
-    const duplicateElement = useEditorStore((s) => s.duplicateElement);
 
     // Selection from editorStore
     const selectedIds = useEditorStore((s) => s.selectedIds);

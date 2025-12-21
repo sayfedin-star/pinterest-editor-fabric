@@ -7,7 +7,6 @@ import { Element, ImageElement, TextElement } from '@/types/editor';
 import { CanvasManager, CanvasConfig } from '@/lib/canvas/CanvasManager';
 import { useSynchronizationBridge } from '@/hooks/useSynchronizationBridge';
 import { detectElementChange } from '@/lib/canvas/elementChangeDetection';
-import { ContextMenu } from './ContextMenu';
 import { DimensionBadge } from './DimensionBadge';
 import { ElementToolbar } from './ElementToolbar';
 import { RichTextEditor } from './RichTextEditor';
@@ -16,8 +15,6 @@ interface EditorCanvasProps {
     containerWidth: number;
     containerHeight: number;
 }
-
-const CANVAS_PADDING = 100;
 
 /**
  * EditorCanvas.v2 - New Architecture using CanvasManager
@@ -39,6 +36,7 @@ export function EditorCanvasV2({ containerWidth, containerHeight }: EditorCanvas
 
     // Local state
     const [isCanvasReady, setIsCanvasReady] = useState(false);
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const [contextMenu, setContextMenu] = useState<{ x: number; y: number; isOpen: boolean }>({
         x: 0,
         y: 0,
@@ -172,7 +170,7 @@ export function EditorCanvasV2({ containerWidth, containerHeight }: EditorCanvas
         setIsCanvasReady(true);
 
         // Register canvas with shared store for thumbnail generation
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+         
         const { useFabricRefStore } = require('@/hooks/useStageRef');
         const canvasRef = { current: (manager as any).canvas };
         useFabricRefStore.getState().setFabricRef(canvasRef);
@@ -477,28 +475,6 @@ export function EditorCanvasV2({ containerWidth, containerHeight }: EditorCanvas
                 isOpen: true
             });
         }
-    };
-
-    const handleCloseContextMenu = () => {
-        setContextMenu(prev => ({ ...prev, isOpen: false }));
-    };
-
-    /**
-     * Handle toolbar actions
-     */
-    const handleDuplicate = () => {
-        if (selectedIds.length === 0) return;
-        duplicateElement(selectedIds[0]);
-    };
-
-    const handleDelete = () => {
-        if (selectedIds.length === 0) return;
-        deleteElement(selectedIds[0]);
-    };
-
-    const handleToggleLock = () => {
-        if (!selectedElement) return;
-        updateElement(selectedElement.id, { locked: !selectedElement.locked });
     };
 
     // Layout Constants

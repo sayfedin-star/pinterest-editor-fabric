@@ -11,6 +11,8 @@ interface AutoSaveIndicatorProps {
     isDirty: boolean;
     errorMessage?: string | null;
     className?: string;
+    /** Whether auto-save is enabled (from settings) */
+    autoSaveEnabled?: boolean;
 }
 
 /**
@@ -23,8 +25,20 @@ export function AutoSaveIndicator({
     isDirty,
     errorMessage,
     className,
+    autoSaveEnabled = true,
 }: AutoSaveIndicatorProps) {
     const getStatusConfig = () => {
+        // Show disabled state when auto-save is off
+        if (!autoSaveEnabled) {
+            return {
+                icon: CloudOff,
+                text: 'Auto-save off',
+                color: 'text-gray-400',
+                bgColor: 'bg-gray-100',
+                animate: false,
+            };
+        }
+
         switch (status) {
             case 'idle':
                 return {

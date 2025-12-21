@@ -2,8 +2,6 @@
 
 import React from 'react';
 import {
-    Undo2,
-    Redo2,
     Bold,
     Italic,
     Underline,
@@ -16,7 +14,6 @@ import { useEditorStore } from '@/stores/editorStore';
 import { cn } from '@/lib/utils';
 import { TextElement as TextElementType } from '@/types/editor';
 import { FontPicker } from '@/components/panels/FontPicker';
-import { SnappingToolbarButton } from '@/components/editor/SnappingToolbarButton';
 
 
 
@@ -25,12 +22,6 @@ interface ToolbarProps {
 }
 
 export function Toolbar({ onOpenFontLibrary }: ToolbarProps) {
-    // Element creation from editorStore (complex with history)
-    const addText = useEditorStore((s) => s.addText);
-    const addImage = useEditorStore((s) => s.addImage);
-    const addShape = useEditorStore((s) => s.addShape);
-    const [showShapeMenu, setShowShapeMenu] = React.useState(false);
-
     // Selection from editorStore (consolidated)
     const selectedIds = useEditorStore((s) => s.selectedIds);
     const selectedId = selectedIds[0] || null;
@@ -39,18 +30,8 @@ export function Toolbar({ onOpenFontLibrary }: ToolbarProps) {
     const elements = useEditorStore((s) => s.elements);
     const updateElement = useEditorStore((s) => s.updateElement);
 
-    // History - use editorStore for both state AND actions (they must match!)
-    const canUndo = useEditorStore((s) => s.canUndo());
-    const canRedo = useEditorStore((s) => s.canRedo());
-    const undo = useEditorStore((s) => s.undo);
-    const redo = useEditorStore((s) => s.redo);
+    // History
     const pushHistory = useEditorStore((s) => s.pushHistory);
-
-
-
-    // Keep snap settings in editorStore for now
-    const snapToGrid = useEditorStore((s) => s.snapToGrid);
-    const setSnapToGrid = useEditorStore((s) => s.setSnapToGrid);
 
     const selectedElement = elements.find((el) => el.id === selectedId);
     const isTextSelected = selectedElement?.type === 'text';

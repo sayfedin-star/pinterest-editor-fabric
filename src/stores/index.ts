@@ -35,6 +35,7 @@ export { useTemplateMetadataStore } from './templateMetadataStore';
 export { useSnappingSettingsStore } from './snappingSettingsStore';
 export { useToastStore } from './toastStore';
 export { useGenerationStore } from './generationStore';
+export { useSettingsStore } from './settingsStore';
 
 // Re-export types
 export type { TemplateState, TemplateActions, TemplateListItem } from './templateStore';
@@ -42,3 +43,4 @@ export type { AlignmentState, AlignmentActions, Alignment, DistributeDirection }
 export type { CategoryState, CategoryActions } from './categoryStore';
 export type { TagState, TagActions } from './tagStore';
 export type { TemplateMetadataState, TemplateMetadataActions } from './templateMetadataStore';
+export type { SettingsState, SettingsActions } from './settingsStore';

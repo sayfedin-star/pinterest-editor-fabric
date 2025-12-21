@@ -1,8 +1,7 @@
 'use client';
 
 import React, { useState, useRef } from 'react';
-import { useRouter } from 'next/navigation';
-import { Save, Upload } from 'lucide-react';
+import { Save, Upload, Settings } from 'lucide-react';
 import { useTemplateStore } from '@/stores/templateStore';
 import { useEditorStore } from '@/stores/editorStore';
 import { useStageRef } from '@/hooks/useStageRef';
@@ -37,19 +36,15 @@ export function Header() {
     const stageRef = useStageRef();
     const stage = stageRef?.current;
 
-    const router = useRouter();
-    const { currentUser, signOut } = useAuth();
+    const { currentUser } = useAuth();
     const userId = currentUser?.id;
 
     const [isCanvaImportOpen, setIsCanvaImportOpen] = useState(false);
     const [nameError, setNameError] = useState(false);
     const nameInputRef = useRef<HTMLInputElement>(null);
 
-    // Auto-save hook (Finding #4)
-    const autoSave = useAutoSave({
-        debounceMs: 30000, // 30 seconds after last change
-        enabled: true,
-    });
+    // Auto-save hook - reads from settingsStore (no overrides, use defaults from store)
+    const autoSave = useAutoSave();
 
     const handleSave = async () => {
         if (!templateName.trim() || templateName === 'Untitled Template') {
@@ -161,11 +156,6 @@ export function Header() {
         }
     };
 
-    const handleLogout = async () => {
-        await signOut();
-        toast.success('Logged out successfully');
-        router.push('/login');
-    };
 
     return (
         <>
@@ -232,6 +222,7 @@ export function Header() {
                             lastSavedAt={autoSave.lastSavedAt}
                             isDirty={autoSave.isDirty}
                             errorMessage={autoSave.errorMessage}
+                            autoSaveEnabled={autoSave.autoSaveEnabled}
                         />
                     </div>
 
@@ -250,6 +241,15 @@ export function Header() {
                         <Save className="w-4 h-4" />
                         {isSaving ? 'Saving...' : 'Save Template'}
                     </button>
+
+                    {/* Settings */}
+                    <a
+                        href="/settings"
+                        className="w-9 h-9 rounded-full bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 flex items-center justify-center transition-colors"
+                        title="Settings"
+                    >
+                        <Settings className="w-4 h-4 text-gray-600 dark:text-gray-400" />
+                    </a>
 
                     {/* User Menu */}
                      <div className="pl-1">

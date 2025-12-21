@@ -85,9 +85,28 @@ export class CanvasPool {
     release(canvas: fabric.StaticCanvas): void {
         this.stats.released++;
 
-        // Reset canvas state
+        // CRITICAL: Dispose all objects to prevent memory leaks
+        // This must happen BEFORE clear() to properly release image memory
+        canvas.getObjects().forEach((obj) => {
+            // Dispose the object (releases internal resources)
+            obj.dispose();
+            
+            // For images, also clear the element reference
+            if (obj.type === 'image') {
+                const img = obj as fabric.Image;
+                // Clear image element to allow garbage collection
+                if ((img as unknown as { _element?: HTMLImageElement })._element) {
+                    (img as unknown as { _element?: HTMLImageElement })._element = undefined;
+                }
+            }
+        });
+
+        // Now clear the canvas (removes objects from array)
         canvas.clear();
+        
+        // Reset canvas state for reuse
         canvas.backgroundColor = '#ffffff';
+        canvas.setZoom(1);
         canvas.renderAll();
 
         if (this.pool.length < this.maxSize) {
