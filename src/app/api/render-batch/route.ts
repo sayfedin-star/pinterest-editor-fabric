@@ -1,8 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
-import * as fabric from 'fabric';
 import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
 import { v4 as uuidv4 } from 'uuid';
 import { Element } from '@/types/editor';
+
+// CRITICAL: Import polyfill FIRST - it auto-executes to setup DOM globals
+// Fabric.js 6.x requires document, window, Image globals to exist
+import '@/lib/fabric/server-polyfill';
+
+// Now safe to import fabric (polyfills are already in place)
+import * as fabric from 'fabric';
 import { renderTemplate, RenderConfig, FieldMapping } from '@/lib/fabric/engine';
 
 // Vercel Serverless Config - 60 seconds for batch processing
