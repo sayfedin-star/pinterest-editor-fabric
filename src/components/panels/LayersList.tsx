@@ -20,8 +20,6 @@ import {
     Trash2,
     Copy
 } from 'lucide-react';
-import { useElementsStore } from '@/stores/elementsStore';
-import { useSelectionStore } from '@/stores/selectionStore';
 import { useEditorStore } from '@/stores/editorStore';
 import { ImageElement, TextElement } from '@/types/editor';
 import { cn } from '@/lib/utils';
@@ -31,15 +29,15 @@ import { cn } from '@/lib/utils';
  * Used by both LayersPanel and PositionPanel (Layers tab)
  */
 export function LayersList() {
-    // Elements from elementsStore
-    const elements = useElementsStore((s) => s.elements);
-    const updateElement = useElementsStore((s) => s.updateElement);
-    const deleteElement = useElementsStore((s) => s.deleteElement);
-    const duplicateElement = useElementsStore((s) => s.duplicateElement);
+    // All state from consolidated editorStore
+    const elements = useEditorStore((s) => s.elements);
+    const updateElement = useEditorStore((s) => s.updateElement);
+    const deleteElement = useEditorStore((s) => s.deleteElement);
+    const duplicateElement = useEditorStore((s) => s.duplicateElement);
 
-    // Selection from selectionStore
-    const selectedIds = useSelectionStore((s) => s.selectedIds);
-    const selectElement = useSelectionStore((s) => s.selectElement);
+    // Selection from editorStore
+    const selectedIds = useEditorStore((s) => s.selectedIds);
+    const selectElement = useEditorStore((s) => s.selectElement);
     const selectedId = selectedIds[0] || null;
 
     // History from editorStore
@@ -97,7 +95,7 @@ export function LayersList() {
                                             selectedId === element.id
                                                 ? "bg-purple-50 border-l-2 border-l-purple-500"
                                                 : isCanvaBackground(element)
-                                                    ? "bg-gradient-to-r from-purple-50/50 to-cyan-50/50 border-l-2 border-l-purple-300"
+                                                    ? "bg-linear-to-r from-purple-50/50 to-cyan-50/50 border-l-2 border-l-purple-300"
                                                     : "bg-white border-l-2 border-l-transparent",
                                             snapshot.isDragging && "shadow-lg scale-[1.02] bg-purple-50"
                                         )}
@@ -110,7 +108,7 @@ export function LayersList() {
 
                                         {/* Icon */}
                                         <div
-                                            className="w-6 h-6 rounded flex items-center justify-center flex-shrink-0"
+                                            className="w-6 h-6 rounded flex items-center justify-center shrink-0"
                                             style={isCanvaBackground(element)
                                                 ? { background: 'linear-gradient(135deg, #8B3DFF, #00C4CC)' }
                                                 : { background: '#f3f4f6' }
@@ -133,7 +131,7 @@ export function LayersList() {
                                         {/* Dynamic indicator */}
                                         {(element.type === 'text' || element.type === 'image') &&
                                             (element as TextElement | ImageElement).isDynamic && (
-                                                <Link2 className="w-3 h-3 text-purple-500 flex-shrink-0" />
+                                                <Link2 className="w-3 h-3 text-purple-500 shrink-0" />
                                             )}
 
                                         {/* Visibility Toggle */}
@@ -143,7 +141,7 @@ export function LayersList() {
                                                 updateElement(element.id, { visible: !element.visible });
                                                 saveHistory();
                                             }}
-                                            className="p-1 hover:bg-gray-100 rounded transition-all duration-150 flex-shrink-0"
+                                            className="p-1 hover:bg-gray-100 rounded transition-all duration-150 shrink-0"
                                             title={element.visible ? "Hide" : "Show"}
                                         >
                                             {element.visible ? (
@@ -160,7 +158,7 @@ export function LayersList() {
                                                 updateElement(element.id, { locked: !element.locked });
                                                 saveHistory();
                                             }}
-                                            className="p-1 hover:bg-gray-100 rounded transition-all duration-150 flex-shrink-0"
+                                            className="p-1 hover:bg-gray-100 rounded transition-all duration-150 shrink-0"
                                             title={element.locked ? "Unlock" : "Lock"}
                                         >
                                             {element.locked ? (

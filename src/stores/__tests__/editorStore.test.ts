@@ -1,9 +1,8 @@
 /**
  * EditorStore Tests - Critical Paths
  * 
- * These tests verify the core functionality of the editorStore before
- * we split it into separate stores. They serve as a safety net during
- * refactoring.
+ * These tests verify the core functionality of the consolidated editorStore.
+ * The editorStore is now the single source of truth for all editor state.
  * 
  * Coverage:
  * - Element CRUD (add, update, delete, duplicate)
@@ -11,20 +10,15 @@
  * - History (undo/redo)
  * - Layer ordering
  * - Alignment operations
+ * - Clipboard operations
  */
 
 import { useEditorStore } from '../editorStore';
-import { useElementsStore } from '../elementsStore';
-import { useSelectionStore } from '../selectionStore';
 import { Element, TextElement, ImageElement, ShapeElement } from '@/types/editor';
 
 // Helper to reset store before each test
 const resetStore = () => {
-    // Reset specialized stores first (they're now source of truth)
-    useElementsStore.setState({ elements: [] });
-    useSelectionStore.setState({ selectedIds: [] });
-
-    // Reset editorStore
+    // editorStore is now the single source of truth
     useEditorStore.setState({
         templateId: 'test-template',
         templateName: 'Test Template',
@@ -259,14 +253,15 @@ describe('editorStore', () => {
                 expect(duplicate.y).toBe(120); // +20 offset
             });
 
-            it('should append "Copy" to the name', () => {
+            it('should assign a unique name to the duplicate', () => {
                 const element = createTextElement({ id: 'text-1', name: 'My Text' });
                 useEditorStore.getState().addElement(element);
 
                 useEditorStore.getState().duplicateElement('text-1');
 
                 const duplicate = useEditorStore.getState().elements[1];
-                expect(duplicate.name).toBe('My Text Copy');
+                // For text elements, generateUniqueName creates names like "Text 1", "Text 2"
+                expect(duplicate.name).toMatch(/^Text \d+$/);
             });
         });
     });

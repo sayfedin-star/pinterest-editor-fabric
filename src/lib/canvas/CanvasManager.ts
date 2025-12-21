@@ -5,7 +5,7 @@ import { AlignmentGuides } from '../fabric/AlignmentGuides';
 import { SnappingSettings } from '@/stores/snappingSettingsStore';
 import { SpatialHashGrid } from './SpatialHashGrid';
 import { applyCanvaStyleControls } from '@/lib/fabric/FabricControlConfig';
-import { useElementsStore } from '@/stores/elementsStore';
+import { useEditorStore } from '@/stores/editorStore';
 
 // Import from new modules
 import {
@@ -281,7 +281,7 @@ export class CanvasManager {
                     
                     // CRITICAL FIX: Re-order all elements after async image load
                     // canvas.add() places new objects at top, breaking z-order
-                    const allElements = useElementsStore.getState().elements;
+                    const allElements = useEditorStore.getState().elements;
                     this.reorderElementsByZIndex(allElements);
                     
                     this.debouncedRender();

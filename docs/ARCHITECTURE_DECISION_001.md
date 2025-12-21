@@ -2,7 +2,11 @@
 
 > **Date:** 2025-12-15  
 > **Author:** AI Architect  
-> **Status:** DECISION MADE
+> **Status:** ~~DECISION MADE~~ **SUPERSEDED by ADR-002**
+
+> [!WARNING]
+> This decision was NOT implemented. On 2025-12-21, a complete store consolidation was performed instead.
+> See [ADR-002](./ARCHITECTURE_DECISION_002.md) for the actual implementation.
 
 ---
 
@@ -10,30 +14,30 @@
 
 ### Store Usage Matrix
 
-| Component | editorStore | elementsStore | selectionStore | canvasStore | Migration % |
-|-----------|-------------|---------------|----------------|-------------|-------------|
-| **PropertiesPanel.tsx** | ✓ | ✗ | ✗ | ✗ | 0% |
-| **TextPropertiesSection** | ✓ | ✗ | ✗ | ✗ | 0% |
-| **PositionSection** | ✓ | ✗ | ✗ | ✗ | 0% |
-| **LayerOrderSection** | ✓ | ✗ | ✗ | ✗ | 0% |
-| **ImagePropertiesSection** | ✓ | ✗ | ✗ | ✗ | 0% |
-| **EffectsSection** | ✓ | ✗ | ✗ | ✗ | 0% |
-| **DynamicDataSection** | ✓ | ✗ | ✗ | ✗ | 0% |
-| **AppearanceSection** | ✓ | ✗ | ✗ | ✗ | 0% |
-| **AlignmentSection** | ✓ | ✗ | ✗ | ✗ | 0% |
-| **LayersPanel** | ✓ | ✓ | ✓ | ✓ | 75% |
-| **FontLibraryPanel** | ✓ | ✗ | ✗ | ✗ | 0% |
-| **CanvasSizePanel** | ✓ | ✗ | ✗ | ✗ | 0% |
-| **CanvasSizeSection** | ✗ | ✓ | ✗ | ✓ | 100% |
-| **Toolbar** | ✓ | ✓ | ✓ | ✓ | 60% |
-| **RightPanel** | ✓ | ✗ | ✗ | ✗ | 0% |
-| **LeftSidebar** | ✓ | ✗ | ✗ | ✗ | 0% |
-| **Header** | ✓ | ✓ | ✗ | ✓ | 40% |
-| **CanvasArea** | ✓ | ✗ | ✗ | ✗ | 0% |
-| **CanvaImportModal** | ✓ | ✗ | ✗ | ✗ | 0% |
-| **TemplateGallery** | ✓ | ✗ | ✗ | ✗ | 0% |
-| **EditorCanvas** | ✓ | ✓ | ✓ | ✓ | 70% |
-| **ContextMenu** | ✓ | ✓ | ✓ | ✗ | 50% |
+| Component                  | editorStore | elementsStore | selectionStore | canvasStore | Migration % |
+| -------------------------- | ----------- | ------------- | -------------- | ----------- | ----------- |
+| **PropertiesPanel.tsx**    | ✓           | ✗             | ✗              | ✗           | 0%          |
+| **TextPropertiesSection**  | ✓           | ✗             | ✗              | ✗           | 0%          |
+| **PositionSection**        | ✓           | ✗             | ✗              | ✗           | 0%          |
+| **LayerOrderSection**      | ✓           | ✗             | ✗              | ✗           | 0%          |
+| **ImagePropertiesSection** | ✓           | ✗             | ✗              | ✗           | 0%          |
+| **EffectsSection**         | ✓           | ✗             | ✗              | ✗           | 0%          |
+| **DynamicDataSection**     | ✓           | ✗             | ✗              | ✗           | 0%          |
+| **AppearanceSection**      | ✓           | ✗             | ✗              | ✗           | 0%          |
+| **AlignmentSection**       | ✓           | ✗             | ✗              | ✗           | 0%          |
+| **LayersPanel**            | ✓           | ✓             | ✓              | ✓           | 75%         |
+| **FontLibraryPanel**       | ✓           | ✗             | ✗              | ✗           | 0%          |
+| **CanvasSizePanel**        | ✓           | ✗             | ✗              | ✗           | 0%          |
+| **CanvasSizeSection**      | ✗           | ✓             | ✗              | ✓           | 100%        |
+| **Toolbar**                | ✓           | ✓             | ✓              | ✓           | 60%         |
+| **RightPanel**             | ✓           | ✗             | ✗              | ✗           | 0%          |
+| **LeftSidebar**            | ✓           | ✗             | ✗              | ✗           | 0%          |
+| **Header**                 | ✓           | ✓             | ✗              | ✓           | 40%         |
+| **CanvasArea**             | ✓           | ✗             | ✗              | ✗           | 0%          |
+| **CanvaImportModal**       | ✓           | ✗             | ✗              | ✗           | 0%          |
+| **TemplateGallery**        | ✓           | ✗             | ✗              | ✗           | 0%          |
+| **EditorCanvas**           | ✓           | ✓             | ✓              | ✓           | 70%         |
+| **ContextMenu**            | ✓           | ✓             | ✓              | ✗           | 50%         |
 
 ### Summary Statistics
 
@@ -45,19 +49,19 @@
 
 ### Functions Still in editorStore (No Specialized Alternative)
 
-| Function | Used By | Must Keep In editorStore? |
-|----------|---------|---------------------------|
-| `addText()` | Toolbar, LeftSidebar | ✓ (complex element creation with history) |
-| `addImage()` | Toolbar, LeftSidebar | ✓ (complex element creation with history) |
-| `addShape()` | Toolbar | ✓ (complex element creation with history) |
-| `loadTemplate()` | Header, LeftSidebar, TemplateGallery | ✓ (coordinates multiple stores) |
-| `undo()` / `redo()` | Toolbar, keyboard | ✓ (manages history snapshots) |
-| `pushHistory()` | Many components | ✓ (history coordination) |
-| `reorderElements()` | LayersPanel | Could move to layersStore |
-| `moveElement*()` | ContextMenu, LayerOrderSection | Could move to layersStore |
-| `alignElement()` | ContextMenu | Could move to alignmentStore |
-| `copyElement()` / `pasteElement()` | ContextMenu | Could move to clipboardStore |
-| `duplicateElement()` | EditorCanvas, ContextMenu | Uses history coordination |
+| Function                           | Used By                              | Must Keep In editorStore?                 |
+| ---------------------------------- | ------------------------------------ | ----------------------------------------- |
+| `addText()`                        | Toolbar, LeftSidebar                 | ✓ (complex element creation with history) |
+| `addImage()`                       | Toolbar, LeftSidebar                 | ✓ (complex element creation with history) |
+| `addShape()`                       | Toolbar                              | ✓ (complex element creation with history) |
+| `loadTemplate()`                   | Header, LeftSidebar, TemplateGallery | ✓ (coordinates multiple stores)           |
+| `undo()` / `redo()`                | Toolbar, keyboard                    | ✓ (manages history snapshots)             |
+| `pushHistory()`                    | Many components                      | ✓ (history coordination)                  |
+| `reorderElements()`                | LayersPanel                          | Could move to layersStore                 |
+| `moveElement*()`                   | ContextMenu, LayerOrderSection       | Could move to layersStore                 |
+| `alignElement()`                   | ContextMenu                          | Could move to alignmentStore              |
+| `copyElement()` / `pasteElement()` | ContextMenu                          | Could move to clipboardStore              |
+| `duplicateElement()`               | EditorCanvas, ContextMenu            | Uses history coordination                 |
 
 ---
 
@@ -70,11 +74,13 @@
 **Breaking Change Risk:** HIGH
 
 **Pros:**
+
 - Clean architecture
 - Single source of truth
 - No sync complexity
 
 **Cons:**
+
 - Must create new stores for: history, clipboard, element creation
 - Must migrate ALL 21 components
 - High risk of breaking functionality
@@ -91,6 +97,7 @@
 **Breaking Change Risk:** NONE
 
 **Concept:**
+
 - editorStore KEEPS its external API (no breaking changes)
 - Internally, editorStore READS from specialized stores
 - Internally, editorStore WRITES to specialized stores
@@ -98,6 +105,7 @@
 - Gradual migration becomes optional
 
 **Implementation:**
+
 ```typescript
 // BEFORE: editorStore manages its own elements
 addElement: (element) => {
@@ -120,6 +128,7 @@ get elements() {
 ```
 
 **Pros:**
+
 - Zero breaking changes
 - Components continue working unchanged
 - Specialized stores become source of truth
@@ -127,6 +136,7 @@ get elements() {
 - Low effort, low risk
 
 **Cons:**
+
 - Still have two "interfaces" (but one source of truth)
 - editorStore file stays large (but simpler internally)
 - Pattern must be documented clearly
@@ -158,7 +168,9 @@ get elements() {
 ### Implementation Plan
 
 #### Phase 1: Elements Facade (1.5 hours)
+
 Make editorStore.elements read from elementsStore:
+
 - `get elements()` returns `elementsStore.elements`
 - `addElement()` delegates to `elementsStore.addElement()`
 - `updateElement()` delegates to `elementsStore.updateElement()`
@@ -167,13 +179,17 @@ Make editorStore.elements read from elementsStore:
 - `setElements()` delegates
 
 #### Phase 2: Selection Facade (30 min)
+
 Make editorStore.selectedIds read from selectionStore:
+
 - `get selectedIds()` returns `selectionStore.selectedIds`
 - `selectElement()` delegates
 - `toggleSelection()` delegates
 
 #### Phase 3: Canvas Facade (30 min)
+
 Make editorStore canvas state read from canvasStore:
+
 - `get canvasSize()` returns `canvasStore.canvasSize`
 - `get backgroundColor()` returns `canvasStore.backgroundColor`
 - `get zoom()` returns `canvasStore.zoom`
@@ -182,13 +198,16 @@ Make editorStore canvas state read from canvasStore:
 - `setZoom()` delegates
 
 #### Phase 4: loadTemplate Fix (30 min)
+
 Update loadTemplate to initialize all specialized stores:
+
 - Set elementsStore.elements
 - Set canvasStore size/background
 - Clear selectionStore
 - Reset history
 
 #### Phase 5: Testing & Validation (1 hour)
+
 - Run all 199 tests
 - Manual testing of all features
 - Verify no regressions
@@ -196,6 +215,7 @@ Update loadTemplate to initialize all specialized stores:
 ### Rollback Plan
 
 If facade pattern causes issues:
+
 1. Git revert facade commits
 2. Return to current sync-on-action pattern
 3. Reassess approach
@@ -214,14 +234,14 @@ If facade pattern causes issues:
 
 ## Timeline
 
-| Phase | Duration | Cumulative |
-|-------|----------|------------|
-| Phase 1: Elements Facade | 1.5h | 1.5h |
-| Phase 2: Selection Facade | 0.5h | 2h |
-| Phase 3: Canvas Facade | 0.5h | 2.5h |
-| Phase 4: loadTemplate Fix | 0.5h | 3h |
-| Phase 5: Testing | 1h | 4h |
-| **Total** | **4 hours** | |
+| Phase                     | Duration    | Cumulative |
+| ------------------------- | ----------- | ---------- |
+| Phase 1: Elements Facade  | 1.5h        | 1.5h       |
+| Phase 2: Selection Facade | 0.5h        | 2h         |
+| Phase 3: Canvas Facade    | 0.5h        | 2.5h       |
+| Phase 4: loadTemplate Fix | 0.5h        | 3h         |
+| Phase 5: Testing          | 1h          | 4h         |
+| **Total**                 | **4 hours** |            |
 
 ---
 

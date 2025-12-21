@@ -1,10 +1,7 @@
 'use client';
 
 import React, { useRef, useEffect, useState, useCallback } from 'react';
-import { useCanvasStore } from '@/stores/canvasStore';
-import { useElementsStore } from '@/stores/elementsStore';
-import { useSelectionStore } from '@/stores/selectionStore';
-import { useEditorStore } from '@/stores/editorStore'; // Keep for duplicate/delete coordination
+import { useEditorStore } from '@/stores/editorStore';
 import { useSnappingSettingsStore } from '@/stores/snappingSettingsStore';
 import { Element, ImageElement, TextElement } from '@/types/editor';
 import { CanvasManager, CanvasConfig } from '@/lib/canvas/CanvasManager';
@@ -120,19 +117,19 @@ export function EditorCanvasV2({ containerWidth, containerHeight }: EditorCanvas
         };
     }, [isCanvasReady]);
 
-    // Canvas state from canvasStore
-    const canvasSize = useCanvasStore((s) => s.canvasSize);
-    const backgroundColor = useCanvasStore((s) => s.backgroundColor);
-    const zoom = useCanvasStore((s) => s.zoom);
+    // All state from consolidated editorStore
+    const canvasSize = useEditorStore((s) => s.canvasSize);
+    const backgroundColor = useEditorStore((s) => s.backgroundColor);
+    const zoom = useEditorStore((s) => s.zoom);
 
-    // Elements from elementsStore
-    const elements = useElementsStore((s) => s.elements);
-    const updateElement = useElementsStore((s) => s.updateElement);
-    const deleteElement = useElementsStore((s) => s.deleteElement);
-    const duplicateElement = useElementsStore((s) => s.duplicateElement);
+    // Elements from editorStore
+    const elements = useEditorStore((s) => s.elements);
+    const updateElement = useEditorStore((s) => s.updateElement);
+    const deleteElement = useEditorStore((s) => s.deleteElement);
+    const duplicateElement = useEditorStore((s) => s.duplicateElement);
 
-    // Selection from selectionStore
-    const selectedIds = useSelectionStore((s) => s.selectedIds);
+    // Selection from editorStore
+    const selectedIds = useEditorStore((s) => s.selectedIds);
 
     // DEBUG: Trace dimensions (commented out to reduce console spam)
     // useEffect(() => {
@@ -528,7 +525,7 @@ export function EditorCanvasV2({ containerWidth, containerHeight }: EditorCanvas
             target.dataset?.canvasBackground === 'true'; // Click on marked background element
         
         if (isBackgroundClick) {
-            useSelectionStore.getState().clearSelection();
+            useEditorStore.getState().selectElement(null);
             setToolbarVisible(false);
             // Also clear selection in canvas manager if available
             if (canvasManagerRef.current?.isInitialized()) {

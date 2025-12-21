@@ -24,6 +24,7 @@
 ### What Problem Does This Solve?
 
 The Pinterest Editor is a **dynamic template design tool** that enables users to create customizable Pinterest pin templates with data-driven content. It solves the problem of:
+
 - Manual, repetitive pin creation for campaigns
 - Lack of batch generation capabilities
 - No dynamic data integration (CSV → Pins)
@@ -38,24 +39,28 @@ The Pinterest Editor is a **dynamic template design tool** that enables users to
 ### Core Features
 
 1. **Visual Canvas Editor**
+
    - Drag-and-drop element placement (text, images, shapes)
    - Real-time preview with Fabric.js rendering
    - Canva-style handles and controls
    - Multi-element selection and manipulation
 
 2. **Dynamic Data Integration**
+
    - CSV import for batch personalization
    - Field mapping ({{productName}}, {{price}}, etc.)
    - Preview mode with live data substitution
    - Bulk export (generate 100s of pins)
 
 3. **Template Management**
+
    - Save/load templates
    - Template gallery with thumbnails
    - Import from Canva (SVG support)
    - Cloud storage (S3 + Supabase)
 
 4. **Professional UI/UX**
+
    - Properties panel (position, appearance, effects)
    - Layers panel (reorder, visibility, lock)
    - Responsive design (desktop + mobile)
@@ -81,7 +86,8 @@ The Pinterest Editor is a **dynamic template design tool** that enables users to
 ### Core Framework
 
 **Next.js 16.0.8** (App Router)
-- **Why this version?** 
+
+- **Why this version?**
   - Latest stable release
   - React 19 support
   - Improved performance with React Compiler
@@ -89,6 +95,7 @@ The Pinterest Editor is a **dynamic template design tool** that enables users to
 - **Trade-offs:** Bleeding edge (some libraries may lag in compatibility)
 
 **React 19.2.1**
+
 - **New features used:**
   - React Compiler (automatic memoization)
   - `use` hook for async components
@@ -96,8 +103,9 @@ The Pinterest Editor is a **dynamic template design tool** that enables users to
 - **Why upgrade?** Performance improvements, better developer experience
 
 **TypeScript 5**
+
 - **Strictness level:** Partial strict mode (not full strict yet)
-- **Current config:** 
+- **Current config:**
   - `strict: false` (to be enabled in Phase 7)
   - Many `any` types (technical debt)
   - No branded types yet
@@ -106,7 +114,8 @@ The Pinterest Editor is a **dynamic template design tool** that enables users to
 ### Canvas & Rendering
 
 **Fabric.js 6.9.0**
-- **Why not Konva?** 
+
+- **Why not Konva?**
   - Fabric has better text rendering
   - More mature ecosystem
   - Built-in features (alignment guides, custom controls)
@@ -117,51 +126,59 @@ The Pinterest Editor is a **dynamic template design tool** that enables users to
 ### State Management
 
 **Zustand 5.0.9**
-- **Why not Redux?** 
+
+- **Why not Redux?**
   - Simpler API (no boilerplate)
   - Better TypeScript support
   - Smaller bundle size
   - No Provider wrapping needed
-- **Why not Context?** 
+- **Why not Context?**
   - Performance (Context causes re-renders)
   - Better DevTools integration
   - Easier testing
-- **Stores:**
-  - `editorStore` - Main app state (elements, templates, history)
+- **Architecture:** Single consolidated store (as of 2025-12-21)
+  - `editorStore` - **Primary store** (elements, selection, canvas, history, templates)
+  - `alignmentStore` - Element alignment utilities (pure functions)
+  - `templateStore` - Template gallery operations
+  - `categoryStore` / `tagStore` - Template organization
   - `snappingSettingsStore` - Canvas snapping configuration
   - `toastStore` - Toast notification queue
   - `generationStore` - Bulk generation state
+  - `templateMetadataStore` - Template categories/tags assignment
+- **Note:** Previously had separate `elementsStore`, `selectionStore`, `canvasStore`, `layersStore` (consolidated into `editorStore`)
 
 ### Styling
 
 **Tailwind CSS v4**
-- **Custom configuration:** 
+
+- **Custom configuration:**
   - Extended color palette (blue, purple, gray shades)
   - Custom animations (`fadeIn`, `slide-in-right`, `shake`, `shimmer`)
   - Custom spacing scale
   - Font family: Inter (from Google Fonts)
-- **Why v4?** 
+- **Why v4?**
   - Performance (CSS-first architecture)
   - Better PostCSS integration
   - Cleaner API
 
 ### Additional Libraries
 
-| Library | Version | Purpose | Bundle Impact |
-|---------|---------|---------|---------------|
-| `@hello-pangea/dnd` | 18.0.1 | Drag-and-drop (layers panel) | ~40KB |
-| `sonner` | 2.0.7 | Toast notifications | ~8KB |
-| `date-fns` | 4.1.0 | Date formatting | ~20KB (tree-shakeable) |
-| `papaparse` | 5.5.3 | CSV parsing | ~45KB |
-| `jszip` | 3.10.1 | ZIP generation (bulk export) | ~75KB |
-| `lodash` | 4.17.21 | Utilities (debounce, throttle) | **~70KB** ⚠️ |
-| `use-image` | 1.1.4 | Image loading hook | ~3KB |
-| `react-colorful` | 5.6.1 | Color picker | ~15KB |
-| `nanoid` | 5.1.6 | ID generation | ~2KB |
-| `clsx` | 2.1.1 | Class name utility | ~1KB |
-| `tailwind-merge` | 3.4.0 | Merge Tailwind classes | ~8KB |
+| Library             | Version | Purpose                        | Bundle Impact          |
+| ------------------- | ------- | ------------------------------ | ---------------------- |
+| `@hello-pangea/dnd` | 18.0.1  | Drag-and-drop (layers panel)   | ~40KB                  |
+| `sonner`            | 2.0.7   | Toast notifications            | ~8KB                   |
+| `date-fns`          | 4.1.0   | Date formatting                | ~20KB (tree-shakeable) |
+| `papaparse`         | 5.5.3   | CSV parsing                    | ~45KB                  |
+| `jszip`             | 3.10.1  | ZIP generation (bulk export)   | ~75KB                  |
+| `lodash`            | 4.17.21 | Utilities (debounce, throttle) | **~70KB** ⚠️           |
+| `use-image`         | 1.1.4   | Image loading hook             | ~3KB                   |
+| `react-colorful`    | 5.6.1   | Color picker                   | ~15KB                  |
+| `nanoid`            | 5.1.6   | ID generation                  | ~2KB                   |
+| `clsx`              | 2.1.1   | Class name utility             | ~1KB                   |
+| `tailwind-merge`    | 3.4.0   | Merge Tailwind classes         | ~8KB                   |
 
 **⚠️ Dependencies to Optimize:**
+
 - **lodash:** Should use `lodash-es` or native JS (save ~60KB)
 - **use-image:** Could implement ourselves (~50 lines)
 - **jszip:** Lazy load only when exporting (save initial bundle)
@@ -277,7 +294,12 @@ src/
 
 ├── stores/                     # Zustand Stores
 │   ├── Purpose: Global state management
-│   ├── editorStore.ts              # Main editor state (800+ lines) ⚠️
+│   ├── editorStore.ts              # Consolidated editor state (elements, selection, canvas, history)
+│   ├── alignmentStore.ts           # Element alignment utilities
+│   ├── templateStore.ts            # Template gallery operations
+│   ├── categoryStore.ts            # Category CRUD
+│   ├── tagStore.ts                 # Tag CRUD with autocomplete
+│   ├── templateMetadataStore.ts    # Template metadata assignment
 │   ├── snappingSettingsStore.ts    # Snapping configuration
 │   ├── toastStore.ts               # Toast queue
 │   └── generationStore.ts          # Generation progress
@@ -292,15 +314,15 @@ src/
 
 ### ⚠️ God Files (>500 lines)
 
-These files violate Single Responsibility Principle:
+These files need attention:
 
-| File | Lines | Status | Action Required |
-|------|-------|--------|-----------------|
-| `PropertiesPanel.tsx` | ~800 | 🔴 Critical | Split into sub-panels |
-| `CanvasManager.ts` | ~500 | 🔴 Critical | Extract services |
-| `editorStore.ts` | ~800 | 🔴 Critical | Split into slices |
-| `LeftSidebar.tsx` | ~500 | 🟡 Moderate | Already cleaned (responsive work) |
-| `EditorCanvas.tsx` | ~450 | 🟡 Moderate | Extract event handlers |
+| File                  | Lines | Status                    | Action Required                   |
+| --------------------- | ----- | ------------------------- | --------------------------------- |
+| `PropertiesPanel.tsx` | ~800  | 🔴 Critical               | Split into sub-panels             |
+| `CanvasManager.ts`    | ~500  | 🔴 Critical               | Extract services                  |
+| `editorStore.ts`      | ~1100 | 🟡 Large but consolidated | Consider slicing by domain        |
+| `LeftSidebar.tsx`     | ~500  | 🟡 Moderate               | Already cleaned (responsive work) |
+| `EditorCanvas.tsx`    | ~450  | 🟡 Moderate               | Extract event handlers            |
 
 ---
 
@@ -423,6 +445,7 @@ Canvas updates to match restored state
 ```
 
 **Current Limitations:**
+
 - ❌ No granular undo (entire state snapshot)
 - ❌ Large memory footprint (50 full states)
 - ❌ No undo compression
@@ -437,36 +460,37 @@ Canvas updates to match restored state
 **File:** `src/stores/editorStore.ts` (800+ lines)
 
 **State Schema:**
+
 ```typescript
 {
   // Template metadata
   templateId: string
   templateName: string
   isNewTemplate: boolean
-  
+
   // Canvas configuration
   canvasSize: { width: number, height: number }
   backgroundColor: string
   zoom: number
-  
+
   // Elements
   elements: Element[]  // Array of all canvas elements
   selectedIds: string[] // Multi-selection support
-  
+
   // Templates list
   templates: TemplateListItem[]
-  
+
   // History (undo/redo)
   history: {
     past: EditorState[]   // Max 50 items
     future: EditorState[]
   }
-  
+
   // UI state
   previewMode: boolean
   isSaving: boolean
   activeTab: 'properties' | 'layers'
-  
+
   // Dynamic data
   csvData: { headers: string[], rows: any[] } | null
   currentDataRow: number
@@ -474,6 +498,7 @@ Canvas updates to match restored state
 ```
 
 **Actions (36 total):**
+
 - **Template:** `loadTemplate`, `resetToNewTemplate`, `setTemplateName`, `setTemplates`
 - **Elements:** `addElement`, `updateElement`, `deleteElement`, `replaceElements`, `clearElements`
 - **Selection:** `selectElement`, `selectMultiple`, `deselectAll`
@@ -483,6 +508,7 @@ Canvas updates to match restored state
 - **UI:** `setPreviewMode`, `setIsSaving`, `setActiveTab`
 
 **⚠️ Issues:**
+
 - Too many responsibilities (should be split into slices)
 - No TypeScript strict mode
 - Many `any` types
@@ -495,13 +521,14 @@ Canvas updates to match restored state
 **Purpose:** Configure canvas snapping behavior
 
 **State:**
+
 ```typescript
 {
-  snapToGrid: boolean
-  snapToElements: boolean
-  snapToPage: boolean
-  snapThreshold: number  // pixels
-  gridSize: number       // pixels
+  snapToGrid: boolean;
+  snapToElements: boolean;
+  snapToPage: boolean;
+  snapThreshold: number; // pixels
+  gridSize: number; // pixels
 }
 ```
 
@@ -514,18 +541,20 @@ Canvas updates to match restored state
 **Purpose:** Manage toast notification queue
 
 **State:**
+
 ```typescript
 {
   toasts: Array<{
-    id: string
-    type: 'success' | 'error' | 'warning' | 'info'
-    message: string
-    duration: number  // ms
-  }>
+    id: string;
+    type: "success" | "error" | "warning" | "info";
+    message: string;
+    duration: number; // ms
+  }>;
 }
 ```
 
 **Features:**
+
 - Auto-dismiss after duration
 - Max 3 visible (queue others)
 - Unique IDs (nanoid)
@@ -538,6 +567,7 @@ Canvas updates to match restored state
 **Purpose:** Track bulk pin generation progress
 
 **State:**
+
 ```typescript
 {
   isGenerating: boolean
@@ -678,6 +708,7 @@ App (Next.js Layout)
 **Library:** `@aws-sdk/client-s3`, `@aws-sdk/lib-storage`
 
 **Configuration:**
+
 ```typescript
 // Environment variables required:
 AWS_REGION=us-east-1
@@ -687,11 +718,13 @@ NEXT_PUBLIC_S3_BUCKET=pinterest-images
 ```
 
 **Usage:**
+
 - Upload user images (from local files)
 - Upload generated thumbnails (template previews)
 - Upload bulk-generated pins (ZIP exports)
 
 **Current Limitations:**
+
 - ❌ No image optimization (uploads raw files)
 - ❌ No CDN (slow loading)
 - ❌ No cleanup (old images accumulate)
@@ -701,6 +734,7 @@ NEXT_PUBLIC_S3_BUCKET=pinterest-images
 **Library:** `@supabase/supabase-js`
 
 **Configuration:**
+
 ```typescript
 // Environment variables required:
 NEXT_PUBLIC_SUPABASE_URL=https://xxx.supabase.co
@@ -708,6 +742,7 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY=...
 ```
 
 **Schema:**
+
 ```sql
 -- templates table
 id UUID PRIMARY KEY
@@ -732,6 +767,7 @@ created_at TIMESTAMP
 ```
 
 **Current Limitations:**
+
 - ❌ No real-time updates
 - ❌ No database migrations (manual schema changes)
 - ❌ No foreign key constraints
@@ -742,12 +778,14 @@ created_at TIMESTAMP
 **Library:** `@vercel/analytics`
 
 **Metrics Tracked:**
+
 - Page views
 - User sessions
 - Performance (Web Vitals)
 - Geography
 
 **Not Tracked:**
+
 - User actions (element added, etc.)
 - Errors (need Sentry)
 - Custom events
@@ -770,11 +808,13 @@ created_at TIMESTAMP
 ### Why Three-Layer Architecture (React → Manager → Fabric)?
 
 **Separation of Concerns:**
+
 1. **React Layer:** UI components, user interactions
 2. **Manager Layer:** Business logic, state coordination
 3. **Fabric Layer:** Canvas rendering, low-level manipulation
 
 **Benefits:**
+
 - Testable in isolation
 - Can swap Fabric for another library later
 - React doesn't know about Fabric internals
@@ -782,11 +822,13 @@ created_at TIMESTAMP
 ### Why Client-Side Only (No SSR for Editor)?
 
 **Reasons:**
+
 - Canvas API not available on server
 - Fabric.js requires DOM
 - User state is session-based (not SEO-critical)
 
 **Trade-offs:**
+
 - ❌ Slower initial load
 - ✅ Simpler architecture
 - ✅ No server costs for editor
@@ -796,6 +838,7 @@ created_at TIMESTAMP
 **Next.js 16 Feature:** Server Components
 
 **Not Used Because:**
+
 - Editor is highly interactive (needs client state)
 - Canvas manipulation requires browser APIs
 - WebSocket-style updates not needed yet
@@ -807,6 +850,7 @@ created_at TIMESTAMP
 ## Next Steps
 
 This document should be updated as the codebase evolves. See:
+
 - **Technical Debt:** `docs/TECHNICAL_DEBT.md` (to be created)
 - **Refactoring Plan:** `docs/REFACTORING_PLAN.md` (to be created)
 - **Dependencies Audit:** `docs/DEPENDENCIES.md` (to be created)

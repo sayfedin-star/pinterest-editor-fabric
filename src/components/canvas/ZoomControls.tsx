@@ -2,7 +2,6 @@
 
 import React from 'react';
 import { ZoomIn, ZoomOut, Maximize2, Undo2, Redo2 } from 'lucide-react';
-import { useCanvasStore } from '@/stores/canvasStore';
 import { useEditorStore } from '@/stores/editorStore';
 import { cn } from '@/lib/utils';
 import { SnappingToolbarButton } from '@/components/editor/SnappingToolbarButton';
@@ -13,9 +12,10 @@ const ZOOM_LEVELS = [0.1, 0.15, 0.2, 0.25, 0.5, 0.75, 1, 1.25, 1.5, 2];
  * Floating footer controls - Undo/Redo, Snapping, and Zoom
  */
 export function ZoomControls() {
-    const zoom = useCanvasStore((s) => s.zoom);
-    const setZoom = useCanvasStore((s) => s.setZoom);
-    const zoomToFit = useCanvasStore((s) => s.zoomToFit);
+    // All zoom state from editorStore
+    const zoom = useEditorStore((s) => s.zoom);
+    const setZoom = useEditorStore((s) => s.setZoom);
+    const zoomToFit = useEditorStore((s) => s.zoomToFit);
 
     // History
     const canUndo = useEditorStore((s) => s.canUndo());

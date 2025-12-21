@@ -3,7 +3,7 @@
 import React, { memo, useCallback } from 'react';
 import { ImageElement } from '@/types/editor';
 import { SectionHeader } from './shared';
-import { useElementsStore } from '@/stores/elementsStore';
+import { useEditorStore } from '@/stores/editorStore';
 import { 
     Maximize2, 
     Minimize2, 
@@ -41,10 +41,10 @@ const fitModeOptions: { value: FitMode; label: string; icon: React.ReactNode; de
  * ImagePropertiesSection - Image-specific controls including fit mode
  */
 export const ImagePropertiesSection = memo(function ImagePropertiesSection({ element }: ImagePropertiesSectionProps) {
-    const updateElement = useElementsStore((state) => state.updateElement);
+    const updateElement = useEditorStore((state) => state.updateElement);
     
-    // Subscribe to elementsStore to get live updates when fitMode changes
-    const currentElement = useElementsStore((state) => 
+    // Subscribe to editorStore to get live updates when fitMode changes
+    const currentElement = useEditorStore((state) => 
         state.elements.find(el => el.id === element.id) as ImageElement | undefined
     );
     

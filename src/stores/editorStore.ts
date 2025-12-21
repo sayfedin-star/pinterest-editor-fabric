@@ -15,10 +15,7 @@ import {
 } from '@/types/editor';
 import { generateId } from '@/lib/utils';
 import { generateUniqueName } from '@/lib/utils/nameValidation';
-// Import specialized stores for cross-store sync
-import { useElementsStore } from './elementsStore';
-import { useSelectionStore } from './selectionStore';
-import { useCanvasStore } from './canvasStore';
+
 
 interface EditorState {
     // Template
@@ -191,37 +188,27 @@ export const useEditorStore = create(
             templates: [],
             _hasHydrated: false,
 
-            // Element operations - specialized stores are source of truth
+            // Element operations - editorStore is the source of truth
             addElement: (element) => {
-                // Add to specialized stores first (source of truth)
-                useElementsStore.getState().addElement(element);
-                useSelectionStore.getState().selectElement(element.id);
-
-                // Sync editorStore.elements from elementsStore (keeps legacy consumers working)
-                const elements = useElementsStore.getState().elements;
-                set({
-                    elements: elements,
+                set((state) => ({
+                    elements: [...state.elements, element],
                     selectedIds: [element.id]
-                });
+                }));
             },
 
             updateElement: (id, updates) => {
-                // Delegate to elementsStore (source of truth)
-                useElementsStore.getState().updateElement(id, updates);
-
-                // Sync back to editorStore for legacy consumers
-                set({ elements: useElementsStore.getState().elements });
+                set((state) => ({
+                    elements: state.elements.map((el) =>
+                        el.id === id ? { ...el, ...updates } as Element : el
+                    )
+                }));
             },
 
             deleteElement: (id) => {
-                // Delegate to elementsStore (also clears selection via sync)
-                useElementsStore.getState().deleteElement(id);
-
-                // Sync back to editorStore for legacy consumers
-                set({
-                    elements: useElementsStore.getState().elements,
-                    selectedIds: useSelectionStore.getState().selectedIds
-                });
+                set((state) => ({
+                    elements: state.elements.filter((el) => el.id !== id),
+                    selectedIds: state.selectedIds.filter((selectedId) => selectedId !== id)
+                }));
                 get().pushHistory();
             },
 
@@ -265,28 +252,27 @@ export const useEditorStore = create(
             },
 
             selectElement: (id) => {
-                // Delegate to selectionStore (source of truth)
                 if (id) {
-                    useSelectionStore.getState().selectElement(id);
+                    set({ selectedIds: [id] });
                 } else {
-                    useSelectionStore.getState().clearSelection();
+                    set({ selectedIds: [] });
                 }
-                // Sync back to editorStore for legacy consumers
-                set({ selectedIds: useSelectionStore.getState().selectedIds });
             },
 
             toggleSelection: (id) => {
-                // Delegate to selectionStore (source of truth)
-                useSelectionStore.getState().toggleSelection(id);
-                // Sync back to editorStore for legacy consumers
-                set({ selectedIds: useSelectionStore.getState().selectedIds });
+                set((state) => ({
+                    selectedIds: state.selectedIds.includes(id)
+                        ? state.selectedIds.filter((selectedId) => selectedId !== id)
+                        : [...state.selectedIds, id]
+                }));
             },
 
             lockElement: (id, locked) => {
-                // Delegate to elementsStore (source of truth)
-                useElementsStore.getState().lockElement(id, locked);
-                // Sync back to editorStore for legacy consumers
-                set({ elements: useElementsStore.getState().elements });
+                set((state) => ({
+                    elements: state.elements.map((el) =>
+                        el.id === id ? { ...el, locked } as Element : el
+                    )
+                }));
                 get().pushHistory();
             },
 
@@ -383,7 +369,7 @@ export const useEditorStore = create(
             },
 
             moveElementForward: (id) => {
-                const elements = useElementsStore.getState().elements;
+                const elements = get().elements;
                 const element = elements.find((el) => el.id === id);
                 if (!element) return;
 
@@ -397,14 +383,11 @@ export const useEditorStore = create(
                     return el;
                 }) as Element[];
 
-                // Sync to elementsStore (source of truth)
-                useElementsStore.getState().setElements(updatedElements);
-                // Sync back to editorStore for legacy consumers
                 set({ elements: updatedElements });
             },
 
             moveElementBackward: (id) => {
-                const elements = useElementsStore.getState().elements;
+                const elements = get().elements;
                 const element = elements.find((el) => el.id === id);
                 if (!element || element.zIndex <= 0) return;
 
@@ -415,14 +398,11 @@ export const useEditorStore = create(
                     return el;
                 }) as Element[];
 
-                // Sync to elementsStore (source of truth)
-                useElementsStore.getState().setElements(updatedElements);
-                // Sync back to editorStore for legacy consumers
                 set({ elements: updatedElements });
             },
 
             moveElementToFront: (id) => {
-                const elements = useElementsStore.getState().elements;
+                const elements = get().elements;
                 const element = elements.find((el) => el.id === id);
                 if (!element) return;
 
@@ -431,14 +411,11 @@ export const useEditorStore = create(
                     el.id === id ? { ...el, zIndex: maxZ + 1 } : el
                 ) as Element[];
 
-                // Sync to elementsStore (source of truth)
-                useElementsStore.getState().setElements(updatedElements);
-                // Sync back to editorStore for legacy consumers
                 set({ elements: updatedElements });
             },
 
             moveElementToBack: (id) => {
-                const currentElements = useElementsStore.getState().elements;
+                const currentElements = get().elements;
                 const movedElements = currentElements.map((el) => ({
                     ...el,
                     zIndex: el.id === id ? -1 : el.zIndex + 1
@@ -451,15 +428,12 @@ export const useEditorStore = create(
                     zIndex: el.zIndex - minZ
                 })) as Element[];
 
-                // Sync to elementsStore (source of truth)
-                useElementsStore.getState().setElements(normalizedElements);
-                // Sync back to editorStore for legacy consumers
                 set({ elements: normalizedElements });
             },
 
             alignElement: (id, alignment) => {
                 const state = get();
-                const elements = useElementsStore.getState().elements;
+                const elements = state.elements;
                 const element = elements.find((el) => el.id === id);
                 if (!element) return;
 
@@ -491,9 +465,6 @@ export const useEditorStore = create(
                     el.id === id ? { ...el, ...update } as Element : el
                 );
 
-                // Sync to elementsStore (source of truth)
-                useElementsStore.getState().setElements(updatedElements);
-                // Sync back to editorStore for legacy consumers
                 set({ elements: updatedElements });
             },
 
@@ -639,7 +610,7 @@ export const useEditorStore = create(
                     const snapshot = history[newIndex];
                     const restoredElements = cloneDeep(snapshot.elements);
 
-                    // Update editorStore state
+                    // Update editorStore state (now source of truth)
                     set({
                         elements: restoredElements,
                         canvasSize: { ...snapshot.canvasSize },
@@ -647,13 +618,6 @@ export const useEditorStore = create(
                         historyIndex: newIndex,
                         selectedIds: []
                     });
-
-                    // Sync to specialized stores
-                    useElementsStore.getState().setElements(cloneDeep(snapshot.elements));
-                    useSelectionStore.getState().clearSelection();
-                    const canvasStore = require('./canvasStore').useCanvasStore.getState();
-                    canvasStore.setCanvasSize(snapshot.canvasSize.width, snapshot.canvasSize.height);
-                    canvasStore.setBackgroundColor(snapshot.backgroundColor);
                 }
             },
 
@@ -664,7 +628,7 @@ export const useEditorStore = create(
                     const snapshot = history[newIndex];
                     const restoredElements = cloneDeep(snapshot.elements);
 
-                    // Update editorStore state
+                    // Update editorStore state (now source of truth)
                     set({
                         elements: restoredElements,
                         canvasSize: { ...snapshot.canvasSize },
@@ -672,13 +636,6 @@ export const useEditorStore = create(
                         historyIndex: newIndex,
                         selectedIds: []
                     });
-
-                    // Sync to specialized stores
-                    useElementsStore.getState().setElements(cloneDeep(snapshot.elements));
-                    useSelectionStore.getState().clearSelection();
-                    const canvasStore = require('./canvasStore').useCanvasStore.getState();
-                    canvasStore.setCanvasSize(snapshot.canvasSize.width, snapshot.canvasSize.height);
-                    canvasStore.setBackgroundColor(snapshot.backgroundColor);
                 }
             },
 
@@ -689,23 +646,14 @@ export const useEditorStore = create(
             setTemplateName: (name) => set({ templateName: name }),
 
             setBackgroundColor: (color) => {
-                // Delegate to canvasStore (source of truth)
-                useCanvasStore.getState().setBackgroundColor(color);
-                // Sync back to editorStore for legacy consumers
                 set({ backgroundColor: color });
             },
 
             setCanvasSize: (width, height) => {
-                // Delegate to canvasStore (source of truth)
-                useCanvasStore.getState().setCanvasSize(width, height);
-                // Sync back to editorStore for legacy consumers
-                set({ canvasSize: useCanvasStore.getState().canvasSize });
+                set({ canvasSize: { width, height } });
             },
 
             setElements: (elements) => {
-                // Delegate to elementsStore (source of truth)
-                useElementsStore.getState().setElements(elements);
-                // Sync back to editorStore for legacy consumers
                 set({ elements });
             },
 
@@ -714,18 +662,7 @@ export const useEditorStore = create(
                 const backgroundColor = template.background_color || '#FFFFFF';
                 const elements = template.elements || [];
 
-                // === FINDING #5 FIX: Sync to ALL specialized stores ===
-                // 1. Sync elements to elementsStore
-                useElementsStore.getState().setElements(elements);
-
-                // 2. Sync canvas config to canvasStore
-                useCanvasStore.getState().setCanvasSize(canvasSize.width, canvasSize.height);
-                useCanvasStore.getState().setBackgroundColor(backgroundColor);
-
-                // 3. Clear selection in selectionStore
-                useSelectionStore.getState().clearSelection();
-
-                // 4. Update editorStore (legacy consumers + own state)
+                // Update editorStore (now source of truth)
                 set({
                     templateId: template.id,
                     templateName: template.name,
@@ -744,18 +681,12 @@ export const useEditorStore = create(
             resetToNewTemplate: () => {
                 const canvasSize = { width: CANVAS_WIDTH, height: CANVAS_HEIGHT };
                 const backgroundColor = '#FFFFFF';
-
-                // Sync to specialized stores
-                useElementsStore.getState().clearElements();
-                useSelectionStore.getState().clearSelection();
-                useCanvasStore.getState().setCanvasSize(canvasSize.width, canvasSize.height);
-                useCanvasStore.getState().setBackgroundColor(backgroundColor);
                 
                 // FIX: Also reset templateStore to clear name and set isNewTemplate
                 const { useTemplateStore } = require('./templateStore');
                 useTemplateStore.getState().resetTemplate();
 
-                // Update editorStore
+                // Update editorStore (now source of truth)
                 set({
                     templateId: generateId(),
                     templateName: 'Untitled Template',
@@ -813,9 +744,6 @@ export const useEditorStore = create(
                     elements: [canvaBackground, ...shiftedElements],
                     templateSource: 'canva_import',
                 });
-
-                // CRITICAL: Sync to elementsStore (source of truth for canvas rendering)
-                useElementsStore.getState().setElements([canvaBackground, ...shiftedElements]);
 
                 pushHistory();
             },

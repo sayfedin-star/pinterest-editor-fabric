@@ -16,8 +16,6 @@ import {
     Lock,
     Unlock
 } from 'lucide-react';
-import { useElementsStore } from '@/stores/elementsStore';
-import { useSelectionStore } from '@/stores/selectionStore';
 import { useEditorStore } from '@/stores/editorStore';
 import { cn } from '@/lib/utils';
 import { LayersList } from './LayersList';
@@ -37,10 +35,10 @@ export function PositionPanel({ onClose }: PositionPanelProps) {
     const [localY, setLocalY] = useState('');
     const [localRotation, setLocalRotation] = useState('');
 
-    // Stores
-    const elements = useElementsStore((s) => s.elements);
-    const updateElement = useElementsStore((s) => s.updateElement);
-    const selectedIds = useSelectionStore((s) => s.selectedIds);
+    // All state from consolidated editorStore
+    const elements = useEditorStore((s) => s.elements);
+    const updateElement = useEditorStore((s) => s.updateElement);
+    const selectedIds = useEditorStore((s) => s.selectedIds);
     const selectedId = selectedIds[0] || null;
 
     const {

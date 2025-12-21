@@ -1,23 +1,22 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { useCanvasStore } from '@/stores/canvasStore';
-import { useElementsStore } from '@/stores/elementsStore';
 import { useEditorStore } from '@/stores/editorStore';
 import { cn } from '@/lib/utils';
 
 export function CanvasSizeSection() {
-    // Canvas state from canvasStore
-    const canvasSize = useCanvasStore((s) => s.canvasSize);
-    const setCanvasSize = useCanvasStore((s) => s.setCanvasSize);
-    const setZoom = useCanvasStore((s) => s.setZoom);
-    const backgroundColor = useCanvasStore((s) => s.backgroundColor);
+    // All state from consolidated editorStore
+    const canvasSize = useEditorStore((s) => s.canvasSize);
+    const setCanvasSize = useEditorStore((s) => s.setCanvasSize);
+    const setZoom = useEditorStore((s) => s.setZoom);
+    const backgroundColor = useEditorStore((s) => s.backgroundColor);
 
-    // Elements from elementsStore
-    const elements = useElementsStore((s) => s.elements);
-    const clearElements = useElementsStore((s) => s.clearElements);
+    // Elements from editorStore
+    const elements = useEditorStore((s) => s.elements);
+    // Note: clearElements doesn't exist in editorStore, use setElements([])
+    const setElements = useEditorStore((s) => s.setElements);
 
-    // History from editorStore (single source of truth)
+    // History from editorStore
     const pushHistory = useEditorStore((s) => s.pushHistory);
 
     const [width, setWidth] = useState(canvasSize.width.toString());
@@ -71,7 +70,7 @@ export function CanvasSizeSection() {
 
         // Clear elements if any exist
         if (elements.length > 0) {
-            clearElements();
+            setElements([]);
         }
 
         // Apply new canvas size

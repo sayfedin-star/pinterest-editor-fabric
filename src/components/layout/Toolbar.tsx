@@ -12,9 +12,7 @@ import {
     AlignRight,
     Library,
 } from 'lucide-react';
-import { useSelectionStore } from '@/stores/selectionStore';
-import { useElementsStore } from '@/stores/elementsStore';
-import { useEditorStore } from '@/stores/editorStore'; // For element creation, undo/redo, history
+import { useEditorStore } from '@/stores/editorStore';
 import { cn } from '@/lib/utils';
 import { TextElement as TextElementType } from '@/types/editor';
 import { FontPicker } from '@/components/panels/FontPicker';
@@ -33,13 +31,13 @@ export function Toolbar({ onOpenFontLibrary }: ToolbarProps) {
     const addShape = useEditorStore((s) => s.addShape);
     const [showShapeMenu, setShowShapeMenu] = React.useState(false);
 
-    // Selection from selectionStore
-    const selectedIds = useSelectionStore((s) => s.selectedIds);
+    // Selection from editorStore (consolidated)
+    const selectedIds = useEditorStore((s) => s.selectedIds);
     const selectedId = selectedIds[0] || null;
 
-    // Elements from elementsStore
-    const elements = useElementsStore((s) => s.elements);
-    const updateElement = useElementsStore((s) => s.updateElement);
+    // Elements from editorStore (consolidated)
+    const elements = useEditorStore((s) => s.elements);
+    const updateElement = useEditorStore((s) => s.updateElement);
 
     // History - use editorStore for both state AND actions (they must match!)
     const canUndo = useEditorStore((s) => s.canUndo());

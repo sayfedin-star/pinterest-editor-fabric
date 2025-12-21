@@ -2,7 +2,7 @@
 
 import React, { memo, useCallback, useState } from 'react';
 import { AlignLeft, AlignCenter, AlignRight, Zap, Eye, EyeOff } from 'lucide-react';
-import { useElementsStore } from '@/stores/elementsStore';
+import { useEditorStore } from '@/stores/editorStore';
 import { TextElement } from '@/types/editor';
 import { cn } from '@/lib/utils';
 import { SectionHeader } from './shared';
@@ -12,10 +12,10 @@ interface TextPropertiesSectionProps {
 }
 
 export const TextPropertiesSection = memo(function TextPropertiesSection({ element }: TextPropertiesSectionProps) {
-    const updateElement = useElementsStore((s) => s.updateElement);
+    const updateElement = useEditorStore((s) => s.updateElement);
     
     // Get live element from store for reactive updates
-    const liveElement = useElementsStore((state) => 
+    const liveElement = useEditorStore((state) => 
         state.elements.find(el => el.id === element.id) as TextElement | undefined
     ) || element;
     

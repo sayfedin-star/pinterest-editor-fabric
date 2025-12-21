@@ -1,8 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { CanvasManager } from '@/lib/canvas/CanvasManager';
 import { useEditorStore } from '@/stores/editorStore';
-import { useSelectionStore } from '@/stores/selectionStore';
-import { useElementsStore } from '@/stores/elementsStore';
 import { Element } from '@/types/editor';
 
 // Set to true for debugging sync issues
@@ -12,7 +10,9 @@ const DEBUG_SYNC = false;
  * SynchronizationBridge - Mediator (Layer 2)
  * 
  * Translates between CanvasManager imperative world and React declarative world.
- * Week 2: Bidirectional sync - Canvas  React + Settings  Canvas
+ * 
+ * SIMPLIFIED (2025-12-21): Now uses only editorStore as single source of truth.
+ * Previous 5 directions → 3 directions (removed duplication)
  * 
  * Key Responsibility: Prevent circular update loops
  */
@@ -34,10 +34,9 @@ export function useSynchronizationBridge(canvasManager: CanvasManager | null) {
             isUpdatingRef.current.fromCanvas = true;
 
             try {
-                // CRITICAL FIX: Update elementsStore (source of truth), not editorStore
-                const elementsStoreUpdate = useElementsStore.getState().updateElement;
+                // CONSOLIDATED: Update editorStore directly (single source of truth)
                 for (const element of updatedElements) {
-                    elementsStoreUpdate(element.id, {
+                    useEditorStore.getState().updateElement(element.id, {
                         x: element.x,
                         y: element.y,
                         width: element.width,
@@ -56,13 +55,13 @@ export function useSynchronizationBridge(canvasManager: CanvasManager | null) {
         return () => { };
     }, [canvasManager]);
 
-    // Direction 2: Selection Sync
+    // Direction 2: Selection Sync (Canvas -> editorStore)
     useEffect(() => {
         if (!canvasManager) return;
 
         const handleSelectionChanged = (selectedIds: string[]) => {
             if (DEBUG_SYNC) console.log('[SynchronizationBridge] Selection:', selectedIds);
-            useSelectionStore.getState().setSelectedIds(selectedIds);
+            // CONSOLIDATED: Update editorStore directly (single source of truth)
             useEditorStore.setState({ selectedIds });
         };
 
@@ -70,19 +69,7 @@ export function useSynchronizationBridge(canvasManager: CanvasManager | null) {
         return () => { };
     }, [canvasManager]);
 
-    // Direction 3: React  Canvas Sync
-    useEffect(() => {
-        if (!canvasManager) return;
-
-        const unsubscribe = useEditorStore.subscribe(() => {
-            if (isUpdatingRef.current.fromCanvas) return;
-            if (DEBUG_SYNC) console.log('[SynchronizationBridge] React → Canvas: Store changed');
-        });
-
-        return () => unsubscribe();
-    }, [canvasManager]);
-
-    // Direction 4: Settings  Canvas Sync
+    // Direction 3: Settings -> Canvas Sync (snapping settings)
     useEffect(() => {
         if (!canvasManager) return;
 
@@ -105,11 +92,11 @@ export function useSynchronizationBridge(canvasManager: CanvasManager | null) {
         return () => unsubscribe();
     }, [canvasManager]);
 
-    // Direction 5: zIndex/Layer Order Sync
+    // Direction 4: zIndex/Layer Order Sync (editorStore -> Canvas)
     useEffect(() => {
         if (!canvasManager) return;
 
-        const unsubscribe = useElementsStore.subscribe((state) => {
+        const unsubscribe = useEditorStore.subscribe((state) => {
             if (isUpdatingRef.current.fromCanvas) return;
 
             const elements = state.elements;
@@ -140,7 +127,7 @@ export function useSynchronizationBridge(canvasManager: CanvasManager | null) {
         });
 
         // Initialize previous zIndex map
-        const initialElements = useElementsStore.getState().elements;
+        const initialElements = useEditorStore.getState().elements;
         prevZIndexesRef.current = new Map(initialElements.map(el => [el.id, el.zIndex]));
 
         return () => unsubscribe();

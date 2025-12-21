@@ -4,8 +4,6 @@ import React, { useState, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { Save, Upload } from 'lucide-react';
 import { useTemplateStore } from '@/stores/templateStore';
-import { useCanvasStore } from '@/stores/canvasStore';
-import { useElementsStore } from '@/stores/elementsStore';
 import { useEditorStore } from '@/stores/editorStore';
 import { useStageRef } from '@/hooks/useStageRef';
 import { cn } from '@/lib/utils';
@@ -29,14 +27,10 @@ export function Header() {
     const setIsSaving = useTemplateStore((s) => s.setIsSaving);
     const setTemplateId = useTemplateStore((s) => s.setTemplateId);
 
-    // Canvas state from canvasStore
-    const backgroundColor = useCanvasStore((s) => s.backgroundColor);
-    const canvasSize = useCanvasStore((s) => s.canvasSize);
-
-    // Elements from elementsStore
-    const elements = useElementsStore((s) => s.elements);
-
-    // Keep some state in editorStore for now (will migrate later)
+    // All canvas/element state from consolidated editorStore
+    const backgroundColor = useEditorStore((s) => s.backgroundColor);
+    const canvasSize = useEditorStore((s) => s.canvasSize);
+    const elements = useEditorStore((s) => s.elements);
     const previewMode = useEditorStore((s) => s.previewMode);
     const setPreviewMode = useEditorStore((s) => s.setPreviewMode);
 
@@ -175,7 +169,7 @@ export function Header() {
 
     return (
         <>
-            <header className="h-16 px-6 border-b border-gray-100 dark:border-gray-800 bg-white/80 dark:bg-gray-900/80 backdrop-blur-md flex items-center justify-between z-50 flex-shrink-0 transition-all">
+            <header className="h-16 px-6 border-b border-gray-100 dark:border-gray-800 bg-white/80 dark:bg-gray-900/80 backdrop-blur-md flex items-center justify-between z-50 shrink-0 transition-all">
                 {/* Left: Back & Title */}
                 <div className="flex items-center gap-4 flex-1">
                     <a
@@ -249,7 +243,7 @@ export function Header() {
                         disabled={isSaving}
                         className={cn(
                             "flex items-center gap-2 px-6 py-2.5 rounded-full font-heading font-medium text-sm transition-all shadow-lg shadow-purple-500/20 active:scale-95",
-                            "bg-gradient-to-r from-primary-creative to-secondary-creative text-white hover:opacity-90",
+                            "bg-linear-to-r from-primary-creative to-secondary-creative text-white hover:opacity-90",
                             isSaving && "opacity-70 cursor-not-allowed"
                         )}
                     >
@@ -259,7 +253,7 @@ export function Header() {
 
                     {/* User Menu */}
                      <div className="pl-1">
-                        <button className="w-9 h-9 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 border-2 border-white dark:border-gray-900 shadow-sm cursor-pointer flex items-center justify-center text-white font-bold text-xs transition-transform hover:scale-105 active:scale-95">
+                        <button className="w-9 h-9 rounded-full bg-linear-to-br from-purple-500 to-pink-500 border-2 border-white dark:border-gray-900 shadow-sm cursor-pointer flex items-center justify-center text-white font-bold text-xs transition-transform hover:scale-105 active:scale-95">
                                 {currentUser?.email?.[0].toUpperCase() || 'G'}
                         </button>
                     </div>

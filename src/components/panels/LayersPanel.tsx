@@ -7,8 +7,6 @@ import {
     Draggable,
     DropResult
 } from '@hello-pangea/dnd';
-import { useElementsStore } from '@/stores/elementsStore';
-import { useSelectionStore } from '@/stores/selectionStore';
 import { useEditorStore } from '@/stores/editorStore';
 import { LayerItem } from './LayerItem';
 
@@ -21,15 +19,15 @@ import { LayerItem } from './LayerItem';
  * - Only renders ~15 visible items at a time (drag-drop constraint)
  */
 export function LayersPanel() {
-    // Elements from elementsStore
-    const elements = useElementsStore((s) => s.elements);
-    const updateElement = useElementsStore((s) => s.updateElement);
-    const deleteElement = useElementsStore((s) => s.deleteElement);
-    const duplicateElement = useElementsStore((s) => s.duplicateElement);
+    // All state from consolidated editorStore
+    const elements = useEditorStore((s) => s.elements);
+    const updateElement = useEditorStore((s) => s.updateElement);
+    const deleteElement = useEditorStore((s) => s.deleteElement);
+    const duplicateElement = useEditorStore((s) => s.duplicateElement);
 
-    // Selection from selectionStore
-    const selectedIds = useSelectionStore((s) => s.selectedIds);
-    const selectElement = useSelectionStore((s) => s.selectElement);
+    // Selection from editorStore
+    const selectedIds = useEditorStore((s) => s.selectedIds);
+    const selectElement = useEditorStore((s) => s.selectElement);
     const selectedId = selectedIds[0] || null;
 
     // History from editorStore

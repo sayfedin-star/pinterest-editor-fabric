@@ -21,8 +21,6 @@
 import { useEffect, useRef, useCallback, useState } from 'react';
 import { useTemplateStore } from '@/stores/templateStore';
 import { useEditorStore } from '@/stores/editorStore';
-import { useElementsStore } from '@/stores/elementsStore';
-import { useCanvasStore } from '@/stores/canvasStore';
 import { saveTemplate as saveTemplateToDb } from '@/lib/db/templates';
 import { isSupabaseConfigured, supabase } from '@/lib/supabase';
 
@@ -75,10 +73,10 @@ export function useAutoSave(options: AutoSaveOptions = {}): AutoSaveState & {
     const setTemplateId = useTemplateStore((s) => s.setTemplateId);
     const setIsNewTemplate = useTemplateStore((s) => s.setIsNewTemplate);
 
-    // Get state from other stores
-    const elements = useElementsStore((s) => s.elements);
-    const canvasSize = useCanvasStore((s) => s.canvasSize);
-    const backgroundColor = useCanvasStore((s) => s.backgroundColor);
+    // Get state from consolidated editorStore (instead of specialized stores)
+    const elements = useEditorStore((s) => s.elements);
+    const canvasSize = useEditorStore((s) => s.canvasSize);
+    const backgroundColor = useEditorStore((s) => s.backgroundColor);
 
     // Update status and notify
     const updateStatus = useCallback((newStatus: AutoSaveStatus) => {

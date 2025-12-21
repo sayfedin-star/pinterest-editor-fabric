@@ -12,8 +12,6 @@ import { useEffect, useRef } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { useEditorStore } from '@/stores/editorStore';
 import { useTemplateStore } from '@/stores/templateStore';
-import { useElementsStore } from '@/stores/elementsStore';
-import { useCanvasStore } from '@/stores/canvasStore';
 import { getTemplate } from '@/lib/db/templates';
 import { toast } from 'sonner';
 import { v4 as uuidv4 } from 'uuid';
@@ -23,14 +21,16 @@ export function useTemplateFromUrl() {
     const templateId = searchParams.get('template');
     const hasProcessedRef = useRef<string | null>(null); // Track what we've processed
     
-    // Store actions
+    // Store actions - all from consolidated editorStore
     const loadTemplate = useEditorStore((s) => s.loadTemplate);
+    const setElements = useEditorStore((s) => s.setElements);
+    const setCanvasSize = useEditorStore((s) => s.setCanvasSize);
+    const setBackgroundColor = useEditorStore((s) => s.setBackgroundColor);
+    
+    // Template metadata from templateStore  
     const setTemplateId = useTemplateStore((s) => s.setTemplateId);
     const setTemplateName = useTemplateStore((s) => s.setTemplateName);
     const setIsNewTemplate = useTemplateStore((s) => s.setIsNewTemplate);
-    const setElements = useElementsStore((s) => s.setElements);
-    const setCanvasSize = useCanvasStore((s) => s.setCanvasSize);
-    const setBackgroundColor = useCanvasStore((s) => s.setBackgroundColor);
     
     useEffect(() => {
         // Skip if we've already processed this exact state
