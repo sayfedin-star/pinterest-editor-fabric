@@ -79,8 +79,9 @@ async function loadImageToCanvas(url: string, options: Partial<fabric.ImageProps
                 },
             });
             if (!response.ok) {
-                console.warn(`[Engine] Image fetch failed (${response.status}): ${fetchUrl.substring(0, 80)}`);
-                throw new Error(`Failed to fetch image: ${response.status}`);
+                const errorText = await response.text().catch(() => 'No error text');
+                console.warn(`[Engine] Image fetch failed (${response.status} ${response.statusText}): ${fetchUrl} - ${errorText.substring(0, 100)}`);
+                throw new Error(`Failed to fetch image: ${response.status} ${response.statusText}`);
             }
             const arrayBuffer = await response.arrayBuffer();
             const base64 = Buffer.from(arrayBuffer).toString('base64');
