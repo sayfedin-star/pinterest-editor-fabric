@@ -29,9 +29,17 @@ interface BatchResult {
 
 // Initialize S3 Client for Tebi
 const getS3Client = () => {
+    // Handle TEBI_ENDPOINT with or without https:// prefix
+    const rawEndpoint = process.env.TEBI_ENDPOINT || '';
+    const endpoint = rawEndpoint.startsWith('https://') || rawEndpoint.startsWith('http://')
+        ? rawEndpoint
+        : `https://${rawEndpoint}`;
+    
+    console.log('[S3] Initializing with endpoint:', endpoint);
+    
     return new S3Client({
         region: 'auto',
-        endpoint: `https://${process.env.TEBI_ENDPOINT}`,
+        endpoint,
         credentials: {
             accessKeyId: process.env.TEBI_ACCESS_KEY!,
             secretAccessKey: process.env.TEBI_SECRET_KEY!,
@@ -60,8 +68,12 @@ async function uploadToS3(
         })
     );
 
-    // Generate public URL
-    return `https://${process.env.TEBI_ENDPOINT}/${bucket}/${key}`;
+    // Generate public URL - handle TEBI_ENDPOINT with or without https://
+    const rawEndpoint = process.env.TEBI_ENDPOINT || '';
+    const baseUrl = rawEndpoint.startsWith('https://') || rawEndpoint.startsWith('http://')
+        ? rawEndpoint
+        : `https://${rawEndpoint}`;
+    return `${baseUrl}/${bucket}/${key}`;
 }
 
 export async function POST(req: NextRequest) {
