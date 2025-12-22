@@ -124,15 +124,12 @@ export async function POST(req: NextRequest) {
 
         // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
         // 🚀 PHASE 1: Create canvas pool for reuse
-        // Calculate dynamic limit based on available memory
-        // Vercel Serverless: 1024MB default, each canvas ~50MB
-        // Safe limit: 14 concurrent (700MB usage, 300MB headroom)
+        // REDUCED parallelism to avoid CPU contention on serverless
+        // Vercel has limited CPU - too many parallel fabric ops block each other
         // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-        const PARALLEL_LIMIT = parseInt(process.env.PARALLEL_LIMIT || '14', 10);
+        const PARALLEL_LIMIT = parseInt(process.env.PARALLEL_LIMIT || '4', 10);
         
-        if (DEBUG_RENDER) {
-            console.log(`[Server Render] Using PARALLEL_LIMIT: ${PARALLEL_LIMIT}`);
-        }
+        console.log(`[Server Render] Using PARALLEL_LIMIT: ${PARALLEL_LIMIT}`);
         
         const canvasPool = new CanvasPool(PARALLEL_LIMIT, canvasSize.width, canvasSize.height);
 
@@ -231,8 +228,8 @@ export async function POST(req: NextRequest) {
                     const base64Data = dataUrl.replace(/^data:image\/\w+;base64,/, '');
                     const buffer = Buffer.from(base64Data, 'base64');
                     
-                    // Log first few pins for timing breakdown
-                    if (pinIndex < 3) {
+                    // Log first 3 pins of batch for timing breakdown
+                    if (pinIndex - startIndex < 3) {
                         console.log(`[Timing Detail] Pin ${pinIndex}: acquire=${t1-t0}ms, renderTemplate=${t2-t1}ms, toDataURL=${t3-t2}ms`);
                     }
                     
