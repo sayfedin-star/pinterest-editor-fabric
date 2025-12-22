@@ -161,9 +161,8 @@ export async function POST(req: NextRequest) {
                 }
             }
             
-            if (uniqueUrls.size > 0 && DEBUG_RENDER) {
-                console.log(`[Server Render] Pre-loading ${uniqueUrls.size} unique images...`);
-            }
+            // ALWAYS log pre-fetch stats (even in production) for debugging
+            console.log(`[Server Render] Found ${imageElements.length} image elements, ${uniqueUrls.size} unique URLs to pre-fetch`);
             
             // Pre-fetch all unique images in parallel
             const preFetchStart = Date.now();
@@ -197,9 +196,8 @@ export async function POST(req: NextRequest) {
             // 🚀 Set the cache so engine.ts loadImageToCanvas can use it
             setServerImageCache(imageCache);
             
-            if (DEBUG_RENDER) {
-                console.log(`[Server Render] Pre-loaded ${imageCache.size} images in ${Date.now() - preFetchStart}ms`);
-            }
+            // ALWAYS log for debugging
+            console.log(`[Server Render] Pre-loaded ${imageCache.size}/${uniqueUrls.size} images in ${Date.now() - preFetchStart}ms`);
 
             // Render function using pool + image cache
             async function renderSinglePin(

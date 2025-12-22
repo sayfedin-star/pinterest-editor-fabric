@@ -78,14 +78,15 @@ async function loadImageToCanvas(url: string, options: Partial<fabric.ImageProps
     if (!isBrowser && serverImageCache) {
         const cachedDataUrl = serverImageCache.get(url);
         if (cachedDataUrl) {
-            if (DEBUG_RENDER) {
-                console.log(`[Engine] Using cached image for: ${url.substring(0, 60)}`);
-            }
+            // Cache HIT - use pre-fetched image
             try {
                 return await tryLoad(cachedDataUrl);
             } catch {
-                // Fall through to normal loading if cache load fails
+                console.warn(`[Engine] Cache hit but load failed for: ${url.substring(0, 60)}`);
             }
+        } else {
+            // Cache MISS - log for debugging
+            console.warn(`[Engine] Cache MISS for: ${url.substring(0, 80)}`);
         }
     }
 
