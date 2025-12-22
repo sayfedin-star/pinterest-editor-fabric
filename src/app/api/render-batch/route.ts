@@ -236,12 +236,23 @@ export async function POST(req: NextRequest) {
             // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
             for (let i = 0; i < csvRows.length; i += PARALLEL_LIMIT) {
                 const chunk = csvRows.slice(i, i + PARALLEL_LIMIT);
+                const chunkStart = Date.now();
+                
                 const chunkPromises = chunk.map(async (rowData, chunkIndex) => {
                     const pinIndex = startIndex + i + chunkIndex;
                     
                     try {
+                        // ⏱️ TIMING: Measure each step
+                        const t0 = Date.now();
                         const buffer = await renderSinglePin(rowData);
+                        const t1 = Date.now();
                         const url = await uploadToS3(s3Client, buffer, campaignId, pinIndex);
+                        const t2 = Date.now();
+                        
+                        // Log first pin of each chunk for timing analysis
+                        if (chunkIndex === 0) {
+                            console.log(`[Timing] Pin ${pinIndex}: render=${t1-t0}ms, upload=${t2-t1}ms`);
+                        }
                         
                         return {
                             index: pinIndex,
@@ -260,6 +271,7 @@ export async function POST(req: NextRequest) {
                 });
 
                 const chunkResults = await Promise.all(chunkPromises);
+                console.log(`[Timing] Chunk ${Math.floor(i/PARALLEL_LIMIT)}: ${chunk.length} pins in ${Date.now() - chunkStart}ms`);
                 results.push(...chunkResults);
             }
 
