@@ -15,7 +15,7 @@ import {
 import { cn } from '@/lib/utils';
 import { useCampaignWizard } from '@/lib/campaigns/CampaignWizardContext';
 import { getTemplate } from '@/lib/db/templates';
-import { usePreviewGeneration, PreviewPin, ValidationWarning } from '@/hooks/usePreviewGeneration';
+import { usePreviewGeneration, PreviewPin, ValidationWarning, TemplateData } from '@/hooks/usePreviewGeneration';
 import { PreviewGrid } from './PreviewCard';
 import { Element, CanvasSize } from '@/types/editor';
 
@@ -175,7 +175,10 @@ function WarningItem({ warning }: { warning: ValidationWarning }) {
 export function PreviewSection({ className }: PreviewSectionProps) {
     const { 
         csvData, 
-        selectedTemplate, 
+        selectedTemplate,
+        selectedTemplates,
+        selectionMode,
+        distributionMode,
         fieldMapping,
         previewStatus,
         setPreviewStatus,
@@ -186,39 +189,82 @@ export function PreviewSection({ className }: PreviewSectionProps) {
         canvas_size: CanvasSize;
         background_color: string;
     } | null>(null);
+    
+    // NEW: State for multi-template mode
+    const [templatesData, setTemplatesData] = useState<TemplateData[]>([]);
     const [templateLoading, setTemplateLoading] = useState(true); // Start as true
     const [inspectPin, setInspectPin] = useState<PreviewPin | null>(null);
     const [isExpanded, setIsExpanded] = useState(true);
     
+    // Determine if we're in multi-template mode
+    const isMultiTemplateMode = selectionMode === 'multiple' && selectedTemplates.length > 1;
+    
     // Load template data when selected template changes
     useEffect(() => {
-        const loadTemplate = async () => {
-            if (!selectedTemplate) {
+        const loadTemplates = async () => {
+            setTemplateLoading(true);
+            
+            if (isMultiTemplateMode) {
+                // Multi-template mode: load all selected templates
+                try {
+                    const loadedTemplates = await Promise.all(
+                        selectedTemplates.map(async (t) => {
+                            const fetched = await getTemplate(t.id);
+                            if (fetched) {
+                                return {
+                                    id: t.id,
+                                    name: t.name,
+                                    elements: fetched.elements as Element[],
+                                    canvasSize: fetched.canvas_size as CanvasSize,
+                                    backgroundColor: fetched.background_color || '#ffffff',
+                                };
+                            }
+                            return null;
+                        })
+                    );
+                    
+                    const validTemplates = loadedTemplates.filter((t): t is TemplateData => t !== null);
+                    setTemplatesData(validTemplates);
+                    
+                    // Also set single template for backward compatibility
+                    if (validTemplates.length > 0) {
+                        setTemplate({
+                            elements: validTemplates[0].elements,
+                            canvas_size: validTemplates[0].canvasSize,
+                            background_color: validTemplates[0].backgroundColor,
+                        });
+                    }
+                    console.log(`[PreviewSection] Loaded ${validTemplates.length} templates for multi-template mode`);
+                } catch (err) {
+                    console.error('Failed to load templates:', err);
+                }
+            } else if (selectedTemplate) {
+                // Single template mode
+                try {
+                    const fetchedTemplate = await getTemplate(selectedTemplate.id);
+                    if (fetchedTemplate) {
+                        setTemplate({
+                            elements: fetchedTemplate.elements as Element[],
+                            canvas_size: fetchedTemplate.canvas_size as CanvasSize,
+                            background_color: fetchedTemplate.background_color || '#ffffff',
+                        });
+                        setTemplatesData([]); // Clear multi-template data
+                    }
+                } catch (err) {
+                    console.error('Failed to load template:', err);
+                }
+            } else {
                 setTemplateLoading(false);
                 return;
             }
             
-            setTemplateLoading(true);
-            try {
-                const fetchedTemplate = await getTemplate(selectedTemplate.id);
-                if (fetchedTemplate) {
-                    setTemplate({
-                        elements: fetchedTemplate.elements as Element[],
-                        canvas_size: fetchedTemplate.canvas_size as CanvasSize,
-                        background_color: fetchedTemplate.background_color || '#ffffff',
-                    });
-                }
-            } catch (err) {
-                console.error('Failed to load template:', err);
-            } finally {
-                setTemplateLoading(false);
-            }
+            setTemplateLoading(false);
         };
         
-        loadTemplate();
-    }, [selectedTemplate]);
+        loadTemplates();
+    }, [selectedTemplate, selectedTemplates, isMultiTemplateMode]);
     
-    // Use preview generation hook
+    // Use preview generation hook - with multi-template support
     const {
         previewPins,
         isGenerating,
@@ -235,6 +281,9 @@ export function PreviewSection({ className }: PreviewSectionProps) {
         backgroundColor: template?.background_color || '#ffffff',
         fieldMapping: fieldMapping,
         previewCount: 5,
+        // NEW: Multi-template props
+        templates: isMultiTemplateMode ? templatesData : undefined,
+        distributionMode: isMultiTemplateMode ? distributionMode : undefined,
     });
     
     // Update context preview status
@@ -421,7 +470,7 @@ export function PreviewSection({ className }: PreviewSectionProps) {
                                     </p>
                                     <p className="text-sm text-blue-700 mt-1 leading-relaxed">
                                         These previews show how your first 5 pins will look. 
-                                        Click <span className="font-semibold">"Create Campaign"</span> below to generate all pins.
+                                        Click <span className="font-semibold">&quot;Create Campaign&quot;</span> below to generate all pins.
                                     </p>
                                 </div>
                             </div>

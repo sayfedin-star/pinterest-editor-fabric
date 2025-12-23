@@ -2,6 +2,7 @@
 
 import React, { createContext, useContext, useState, useCallback, ReactNode } from 'react';
 import { TemplateListItem } from '@/lib/db/templates';
+import { DistributionMode } from '@/types/database.types';
 
 // ============================================
 // Types
@@ -22,10 +23,19 @@ export interface FieldMapping {
 
 export type PreviewStatus = 'idle' | 'generating' | 'ready' | 'error';
 
+// Selection mode for template picker
+export type SelectionMode = 'single' | 'multiple';
+
+// Maximum templates allowed in multi-template mode
+export const MAX_TEMPLATES = 10;
+
 export interface CampaignWizardState {
     currentStep: WizardStep;
     csvData: CSVData | null;
-    selectedTemplate: TemplateListItem | null;
+    selectedTemplate: TemplateListItem | null; // Keep for single mode / backward compat
+    selectedTemplates: TemplateListItem[]; // NEW: Multi-template array
+    selectionMode: SelectionMode; // NEW: 'single' or 'multiple'
+    distributionMode: DistributionMode; // NEW: How templates are assigned to rows
     fieldMapping: FieldMapping;
     campaignName: string;
     campaignDescription: string;
@@ -48,6 +58,17 @@ export interface CampaignWizardActions {
     setPreviewStatus: (status: PreviewStatus) => void;
     resetWizard: () => void;
     
+    // Multi-template actions
+    setSelectionMode: (mode: SelectionMode) => void;
+    setSelectedTemplates: (templates: TemplateListItem[]) => void;
+    addTemplate: (template: TemplateListItem) => boolean; // Returns false if at max
+    removeTemplate: (templateId: string) => void;
+    reorderTemplates: (fromIndex: number, toIndex: number) => void;
+    setDistributionMode: (mode: DistributionMode) => void;
+    
+    // Computed properties
+    getActiveTemplates: () => TemplateListItem[]; // Returns single or multi based on mode
+    
     // Validation
     canProceed: () => boolean;
     getValidationErrors: () => string[];
@@ -63,6 +84,9 @@ const initialState: CampaignWizardState = {
     currentStep: 1,
     csvData: null,
     selectedTemplate: null,
+    selectedTemplates: [],
+    selectionMode: 'single',
+    distributionMode: 'sequential',
     fieldMapping: {},
     campaignName: '',
     campaignDescription: '',
@@ -140,12 +164,99 @@ export function CampaignWizardProvider({ children }: { children: ReactNode }) {
         setState(initialState);
     }, []);
 
+    // ============================================
+    // Multi-Template Actions
+    // ============================================
+
+    const setSelectionMode = useCallback((mode: SelectionMode) => {
+        setState((prev) => {
+            // When switching to single mode, keep only the first template
+            if (mode === 'single' && prev.selectedTemplates.length > 0) {
+                return {
+                    ...prev,
+                    selectionMode: mode,
+                    selectedTemplate: prev.selectedTemplates[0],
+                    fieldMapping: {}, // Clear mapping - will need to re-map
+                };
+            }
+            // When switching to multiple mode, add current single template to array
+            if (mode === 'multiple' && prev.selectedTemplate) {
+                return {
+                    ...prev,
+                    selectionMode: mode,
+                    selectedTemplates: [prev.selectedTemplate],
+                };
+            }
+            return { ...prev, selectionMode: mode };
+        });
+    }, []);
+
+    const setSelectedTemplates = useCallback((templates: TemplateListItem[]) => {
+        setState((prev) => ({
+            ...prev,
+            selectedTemplates: templates.slice(0, MAX_TEMPLATES),
+            fieldMapping: {}, // Clear mapping when templates change
+        }));
+    }, []);
+
+    const addTemplate = useCallback((template: TemplateListItem): boolean => {
+        let wasAdded = false;
+        setState((prev) => {
+            // Check if already at max or already selected
+            if (prev.selectedTemplates.length >= MAX_TEMPLATES) {
+                return prev;
+            }
+            if (prev.selectedTemplates.some(t => t.id === template.id)) {
+                return prev; // Already selected
+            }
+            wasAdded = true;
+            return {
+                ...prev,
+                selectedTemplates: [...prev.selectedTemplates, template],
+                fieldMapping: {}, // Clear mapping when templates change
+            };
+        });
+        return wasAdded;
+    }, []);
+
+    const removeTemplate = useCallback((templateId: string) => {
+        setState((prev) => ({
+            ...prev,
+            selectedTemplates: prev.selectedTemplates.filter(t => t.id !== templateId),
+            fieldMapping: {}, // Clear mapping when templates change
+        }));
+    }, []);
+
+    const reorderTemplates = useCallback((fromIndex: number, toIndex: number) => {
+        setState((prev) => {
+            const templates = [...prev.selectedTemplates];
+            const [removed] = templates.splice(fromIndex, 1);
+            templates.splice(toIndex, 0, removed);
+            return { ...prev, selectedTemplates: templates };
+        });
+    }, []);
+
+    const setDistributionMode = useCallback((mode: DistributionMode) => {
+        setState((prev) => ({ ...prev, distributionMode: mode }));
+    }, []);
+
+    const getActiveTemplates = useCallback((): TemplateListItem[] => {
+        if (state.selectionMode === 'multiple') {
+            return state.selectedTemplates;
+        }
+        return state.selectedTemplate ? [state.selectedTemplate] : [];
+    }, [state.selectionMode, state.selectedTemplates, state.selectedTemplate]);
+
     // Step-based validation (kept for backward compatibility)
     const canProceed = useCallback(() => {
         switch (state.currentStep) {
             case 1:
                 return state.csvData !== null && state.csvData.rowCount > 0;
             case 2:
+                // In multi-mode, check selectedTemplates; in single-mode, check selectedTemplate
+                if (state.selectionMode === 'multiple') {
+                    return state.selectedTemplates.length >= 1;
+                }
                 return state.selectedTemplate !== null;
             case 3:
                 return Object.keys(state.fieldMapping).length > 0;
@@ -168,11 +279,24 @@ export function CampaignWizardProvider({ children }: { children: ReactNode }) {
             errors.push('CSV file is required');
         }
         
-        if (!state.selectedTemplate) {
-            errors.push('Please select a template');
+        // Template validation based on mode
+        if (state.selectionMode === 'multiple') {
+            if (state.selectedTemplates.length === 0) {
+                errors.push('Please select at least one template');
+            } else if (state.selectedTemplates.length > MAX_TEMPLATES) {
+                errors.push(`Maximum ${MAX_TEMPLATES} templates allowed`);
+            }
+        } else {
+            if (!state.selectedTemplate) {
+                errors.push('Please select a template');
+            }
         }
         
-        if (state.selectedTemplate && Object.keys(state.fieldMapping).length === 0) {
+        // Field mapping validation
+        const hasTemplates = state.selectionMode === 'multiple' 
+            ? state.selectedTemplates.length > 0 
+            : state.selectedTemplate !== null;
+        if (hasTemplates && Object.keys(state.fieldMapping).length === 0) {
             errors.push('Please map at least one field');
         }
         
@@ -196,6 +320,15 @@ export function CampaignWizardProvider({ children }: { children: ReactNode }) {
         setCampaignDescription,
         setPreviewStatus,
         resetWizard,
+        // Multi-template actions
+        setSelectionMode,
+        setSelectedTemplates,
+        addTemplate,
+        removeTemplate,
+        reorderTemplates,
+        setDistributionMode,
+        getActiveTemplates,
+        // Validation
         canProceed,
         getValidationErrors,
         isFormValid,

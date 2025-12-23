@@ -63,17 +63,24 @@ async function loadImageToCanvas(url: string, options: Partial<fabric.ImageProps
     if (isBrowser) {
         const cache = getImageCache();
         const cachedImage = cache.get(url);
+        
         if (cachedImage && cachedImage.complete && cachedImage.naturalWidth > 0) {
             try {
                 // Create fabric image from cached HTMLImageElement
                 const img = new fabric.FabricImage(cachedImage, { ...options });
                 // Ensure the image is properly initialized
                 if (img && img.width && img.width > 0) {
+                    // Cache HIT - this is the fast path
                     return img;
                 }
             } catch (error) {
                 console.warn(`[Engine] Failed to create FabricImage from cache for ${url.substring(0, 60)}:`, error);
-                // Fall through to normal loading
+            }
+        } else {
+            // Cache MISS - log for debugging
+            const stats = cache.getStats();
+            if (stats.cached > 0) {
+                console.log(`[Engine] Cache MISS for: ${url.substring(0, 80)} (cache has ${stats.cached} images)`);
             }
         }
     }

@@ -35,7 +35,8 @@ export class CanvasPool {
     private stats = { acquired: 0, released: 0, created: 0, disposed: 0 };
 
     constructor(options: CanvasPoolOptions = {}) {
-        this.maxSize = options.maxSize ?? 5;
+        // Increased from 5 to 10 for better parallelism in bulk generation
+        this.maxSize = options.maxSize ?? 10;
         this.defaultWidth = options.defaultWidth ?? 1000;
         this.defaultHeight = options.defaultHeight ?? 1500;
     }

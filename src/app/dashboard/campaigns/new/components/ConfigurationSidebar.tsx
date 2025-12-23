@@ -22,9 +22,10 @@ type UploadTab = 'file' | 'url';
 
 interface ConfigurationSidebarProps {
     className?: string;
+    horizontal?: boolean; // NEW: horizontal layout mode
 }
 
-export function ConfigurationSidebar({ className }: ConfigurationSidebarProps) {
+export function ConfigurationSidebar({ className, horizontal = false }: ConfigurationSidebarProps) {
     const { 
         campaignName, 
         setCampaignName, 
@@ -166,79 +167,86 @@ export function ConfigurationSidebar({ className }: ConfigurationSidebarProps) {
 
     return (
         <aside className={cn(
-            "bg-surface-light border border-white/20 rounded-2xl p-6 space-y-8 shadow-creative-sm",
-            "lg:sticky lg:top-24 lg:max-h-[calc(100vh-8rem)] lg:overflow-y-auto custom-scrollbar",
+            "bg-surface-light border border-white/20 rounded-2xl p-6 shadow-creative-sm",
+            horizontal 
+                ? "grid grid-cols-1 md:grid-cols-2 gap-6" // Horizontal: 2-column grid
+                : "space-y-8 lg:sticky lg:top-24 lg:max-h-[calc(100vh-8rem)] lg:overflow-y-auto custom-scrollbar", // Vertical
             className
         )}>
-            {/* Configuration Header */}
-            <div className="flex items-center gap-3 pb-4 border-b border-gray-100 dark:border-gray-800">
-                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center shadow-lg shadow-blue-500/20">
-                    <FileText className="w-5 h-5 text-white" />
+            {/* Configuration Header - Only show in vertical mode */}
+            {!horizontal && (
+                <div className="flex items-center gap-3 pb-4 border-b border-gray-100 dark:border-gray-800 md:col-span-3">
+                    <div className="w-10 h-10 rounded-xl bg-linear-to-br from-blue-500 to-purple-600 flex items-center justify-center shadow-lg shadow-blue-500/20">
+                        <FileText className="w-5 h-5 text-white" />
+                    </div>
+                    <div>
+                        <h2 className="font-heading font-semibold text-gray-900 text-lg">Configuration</h2>
+                        <p className="text-xs text-gray-500 font-medium">Setup your campaign details</p>
+                    </div>
                 </div>
-                <div>
-                    <h2 className="font-heading font-semibold text-gray-900 text-lg">Configuration</h2>
-                    <p className="text-xs text-gray-500 font-medium">Setup your campaign details</p>
-                </div>
-            </div>
+            )}
             
-            {/* Campaign Name */}
-            <div className="space-y-2">
-                <label 
-                    htmlFor="campaign-name" 
-                    className="block text-sm font-semibold text-gray-700"
-                >
-                    Campaign Name <span className="text-primary-creative">*</span>
-                </label>
-                <input
-                    id="campaign-name"
-                    type="text"
-                    value={campaignName}
-                    onChange={(e) => {
-                        setCampaignName(e.target.value);
-                        if (nameError && e.target.value.trim()) setNameError(false);
-                    }}
-                    onBlur={validateName}
-                    placeholder="e.g. Summer Collection Launch"
-                    maxLength={100}
-                    className={cn(
-                        "w-full px-4 py-3 bg-gray-50 border rounded-xl text-sm transition-all duration-200",
-                        "focus:ring-2 focus:ring-primary-creative/20 focus:border-primary-creative focus:bg-white",
-                        nameError 
-                            ? "border-red-400 bg-red-50/50" 
-                            : "border-gray-200 hover:border-gray-300"
+            {/* Campaign Name + Description - Left Column when horizontal */}
+            <div className={cn(horizontal && "space-y-4")}>
+                {/* Campaign Name */}
+                <div className="space-y-2">
+                    <label 
+                        htmlFor="campaign-name" 
+                        className="block text-sm font-semibold text-gray-700"
+                    >
+                        Campaign Name <span className="text-primary-creative">*</span>
+                    </label>
+                    <input
+                        id="campaign-name"
+                        type="text"
+                        value={campaignName}
+                        onChange={(e) => {
+                            setCampaignName(e.target.value);
+                            if (nameError && e.target.value.trim()) setNameError(false);
+                        }}
+                        onBlur={validateName}
+                        placeholder="e.g. Summer Collection Launch"
+                        maxLength={100}
+                        className={cn(
+                            "w-full px-4 py-3 bg-gray-50 border rounded-xl text-sm transition-all duration-200",
+                            "focus:ring-2 focus:ring-primary-creative/20 focus:border-primary-creative focus:bg-white",
+                            nameError 
+                                ? "border-red-400 bg-red-50/50" 
+                                : "border-gray-200 hover:border-gray-300"
+                        )}
+                    />
+                    {nameError && (
+                        <p className="text-xs text-red-500 font-medium flex items-center gap-1">
+                            <AlertCircle className="w-3 h-3" /> Campaign name is required
+                        </p>
                     )}
-                />
-                {nameError && (
-                    <p className="text-xs text-red-500 font-medium flex items-center gap-1">
-                        <AlertCircle className="w-3 h-3" /> Campaign name is required
+                </div>
+                
+                {/* Description */}
+                <div className="space-y-2">
+                    <label 
+                        htmlFor="campaign-description" 
+                        className="block text-sm font-semibold text-gray-700"
+                    >
+                        Description <span className="text-gray-400 font-normal">(Optional)</span>
+                    </label>
+                    <textarea
+                        id="campaign-description"
+                        value={campaignDescription}
+                        onChange={(e) => setCampaignDescription(e.target.value)}
+                        placeholder="Add notes about this campaign..."
+                        maxLength={500}
+                        rows={horizontal ? 2 : 3}
+                        className={cn(
+                            "w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-sm resize-none transition-all duration-200",
+                            "focus:ring-2 focus:ring-primary-creative/20 focus:border-primary-creative focus:bg-white",
+                            "hover:border-gray-300"
+                        )}
+                    />
+                    <p className="text-xs text-gray-400 text-right font-medium">
+                        {campaignDescription.length}/500
                     </p>
-                )}
-            </div>
-            
-            {/* Description */}
-            <div className="space-y-2">
-                <label 
-                    htmlFor="campaign-description" 
-                    className="block text-sm font-semibold text-gray-700"
-                >
-                    Description <span className="text-gray-400 font-normal">(Optional)</span>
-                </label>
-                <textarea
-                    id="campaign-description"
-                    value={campaignDescription}
-                    onChange={(e) => setCampaignDescription(e.target.value)}
-                    placeholder="Add notes about this campaign..."
-                    maxLength={500}
-                    rows={3}
-                    className={cn(
-                        "w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-sm resize-none transition-all duration-200",
-                        "focus:ring-2 focus:ring-primary-creative/20 focus:border-primary-creative focus:bg-white",
-                        "hover:border-gray-300"
-                    )}
-                />
-                <p className="text-xs text-gray-400 text-right font-medium">
-                    {campaignDescription.length}/500
-                </p>
+                </div>
             </div>
             
             {/* Data Source */}

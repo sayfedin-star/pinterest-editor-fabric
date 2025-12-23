@@ -1,12 +1,22 @@
 // Campaign database operations
 import { supabase, isSupabaseConfigured, getCurrentUserId } from '../supabase';
-import { DbCampaign, CampaignStatus, FieldMapping } from '@/types/database.types';
+import { 
+    DbCampaign, 
+    CampaignStatus, 
+    FieldMapping, 
+    DistributionMode, 
+    TemplateSnapshot,
+    CampaignStatistics 
+} from '@/types/database.types';
 
 // ============================================
 // Types for campaign operations
 // ============================================
 export interface CreateCampaignData {
-    template_id: string;
+    template_id?: string; // Optional for backward compat
+    template_ids?: string[]; // NEW: Array of template IDs
+    distribution_mode?: DistributionMode; // NEW
+    template_snapshot?: TemplateSnapshot[]; // NEW
     name: string;
     csv_data: Record<string, unknown>[];
     field_mapping: FieldMapping;
@@ -20,6 +30,8 @@ export interface CampaignListItem {
     id: string;
     name: string;
     template_id: string;
+    template_ids: string[] | null; // NEW
+    distribution_mode: DistributionMode; // NEW
     total_pins: number;
     generated_pins: number;
     status: CampaignStatus;
@@ -56,9 +68,15 @@ export async function createCampaign(data: CreateCampaignData): Promise<DbCampai
     }
 
     try {
+        // Determine template_id for backward compatibility
+        const primaryTemplateId = data.template_id || (data.template_ids?.[0] ?? '');
+        
         const insertData = {
             user_id: userId,
-            template_id: data.template_id,
+            template_id: primaryTemplateId, // Keep for backward compat
+            template_ids: data.template_ids || (data.template_id ? [data.template_id] : null),
+            distribution_mode: data.distribution_mode || 'sequential',
+            template_snapshot: data.template_snapshot || null,
             name: data.name,
             csv_data: data.csv_data,
             field_mapping: data.field_mapping,
@@ -106,7 +124,7 @@ export async function getCampaigns(): Promise<CampaignListItem[]> {
         // First get campaigns
         const { data: campaigns, error } = await supabase
             .from('campaigns')
-            .select('id, name, template_id, total_pins, generated_pins, status, created_at, updated_at')
+            .select('id, name, template_id, template_ids, distribution_mode, total_pins, generated_pins, status, created_at, updated_at')
             .eq('user_id', userId)
             .order('created_at', { ascending: false });
 

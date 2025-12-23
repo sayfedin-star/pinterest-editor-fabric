@@ -109,6 +109,14 @@ export class ImagePreloadCache {
             return this.cache.get(url)!;
         }
         this.stats.misses++;
+        
+        // Debug: On first few misses, log what we're looking for vs what's cached
+        if (this.stats.misses <= 3 && this.cache.size > 0) {
+            const cacheKeys = Array.from(this.cache.keys()).slice(0, 3);
+            console.log(`[ImageCache] Looking for: ${url.substring(0, 80)}`);
+            console.log(`[ImageCache] Cache has keys like: ${cacheKeys.map(k => k.substring(0, 60)).join(', ')}`);
+        }
+        
         return null;
     }
 
@@ -187,6 +195,14 @@ export function extractImageUrls(
 
     for (const el of elements) {
         if (el.type !== 'image') continue;
+        
+        // Debug: Log element properties
+        console.log('[extractImageUrls] Image element:', {
+            isDynamic: el.isDynamic,
+            dynamicSource: el.dynamicSource,
+            imageUrl: el.imageUrl?.substring(0, 50),
+            isCanvaBackground: el.isCanvaBackground
+        });
 
         // Static image URL (including Canva backgrounds)
         if (el.imageUrl && !el.isDynamic) {

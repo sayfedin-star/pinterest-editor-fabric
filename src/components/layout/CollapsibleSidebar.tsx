@@ -19,7 +19,8 @@ import {
   Plus,
   Zap,
   Home,
-  PinIcon
+  PinIcon,
+  Key
 } from "lucide-react";
 import {
   Tooltip,
@@ -153,6 +154,7 @@ export function CollapsibleSidebar() {
             items={[
               { icon: <FileStack className="w-5 h-5" />, label: "My Templates", href: "/dashboard/templates", count: 12 },
               { icon: <Megaphone className="w-5 h-5" />, label: "Campaigns", href: "/dashboard/campaigns", count: 4, active: true },
+              { icon: <Key className="w-5 h-5" />, label: "API Keys", href: "/dashboard/api-keys" },
               { icon: <Type className="w-5 h-5" />, label: "Fonts", href: "/dashboard/fonts" },
               { icon: <FolderOpen className="w-5 h-5" />, label: "Categories", href: "/dashboard/categories" },
               { icon: <Tag className="w-5 h-5" />, label: "Tags", href: "/dashboard/tags" }

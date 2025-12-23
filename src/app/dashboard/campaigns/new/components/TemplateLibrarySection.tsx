@@ -9,13 +9,16 @@ import {
     X,
     Filter,
     PanelLeftClose,
-    PanelLeft
+    PanelLeft,
+    Layers
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { TemplateListItem, getTemplatesWithElements, TemplateWithElements } from '@/lib/db/templates';
 import { CompactTemplateCard } from '@/components/campaign/CompactTemplateCard';
 import { ScalableFilterSidebar } from '@/components/shared/ScalableFilterSidebar';
-import { useCampaignWizard } from '@/lib/campaigns/CampaignWizardContext';
+import { useCampaignWizard, MAX_TEMPLATES } from '@/lib/campaigns/CampaignWizardContext';
+import { TemplateModeSelector } from '@/components/campaign/TemplateModeSelector';
+import { DistributionModeSelector } from '@/components/campaign/DistributionModeSelector';
 import { extractDynamicData, DynamicDataSummary, DynamicDataFilter, matchesDynamicDataFilter } from '@/lib/utils/extractDynamicData';
 
 interface TemplateLibrarySectionProps {
@@ -23,15 +26,25 @@ interface TemplateLibrarySectionProps {
 }
 
 export function TemplateLibrarySection({ onTemplateSelect }: TemplateLibrarySectionProps) {
-    const { selectedTemplate, setSelectedTemplate } = useCampaignWizard();
+    const { 
+        selectedTemplate, 
+        setSelectedTemplate,
+        selectedTemplates,
+        selectionMode,
+        setSelectionMode,
+        addTemplate,
+        removeTemplate,
+        distributionMode,
+        setDistributionMode,
+    } = useCampaignWizard();
     
     // Data state
     const [templates, setTemplates] = useState<TemplateWithElements[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     
-    // Filter state
-    const [showFilters, setShowFilters] = useState(true);
+    // Filter state - hidden by default for cleaner UX
+    const [showFilters, setShowFilters] = useState(false);
     const [searchQuery, setSearchQuery] = useState('');
     const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(null);
     const [selectedTagIds, setSelectedTagIds] = useState<string[]>([]);
@@ -85,14 +98,35 @@ export function TemplateLibrarySection({ onTemplateSelect }: TemplateLibrarySect
     }, [templates]);
 
     const handleSelect = useCallback((template: TemplateListItem) => {
-        // Toggle selection - if already selected, deselect
-        if (selectedTemplate?.id === template.id) {
-            setSelectedTemplate(null);
+        if (selectionMode === 'single') {
+            // Single mode: toggle selection
+            if (selectedTemplate?.id === template.id) {
+                setSelectedTemplate(null);
+            } else {
+                setSelectedTemplate(template);
+                onTemplateSelect?.();
+            }
         } else {
-            setSelectedTemplate(template);
-            onTemplateSelect?.();
+            // Multi mode: toggle in array
+            const isAlreadySelected = selectedTemplates.some(t => t.id === template.id);
+            if (isAlreadySelected) {
+                removeTemplate(template.id);
+            } else {
+                const added = addTemplate(template);
+                if (added) {
+                    onTemplateSelect?.();
+                }
+            }
         }
-    }, [selectedTemplate, setSelectedTemplate, onTemplateSelect]);
+    }, [selectionMode, selectedTemplate, setSelectedTemplate, selectedTemplates, addTemplate, removeTemplate, onTemplateSelect]);
+
+    // Check if template is selected (works for both modes)
+    const isTemplateSelected = useCallback((templateId: string): boolean => {
+        if (selectionMode === 'single') {
+            return selectedTemplate?.id === templateId;
+        }
+        return selectedTemplates.some(t => t.id === templateId);
+    }, [selectionMode, selectedTemplate, selectedTemplates]);
 
     // Apply client-side dynamic data filter (can't do this server-side easily)
     const filteredTemplates = useMemo(() => {
@@ -131,10 +165,21 @@ export function TemplateLibrarySection({ onTemplateSelect }: TemplateLibrarySect
                 <div className="space-y-1">
                     <h2 className="text-xl font-semibold text-gray-900 flex items-center gap-2">
                         <Layout className="w-5 h-5 text-primary-creative" />
-                        Select Template
+                        Select Template{selectionMode === 'multiple' ? 's' : ''}
                     </h2>
-                    <p className="text-sm text-gray-500">Choose a design to start your campaign</p>
+                    <p className="text-sm text-gray-500">
+                        {selectionMode === 'single' 
+                            ? 'Choose a design to start your campaign'
+                            : `Select up to ${MAX_TEMPLATES} templates for variety`}
+                    </p>
                 </div>
+                
+                {/* Mode Toggle - NEW */}
+                <TemplateModeSelector
+                    mode={selectionMode}
+                    onModeChange={setSelectionMode}
+                    selectedCount={selectedTemplates.length}
+                />
                 
                 <div className="flex flex-wrap items-center gap-3">
                     {/* Filter Toggle */}
@@ -191,6 +236,15 @@ export function TemplateLibrarySection({ onTemplateSelect }: TemplateLibrarySect
                     </button>
                 </div>
             </div>
+            
+            {/* Distribution Mode Selector - only visible in multi-mode with 2+ templates */}
+            {selectionMode === 'multiple' && selectedTemplates.length >= 2 && (
+                <DistributionModeSelector
+                    mode={distributionMode}
+                    onModeChange={setDistributionMode}
+                    templateCount={selectedTemplates.length}
+                />
+            )}
 
             {/* Main Content: Sidebar + Grid */}
             <div className="flex gap-6">
@@ -211,16 +265,22 @@ export function TemplateLibrarySection({ onTemplateSelect }: TemplateLibrarySect
 
                 {/* Template Grid */}
                 <div className="flex-1 min-w-0">
-                    {/* Results count */}
+                    {/* Results count and selection summary */}
                     <div className="flex items-center justify-between mb-4">
                         <p className="text-sm text-gray-500">
                             {filteredTemplates.length} template{filteredTemplates.length !== 1 ? 's' : ''}
                             {activeFilterCount > 0 && ' (filtered)'}
                         </p>
-                        {selectedTemplate && (
+                        {selectionMode === 'single' && selectedTemplate && (
                             <p className="text-sm text-blue-600 font-medium flex items-center gap-1">
                                 <Star className="w-4 h-4" />
                                 Selected: {selectedTemplate.name}
+                            </p>
+                        )}
+                        {selectionMode === 'multiple' && selectedTemplates.length > 0 && (
+                            <p className="text-sm text-blue-600 font-medium flex items-center gap-1">
+                                <Layers className="w-4 h-4" />
+                                {selectedTemplates.length}/{MAX_TEMPLATES} selected
                             </p>
                         )}
                     </div>
@@ -270,7 +330,7 @@ export function TemplateLibrarySection({ onTemplateSelect }: TemplateLibrarySect
                                     key={template.id}
                                     template={template}
                                     dynamicData={dynamicDataMap.get(template.id)}
-                                    isSelected={selectedTemplate?.id === template.id}
+                                    isSelected={isTemplateSelected(template.id)}
                                     onSelect={handleSelect}
                                 />
                             ))}

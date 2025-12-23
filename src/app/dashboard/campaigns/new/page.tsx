@@ -149,55 +149,47 @@ function SinglePageContent() {
                 </div>
             </header>
 
-            <main className="max-w-[1600px] mx-auto px-6 py-8">
-                {/* Two-column layout */}
-                <div className="grid lg:grid-cols-12 gap-8 items-start">
-                    {/* Left Sidebar - Configuration */}
-                    <div className="lg:col-span-3 space-y-6">
-                        <ConfigurationSidebar />
-                        
-                        {/* Mobile Steps */}
-                        <div className="lg:hidden bg-white p-4 rounded-xl border border-gray-200">
-                             <StepIndicator />
-                        </div>
-                    </div>
+            <main className="max-w-[1600px] mx-auto px-6 py-8 space-y-8">
+                {/* Configuration Section - Horizontal */}
+                <ConfigurationSidebar horizontal />
 
-                    {/* Main Content */}
-                    <div className="lg:col-span-9 space-y-8">
-                        {/* Template Library */}
-                        <div className="bg-transparent rounded-3xl transition-all duration-500">
-                            <TemplateLibrarySection 
-                                onTemplateSelect={scrollToFieldMapping}
-                            />
-                        </div>
-
-                        {/* Field Mapping (conditional) */}
-                        <div 
-                            ref={fieldMappingRef} 
-                            className={cn(
-                                "transition-all duration-700 ease-out",
-                                selectedTemplate ? "opacity-100 translate-y-0" : "opacity-0 translate-y-10 pointer-events-none h-0 overflow-hidden"
-                            )}
-                        >
-                            {selectedTemplate && <FieldMappingSection />}
-                        </div>
-
-                        {/* Preview Section - Shows after field mapping is configured */}
-                        <div className={cn(
-                            "transition-all duration-700 ease-out delay-100",
-                            selectedTemplate && csvData && Object.keys(fieldMapping).length > 0
-                                ? "opacity-100 translate-y-0"
-                                : "opacity-0 translate-y-10 pointer-events-none h-0 overflow-hidden"
-                        )}>
-                            {selectedTemplate && csvData && Object.keys(fieldMapping).length > 0 && (
-                                <PreviewSection />
-                            )}
-                        </div>
-                        
-                         {/* Form Actions */}
-                         <FormActions />
-                    </div>
+                {/* Mobile Steps */}
+                <div className="lg:hidden bg-white p-4 rounded-xl border border-gray-200">
+                     <StepIndicator />
                 </div>
+
+                {/* Template Library */}
+                <div className="bg-transparent rounded-3xl transition-all duration-500">
+                    <TemplateLibrarySection 
+                        onTemplateSelect={scrollToFieldMapping}
+                    />
+                </div>
+
+                {/* Field Mapping (conditional) */}
+                <div 
+                    ref={fieldMappingRef} 
+                    className={cn(
+                        "transition-all duration-700 ease-out",
+                        selectedTemplate ? "opacity-100 translate-y-0" : "opacity-0 translate-y-10 pointer-events-none h-0 overflow-hidden"
+                    )}
+                >
+                    {selectedTemplate && <FieldMappingSection />}
+                </div>
+
+                {/* Preview Section - Shows after field mapping is configured */}
+                <div className={cn(
+                    "transition-all duration-700 ease-out delay-100",
+                    selectedTemplate && csvData && Object.keys(fieldMapping).length > 0
+                        ? "opacity-100 translate-y-0"
+                        : "opacity-0 translate-y-10 pointer-events-none h-0 overflow-hidden"
+                )}>
+                    {selectedTemplate && csvData && Object.keys(fieldMapping).length > 0 && (
+                        <PreviewSection />
+                    )}
+                </div>
+                
+                 {/* Form Actions */}
+                 <FormActions />
             </main>
         </div>
     );

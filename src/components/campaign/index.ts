@@ -7,3 +7,6 @@ export { GenerationSettingsPanel } from './GenerationSettings';
 export { GenerationController } from './GenerationController';
 export { PinCard, PinsGrid } from './PinCard';
 export { ExportToolbar } from './ExportToolbar';
+export { TemplateModeSelector } from './TemplateModeSelector';
+export { DistributionModeSelector } from './DistributionModeSelector';
+

@@ -136,12 +136,14 @@ export const CompactTemplateCard = memo(function CompactTemplateCard({
     );
 }, (prevProps, nextProps) => {
     // Custom comparison for memo - only re-render when these change
+    // IMPORTANT: Include onSelect to ensure callback changes trigger re-render
     return (
         prevProps.template.id === nextProps.template.id &&
         prevProps.template.name === nextProps.template.name &&
         prevProps.template.thumbnail_url === nextProps.template.thumbnail_url &&
         prevProps.template.is_featured === nextProps.template.is_featured &&
         prevProps.isSelected === nextProps.isSelected &&
+        prevProps.onSelect === nextProps.onSelect && // Fix: include callback comparison
         prevProps.dynamicData?.images === nextProps.dynamicData?.images &&
         prevProps.dynamicData?.texts === nextProps.dynamicData?.texts &&
         prevProps.template.category_data?.id === nextProps.template.category_data?.id

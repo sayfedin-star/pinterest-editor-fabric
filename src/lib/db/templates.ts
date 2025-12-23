@@ -3,6 +3,12 @@ import { supabase, isSupabaseConfigured, getCurrentUserId } from '../supabase';
 import { DbTemplate, DbCategory, DbTag } from '@/types/database.types';
 import { Element } from '@/types/editor';
 import { assignTagsToTemplate } from './tags';
+import { customAlphabet } from 'nanoid';
+
+// Configuration
+const SHORT_ID_ALPHABET = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz';
+const SHORT_ID_LENGTH = 8;
+const nanoid = customAlphabet(SHORT_ID_ALPHABET, SHORT_ID_LENGTH);
 
 // Import shared types from templates module
 import type {
@@ -21,6 +27,43 @@ export type {
 } from './templates/types';
 
 // Note: TemplateWithElements is defined below as it extends TemplateListItem
+
+/**
+ * Generate a unique short ID for a template
+ * Format: TMPL-{8 chars}
+ */
+export function generateShortId(): string {
+    return `TMPL-${nanoid()}`;
+}
+
+/**
+ * Get a template by its short ID (Server-side compatible)
+ * @param shortId The short ID to look up
+ * @param client Optional Supabase client (defaults to global client)
+ */
+export async function getTemplateByShortId(
+    shortId: string,
+    client = supabase
+): Promise<DbTemplate | null> {
+    try {
+        const { data, error } = await client
+            .from('templates')
+            .select('*')
+            .eq('short_id', shortId)
+            .single();
+
+        if (error) {
+            console.error('Error fetching template by short ID:', error);
+            return null;
+        }
+
+        return data;
+    } catch (error) {
+        console.error('Error fetching template by short ID:', error);
+        return null;
+    }
+}
+
 // ============================================
 // Template Name Helpers
 // ============================================
@@ -143,6 +186,7 @@ export async function saveTemplate(data: SaveTemplateData): Promise<DbTemplate |
             const insertData = {
                 user_id: userId,
                 name: data.name,
+                short_id: generateShortId(), // Auto-generate short ID
                 description: data.description || null,
                 canvas_size: data.canvas_size,
                 background_color: data.background_color,
@@ -464,6 +508,7 @@ export async function duplicateTemplate(templateId: string, newName?: string): P
         // Create a duplicate with the new name
         const duplicateData: SaveTemplateData = {
             name: finalName,
+            // short_id will be generated automatically by saveTemplate
             description: original.description || undefined,
             canvas_size: original.canvas_size,
             background_color: original.background_color,

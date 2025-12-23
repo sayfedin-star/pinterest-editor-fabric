@@ -4,6 +4,8 @@ import { useState, useCallback, useRef } from 'react';
 import { Element, CanvasSize, ImageElement } from '@/types/editor';
 import { renderTemplate, exportToBlob, FieldMapping } from '@/lib/fabric/engine';
 import { getCanvasPool } from '@/lib/canvas/CanvasPool';
+import { getTemplateForRow } from '@/lib/campaigns/distributionEngine';
+import { DistributionMode } from '@/types/database.types';
 
 // ============================================
 // Types
@@ -23,12 +25,23 @@ export interface PreviewPin {
     generationTimeMs: number;
     status: 'pending' | 'generating' | 'completed' | 'failed';
     error?: string;
+    templateId?: string; // NEW: Which template was used for this pin
+    templateName?: string; // NEW: Template name for display
+}
+
+// NEW: Template data for multi-template mode
+export interface TemplateData {
+    id: string;
+    name: string;
+    elements: Element[];
+    canvasSize: CanvasSize;
+    backgroundColor: string;
 }
 
 export interface UsePreviewGenerationProps {
     /** CSV data rows */
     csvRows: Record<string, string>[];
-    /** Template elements to render */
+    /** Template elements to render (single template mode) */
     templateElements: Element[];
     /** Canvas size for the template */
     canvasSize: CanvasSize;
@@ -38,6 +51,11 @@ export interface UsePreviewGenerationProps {
     fieldMapping: Record<string, string>;
     /** Number of preview pins to generate (default: 5) */
     previewCount?: number;
+    // NEW: Multi-template support
+    /** Array of templates for multi-template mode */
+    templates?: TemplateData[];
+    /** Distribution mode for multi-template */
+    distributionMode?: DistributionMode;
 }
 
 export interface UsePreviewGenerationResult {
@@ -147,6 +165,8 @@ export function usePreviewGeneration({
     backgroundColor,
     fieldMapping,
     previewCount = DEFAULT_PREVIEW_COUNT,
+    templates,
+    distributionMode = 'sequential',
 }: UsePreviewGenerationProps): UsePreviewGenerationResult {
     const [previewPins, setPreviewPins] = useState<PreviewPin[]>([]);
     const [isGenerating, setIsGenerating] = useState(false);
@@ -219,22 +239,64 @@ export function usePreviewGeneration({
                 ));
                 
                 try {
+                    // MULTI-TEMPLATE: Determine which template to use for this row
+                    let currentElements = templateElements;
+                    let currentCanvasSize = canvasSize;
+                    let currentBgColor = backgroundColor;
+                    let currentTemplateId: string | undefined;
+                    
+                    if (templates && templates.length > 1) {
+                        // Use distribution engine to select template
+                        const templateSnapshots = templates.map(t => ({
+                            id: t.id,
+                            short_id: t.id.slice(0, 8),
+                            name: t.name,
+                            elements: t.elements,
+                            canvas_size: t.canvasSize,
+                            background_color: t.backgroundColor,
+                        }));
+                        
+                        const distributionResult = getTemplateForRow(
+                            {
+                                templates: templateSnapshots,
+                                mode: distributionMode,
+                                totalRows: csvRows.length,
+                            },
+                            {
+                                rowIndex: i,
+                                csvRow: rowData as Record<string, unknown>,
+                            }
+                        );
+                        
+                        // Find the selected template
+                        const selectedTemplate = templates.find(t => t.id === distributionResult.template.id);
+                        if (selectedTemplate) {
+                            currentElements = selectedTemplate.elements;
+                            currentCanvasSize = selectedTemplate.canvasSize;
+                            currentBgColor = selectedTemplate.backgroundColor;
+                            currentTemplateId = selectedTemplate.id;
+                        }
+                        
+                        console.log(`[PreviewGen] Row ${i}: Using template "${distributionResult.template.name}"${distributionResult.warning ? ` (${distributionResult.warning})` : ''}`);
+                    }
+                    
                     // Get canvas from pool (returns StaticCanvas directly)
                     const canvas = canvasPoolRef.current.acquire(
-                        canvasSize.width,
-                        canvasSize.height
+                        currentCanvasSize.width,
+                        currentCanvasSize.height
                     );
                     
                     // BUGFIX: Enhanced logging for multi-image debugging
                     console.log(`[PreviewGen] Generating pin ${i + 1}:`, {
                         rowData: Object.keys(rowData),
                         fieldMapping,
-                        imageElementCount: templateElements.filter(e => e.type === 'image').length,
-                        textElementCount: templateElements.filter(e => e.type === 'text').length,
+                        templateId: currentTemplateId,
+                        imageElementCount: currentElements.filter(e => e.type === 'image').length,
+                        textElementCount: currentElements.filter(e => e.type === 'text').length,
                     });
                     
                     // Log each image element's dynamic binding
-                    templateElements.forEach((el, idx) => {
+                    currentElements.forEach((el, idx) => {
                         if (el.type === 'image') {
                             const imgEl = el as ImageElement;
                             console.log(`[PreviewGen] Image element ${idx} (${imgEl.name}):`, {
@@ -252,11 +314,11 @@ export function usePreviewGeneration({
                     // Render the template with data - using RenderConfig object
                     await renderTemplate(
                         canvas,
-                        templateElements,
+                        currentElements,
                         {
-                            width: canvasSize.width,
-                            height: canvasSize.height,
-                            backgroundColor,
+                            width: currentCanvasSize.width,
+                            height: currentCanvasSize.height,
+                            backgroundColor: currentBgColor,
                         },
                         rowData,
                         fieldMapping as FieldMapping
@@ -313,7 +375,7 @@ export function usePreviewGeneration({
         } finally {
             setIsGenerating(false);
         }
-    }, [csvRows, templateElements, canvasSize, backgroundColor, fieldMapping, previewCount, previewPins.length, error]);
+    }, [csvRows, templateElements, canvasSize, backgroundColor, fieldMapping, previewCount, previewPins.length, error, templates, distributionMode]);
     
     /**
      * Force regenerate all preview pins

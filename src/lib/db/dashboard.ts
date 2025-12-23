@@ -98,7 +98,7 @@ export async function getRecentProjects(): Promise<DashboardProject[]> {
     try {
         const { data: campaigns, error } = await supabase
             .from('campaigns')
-            .select('id, name, template_id, total_pins, generated_pins, status, created_at, updated_at')
+            .select('id, name, template_id, template_ids, distribution_mode, total_pins, generated_pins, status, created_at, updated_at')
             .eq('user_id', userId)
             .order('updated_at', { ascending: false })
             .limit(10); // Limit to recent 10

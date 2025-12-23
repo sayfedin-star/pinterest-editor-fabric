@@ -1,12 +1,14 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { Layout, Check, Plus, Sparkles, Eye } from 'lucide-react';
+import { Layout, Check, Plus, Sparkles, Eye, X, GripVertical } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { useCampaignWizard } from '@/lib/campaigns/CampaignWizardContext';
+import { useCampaignWizard, MAX_TEMPLATES } from '@/lib/campaigns/CampaignWizardContext';
 import { getTemplates, TemplateListItem } from '@/lib/db/templates';
 import { isSupabaseConfigured } from '@/lib/supabase';
 import Link from 'next/link';
+import { TemplateModeSelector } from './TemplateModeSelector';
+import { DistributionModeSelector } from './DistributionModeSelector';
 
 // Demo templates for when database is not configured
 const demoTemplates: TemplateListItem[] = [
@@ -28,8 +30,59 @@ function TemplateCardSkeleton() {
     );
 }
 
+// Selected template chip for multi-select summary
+function SelectedTemplateChip({ 
+    template, 
+    index,
+    onRemove 
+}: { 
+    template: TemplateListItem; 
+    index: number;
+    onRemove: () => void;
+}) {
+    const colors = [
+        'bg-purple-100 text-purple-700 border-purple-200',
+        'bg-pink-100 text-pink-700 border-pink-200',
+        'bg-blue-100 text-blue-700 border-blue-200',
+        'bg-green-100 text-green-700 border-green-200',
+        'bg-amber-100 text-amber-700 border-amber-200',
+    ];
+    const colorClass = colors[index % colors.length];
+    const letter = String.fromCharCode(65 + index); // A, B, C...
+
+    return (
+        <div className={cn(
+            "flex items-center gap-2 pl-2 pr-1 py-1 rounded-lg border text-sm font-medium",
+            colorClass
+        )}>
+            <GripVertical className="w-3 h-3 opacity-50 cursor-grab" />
+            <span className="w-5 h-5 rounded bg-white/50 flex items-center justify-center text-xs font-bold">
+                {letter}
+            </span>
+            <span className="truncate max-w-[120px]">{template.name}</span>
+            <button
+                type="button"
+                onClick={onRemove}
+                className="p-1 rounded-md hover:bg-white/50 transition-colors"
+            >
+                <X className="w-3.5 h-3.5" />
+            </button>
+        </div>
+    );
+}
+
 export function StepSelectTemplate() {
-    const { selectedTemplate, setSelectedTemplate } = useCampaignWizard();
+    const { 
+        selectedTemplate, 
+        setSelectedTemplate,
+        selectedTemplates,
+        selectionMode,
+        setSelectionMode,
+        addTemplate,
+        removeTemplate,
+        distributionMode,
+        setDistributionMode,
+    } = useCampaignWizard();
 
     const [templates, setTemplates] = useState<TemplateListItem[]>([]);
     const [isLoading, setIsLoading] = useState(true);
@@ -56,22 +109,67 @@ export function StepSelectTemplate() {
         fetchTemplates();
     }, []);
 
+    // Handle template selection based on current mode
     const handleSelect = (template: TemplateListItem) => {
-        if (selectedTemplate?.id === template.id) {
-            setSelectedTemplate(null);
+        if (selectionMode === 'single') {
+            // Single mode - toggle selection
+            if (selectedTemplate?.id === template.id) {
+                setSelectedTemplate(null);
+            } else {
+                setSelectedTemplate(template);
+            }
         } else {
-            setSelectedTemplate(template);
+            // Multi mode - toggle in array
+            const isAlreadySelected = selectedTemplates.some(t => t.id === template.id);
+            if (isAlreadySelected) {
+                removeTemplate(template.id);
+            } else {
+                addTemplate(template);
+            }
         }
+    };
+
+    // Check if template is selected (either mode)
+    const isTemplateSelected = (templateId: string): boolean => {
+        if (selectionMode === 'single') {
+            return selectedTemplate?.id === templateId;
+        }
+        return selectedTemplates.some(t => t.id === templateId);
+    };
+
+    // Get selection index for multi-mode (for badge letter)
+    const getSelectionIndex = (templateId: string): number => {
+        return selectedTemplates.findIndex(t => t.id === templateId);
     };
 
     return (
         <div className="space-y-6">
-            <div>
-                <h2 className="text-xl font-semibold text-gray-900">Choose a Template</h2>
-                <p className="text-gray-600 mt-1">
-                    Select the template you want to use for generating pins from your CSV data.
-                </p>
+            {/* Header with Mode Selector */}
+            <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
+                <div>
+                    <h2 className="text-xl font-semibold text-gray-900">Choose Templates</h2>
+                    <p className="text-gray-600 mt-1">
+                        {selectionMode === 'single' 
+                            ? 'Select a template to use for all your pins.'
+                            : `Select up to ${MAX_TEMPLATES} templates for variety in your pins.`}
+                    </p>
+                </div>
+                
+                <TemplateModeSelector
+                    mode={selectionMode}
+                    onModeChange={setSelectionMode}
+                    selectedCount={selectedTemplates.length}
+                />
             </div>
+
+            {/* Distribution Mode Selector (only visible in multi-mode with 2+ templates) */}
+            {selectionMode === 'multiple' && (
+                <DistributionModeSelector
+                    mode={distributionMode}
+                    onModeChange={setDistributionMode}
+                    templateCount={selectedTemplates.length}
+                />
+            )}
 
             {/* Loading State - Skeleton Grid */}
             {isLoading ? (
@@ -99,11 +197,15 @@ export function StepSelectTemplate() {
                     </Link>
                 </div>
             ) : (
-                /* Template Grid - Enhanced */
+                /* Template Grid - Enhanced for multi-select */
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
                     {templates.map((template) => {
-                        const isSelected = selectedTemplate?.id === template.id;
+                        const isSelected = isTemplateSelected(template.id);
                         const isHovered = hoveredId === template.id;
+                        const selectionIndex = getSelectionIndex(template.id);
+                        const isAtMax = selectionMode === 'multiple' && 
+                                        selectedTemplates.length >= MAX_TEMPLATES && 
+                                        !isSelected;
 
                         return (
                             <button
@@ -111,18 +213,41 @@ export function StepSelectTemplate() {
                                 onClick={() => handleSelect(template)}
                                 onMouseEnter={() => setHoveredId(template.id)}
                                 onMouseLeave={() => setHoveredId(null)}
+                                disabled={isAtMax}
                                 className={cn(
                                     "group relative bg-white rounded-xl border-2 overflow-hidden text-left transition-all duration-300",
                                     isSelected
                                         ? "border-blue-500 ring-4 ring-blue-100 shadow-lg scale-[1.02]"
+                                        : isAtMax
+                                        ? "border-gray-200 opacity-50 cursor-not-allowed"
                                         : "border-gray-200 hover:border-blue-300 hover:shadow-xl hover:scale-[1.02]"
                                 )}
                             >
-                                {/* Selected Indicator */}
+                                {/* Selection Indicator */}
                                 {isSelected && (
-                                    <div className="absolute top-3 right-3 z-10 w-7 h-7 bg-blue-600 rounded-full flex items-center justify-center shadow-lg animate-in zoom-in-50 duration-200">
-                                        <Check className="w-4 h-4 text-white" strokeWidth={3} />
+                                    <div className="absolute top-3 right-3 z-10">
+                                        {selectionMode === 'multiple' ? (
+                                            // Multi-mode: show letter badge
+                                            <div className="w-7 h-7 bg-blue-600 rounded-full flex items-center justify-center shadow-lg animate-in zoom-in-50 duration-200">
+                                                <span className="text-white text-sm font-bold">
+                                                    {String.fromCharCode(65 + selectionIndex)}
+                                                </span>
+                                            </div>
+                                        ) : (
+                                            // Single-mode: show checkmark
+                                            <div className="w-7 h-7 bg-blue-600 rounded-full flex items-center justify-center shadow-lg animate-in zoom-in-50 duration-200">
+                                                <Check className="w-4 h-4 text-white" strokeWidth={3} />
+                                            </div>
+                                        )}
                                     </div>
+                                )}
+
+                                {/* Multi-mode Checkbox Overlay */}
+                                {selectionMode === 'multiple' && !isSelected && !isAtMax && (
+                                    <div className={cn(
+                                        "absolute top-3 right-3 z-10 w-6 h-6 border-2 rounded-md bg-white/90 shadow-sm transition-opacity",
+                                        isHovered ? "opacity-100 border-blue-400" : "opacity-0 group-hover:opacity-100 border-gray-300"
+                                    )} />
                                 )}
 
                                 {/* Thumbnail */}
@@ -149,7 +274,9 @@ export function StepSelectTemplate() {
                                     )}>
                                         <div className="flex items-center gap-2 px-4 py-2 bg-white/90 rounded-full text-sm font-medium text-gray-800">
                                             <Eye className="w-4 h-4" />
-                                            Click to select
+                                            {selectionMode === 'multiple' 
+                                                ? (isAtMax ? 'Max reached' : 'Click to add')
+                                                : 'Click to select'}
                                         </div>
                                     </div>
                                 </div>
@@ -166,7 +293,9 @@ export function StepSelectTemplate() {
                                         {isSelected && (
                                             <span className="flex items-center gap-1 px-2 py-1 bg-blue-100 text-blue-700 text-xs rounded-full font-medium">
                                                 <Sparkles className="w-3 h-3" />
-                                                Selected
+                                                {selectionMode === 'multiple' 
+                                                    ? `#${selectionIndex + 1}` 
+                                                    : 'Selected'}
                                             </span>
                                         )}
                                     </div>
@@ -177,8 +306,8 @@ export function StepSelectTemplate() {
                 </div>
             )}
 
-            {/* Selected Template Summary */}
-            {selectedTemplate && (
+            {/* Selected Template(s) Summary */}
+            {selectionMode === 'single' && selectedTemplate && (
                 <div className="flex items-center justify-between p-4 bg-blue-50 border border-blue-200 rounded-xl animate-in slide-in-from-bottom-2 duration-300">
                     <div className="flex items-center gap-3">
                         <div className="w-10 h-10 rounded-lg bg-blue-100 flex items-center justify-center">
@@ -197,6 +326,36 @@ export function StepSelectTemplate() {
                     </button>
                 </div>
             )}
+
+            {/* Multi-mode Selected Templates Summary */}
+            {selectionMode === 'multiple' && selectedTemplates.length > 0 && (
+                <div className="p-4 bg-blue-50 border border-blue-200 rounded-xl animate-in slide-in-from-bottom-2 duration-300 space-y-3">
+                    <div className="flex items-center justify-between">
+                        <div>
+                            <p className="font-medium text-gray-900">
+                                {selectedTemplates.length} Template{selectedTemplates.length !== 1 ? 's' : ''} Selected
+                            </p>
+                            <p className="text-sm text-gray-600">
+                                {distributionMode === 'sequential' && 'Templates will cycle in order'}
+                                {distributionMode === 'random' && 'Templates will be assigned randomly'}
+                                {distributionMode === 'equal' && 'Rows will be split evenly between templates'}
+                                {distributionMode === 'csv_column' && 'Template assigned via CSV "template" column'}
+                            </p>
+                        </div>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                        {selectedTemplates.map((template, index) => (
+                            <SelectedTemplateChip
+                                key={template.id}
+                                template={template}
+                                index={index}
+                                onRemove={() => removeTemplate(template.id)}
+                            />
+                        ))}
+                    </div>
+                </div>
+            )}
         </div>
     );
 }
+
