@@ -8,7 +8,6 @@ import {
     AlignLeft,
     AlignCenter,
     AlignRight,
-    Library,
 } from 'lucide-react';
 import { useEditorStore } from '@/stores/editorStore';
 import { cn } from '@/lib/utils';
@@ -17,11 +16,7 @@ import { FontPicker } from '@/components/panels/FontPicker';
 
 
 
-interface ToolbarProps {
-    onOpenFontLibrary?: () => void;
-}
-
-export function Toolbar({ onOpenFontLibrary }: ToolbarProps) {
+export function Toolbar() {
     // Selection from editorStore (consolidated)
     const selectedIds = useEditorStore((s) => s.selectedIds);
     const selectedId = selectedIds[0] || null;
@@ -64,14 +59,7 @@ export function Toolbar({ onOpenFontLibrary }: ToolbarProps) {
             {isTextSelected && textElement && (
                 <>
 
-                    {/* Font Library */}
-                    <button
-                        onClick={() => onOpenFontLibrary?.()}
-                        className="flex items-center gap-1 h-8 px-2 rounded border border-blue-400 bg-blue-50 text-blue-600 text-xs font-medium hover:bg-blue-100"
-                    >
-                        <Library className="w-3.5 h-3.5" />
-                        More
-                    </button>
+
 
                     {/* Font Picker */}
                     <FontPicker
@@ -82,18 +70,34 @@ export function Toolbar({ onOpenFontLibrary }: ToolbarProps) {
                         }}
                     />
 
-                    {/* Font Size */}
-                    <input
-                        type="number"
-                        value={textElement.fontSize}
-                        onChange={(e) => {
-                            updateElement(textElement.id, { fontSize: parseInt(e.target.value) || 12 });
-                            pushHistory();
-                        }}
-                        className="h-8 w-12 px-1 border border-gray-300 rounded text-xs text-center"
-                        min={8}
-                        max={200}
-                    />
+                    {/* Font Size - disabled when autoFitText is on */}
+                    <div className="relative group">
+                        <input
+                            type="number"
+                            value={textElement.fontSize}
+                            onChange={(e) => {
+                                if (!textElement.autoFitText) {
+                                    updateElement(textElement.id, { fontSize: parseInt(e.target.value) || 12 });
+                                    pushHistory();
+                                }
+                            }}
+                            disabled={textElement.autoFitText}
+                            className={cn(
+                                "h-8 w-12 px-1 border rounded text-xs text-center transition-all",
+                                textElement.autoFitText 
+                                    ? "border-blue-200 bg-blue-50 text-blue-600 cursor-not-allowed"
+                                    : "border-gray-300 bg-white"
+                            )}
+                            min={8}
+                            max={200}
+                            title={textElement.autoFitText ? "Size auto-calculated (auto-fit enabled)" : "Font size"}
+                        />
+                        {textElement.autoFitText && (
+                            <div className="absolute -bottom-5 left-1/2 -translate-x-1/2 text-[9px] text-blue-500 whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity">
+                                auto
+                            </div>
+                        )}
+                    </div>
 
                     {/* Bold/Italic/Underline */}
                     <IconButton

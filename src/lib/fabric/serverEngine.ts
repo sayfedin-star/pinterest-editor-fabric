@@ -144,6 +144,55 @@ function getServerSafeFont(fontFamily: string): string {
 }
 
 /**
+ * Download and register a font from URL for server-side rendering
+ * @param fontUrl - URL to TTF/OTF font file
+ * @param familyName - Font family name to register as
+ * @returns True if font was loaded successfully
+ */
+async function loadFontFromUrl(fontUrl: string, familyName: string): Promise<boolean> {
+    const fontKey = `${familyName}-url`;
+    
+    // Skip if already registered
+    if (registeredFonts.has(fontKey)) {
+        console.log(`[ServerEngine] Font already loaded from URL: ${familyName}`);
+        return true;
+    }
+    
+    try {
+        console.log(`[ServerEngine] Downloading font from URL: ${familyName} (${fontUrl})`);
+        
+        // Download font file
+        const response = await fetch(fontUrl);
+        if (!response.ok) {
+            console.error(`[ServerEngine] Failed to download font: HTTP ${response.status}`);
+            return false;
+        }
+        
+        const buffer = await response.arrayBuffer();
+        
+        // Determine file extension from URL or content-type
+        let extension = 'ttf';
+        if (fontUrl.includes('.otf')) extension = 'otf';
+        else if (fontUrl.includes('.woff2')) extension = 'woff2';
+        else if (fontUrl.includes('.woff')) extension = 'woff';
+        
+        // Write to temp file (registerFont requires file path)
+        const tempPath = path.join('/tmp', `font_${Date.now()}_${familyName.replace(/\s+/g, '_')}.${extension}`);
+        fs.writeFileSync(tempPath, Buffer.from(buffer));
+        
+        // Register font
+        registerFont(tempPath, { family: familyName });
+        registeredFonts.add(fontKey);
+        
+        console.log(`[ServerEngine] Successfully loaded font from URL: ${familyName}`);
+        return true;
+    } catch (error) {
+        console.error(`[ServerEngine] Failed to load font from URL:`, error);
+        return false;
+    }
+}
+
+/**
  * Replace dynamic fields in text with values from row data
  */
 function replaceDynamicFields(text: string, rowData: Record<string, string>, fieldMapping: FieldMapping): string {
@@ -255,6 +304,95 @@ function applyTextTransform(text: string, transform?: 'none' | 'uppercase' | 'lo
     }
 }
 
+// Internal padding for auto-fit text (prevents text from touching container edges)
+const AUTOFIT_PADDING = 15;
+
+/**
+ * Calculate optimal font size to fit text within container (server-side)
+ * Uses Fabric.js Textbox for ACCURATE measurement - same as client-side
+ * Binary search finds the LARGEST font that fits within container height
+ * 
+ * Enhancements:
+ * - 15px internal padding on all sides for visual breathing room
+ * - Lower default maxFontSize (48px) for better visual consistency across pins
+ */
+function calculateFitFontSizeServer(
+    text: string,
+    containerWidth: number,
+    containerHeight: number,
+    fontFamily: string,
+    fontWeight: string | number = 400,
+    lineHeight: number = 1.2,
+    letterSpacing: number = 0,
+    maxFontSize: number = 48  // Lowered from 200 for visual balance
+): number {
+    if (!text || !containerWidth || !containerHeight) return 16;
+    
+    // Apply internal padding - text should not touch container edges
+    const paddedWidth = containerWidth - (AUTOFIT_PADDING * 2);
+    const paddedHeight = containerHeight - (AUTOFIT_PADDING * 2);
+    
+    // Ensure padded dimensions are positive
+    if (paddedWidth <= 0 || paddedHeight <= 0) return 16;
+    
+    const minSize = 8;
+    let low = minSize;
+    let high = maxFontSize;
+    let optimalSize = minSize;
+    
+    // Additional safety margin on padded height
+    const safePaddedHeight = paddedHeight - 5;
+    
+    /**
+     * Measure text height using Fabric.js Textbox
+     * CRITICAL: Settings MUST match rendering to get accurate height
+     * Uses paddedWidth for accurate measurement with internal padding
+     */
+    const measureHeight = (fontSize: number): number => {
+        const testTextbox = new Textbox(text, {
+            width: paddedWidth,  // Use padded width for measurement
+            fontSize: fontSize,
+            fontFamily: fontFamily,
+            fontWeight: fontWeight,
+            lineHeight: lineHeight,
+            charSpacing: letterSpacing * 10,
+            // NO splitByGrapheme - must match rendering settings
+        });
+        return testTextbox.height || 0;
+    };
+    
+    // Binary search: find the LARGEST font size that fits
+    for (let i = 0; i < 15; i++) {
+        const testSize = Math.floor((low + high) / 2);
+        const textHeight = measureHeight(testSize);
+        
+        if (textHeight <= safePaddedHeight) {  // Use safe padded height
+            // Text fits! Try larger
+            optimalSize = testSize;
+            low = testSize + 1;
+        } else {
+            // Text doesn't fit, try smaller
+            high = testSize - 1;
+        }
+        
+        if (low > high) break;
+    }
+    
+    // Verification: check actual height at optimal size
+    const finalHeight = measureHeight(optimalSize);
+    console.log(`[ServerEngine] AutoFit: "${text.substring(0, 30)}..." => ${optimalSize}px (textHeight: ${finalHeight}px, paddedHeight: ${paddedHeight}px, safe: ${safePaddedHeight}px)`);
+    
+    // EXTRA SAFETY: If still overflowing, reduce by 1px
+    if (finalHeight > safePaddedHeight && optimalSize > minSize) {
+        const reducedSize = optimalSize - 1;
+        const reducedHeight = measureHeight(reducedSize);
+        console.log(`[ServerEngine] AutoFit: OVERFLOW DETECTED! Reducing ${optimalSize}px -> ${reducedSize}px (height: ${reducedHeight}px)`);
+        return reducedSize;
+    }
+    
+    return Math.max(minSize, Math.min(optimalSize, maxFontSize));
+}
+
 /**
  * Render a single element to the canvas
  */
@@ -291,11 +429,38 @@ async function renderElement(
         console.log(`[ServerEngine] TEXT: position x=${el.x}, y=${el.y}, width=${textEl.width}`);
         console.log(`[ServerEngine] TEXT: font=${textEl.fontFamily}, size=${textEl.fontSize}, fill=${textEl.fill}`);
 
+        // Load custom font from URL if available (for server-side rendering)
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const fontUrl = (textEl as any).fontUrl;
+        if (fontUrl && textEl.fontFamily) {
+            console.log(`[ServerEngine] TEXT: Loading custom font from URL: ${textEl.fontFamily}`);
+            await loadFontFromUrl(fontUrl, textEl.fontFamily);
+        }
+
+        // CRITICAL: Get safe font FIRST, use same font for measurement AND rendering
+        const safeFontFamily = getServerSafeFont(textEl.fontFamily || 'Arial');
+        
+        // Calculate font size - use auto-fit if enabled
+        let fontSize = textEl.fontSize || 16;
+        if (textEl.autoFitText && text && textEl.width && textEl.height) {
+            fontSize = calculateFitFontSizeServer(
+                text,
+                textEl.width,
+                textEl.height,
+                safeFontFamily,  // Use SAME font as rendering
+                textEl.fontWeight || 400,
+                textEl.lineHeight || 1.2,
+                textEl.letterSpacing || 0,
+                textEl.maxFontSize || 200
+            );
+            console.log(`[ServerEngine] TEXT: Auto-fit font size calculated: ${fontSize} (original: ${textEl.fontSize}, max: ${textEl.maxFontSize})`);
+        }
+
         const textbox = new Textbox(text, {
             ...commonOptions,
             width: textEl.width,
-            fontSize: textEl.fontSize || 16,
-            fontFamily: getServerSafeFont(textEl.fontFamily || 'Arial'),
+            fontSize: fontSize,
+            fontFamily: safeFontFamily,  // Use SAME font as measurement
             fill: textEl.hollowText ? 'transparent' : (textEl.fill || '#000000'),
             textAlign: textEl.align || 'left',
             lineHeight: textEl.lineHeight || 1.2,
@@ -304,7 +469,21 @@ async function renderElement(
             fontStyle: textEl.fontStyle?.includes('italic') ? 'italic' : 'normal',
             underline: textEl.textDecoration === 'underline',
             linethrough: textEl.textDecoration === 'line-through',
+            // NOTE: splitByGrapheme removed to prevent ugly mid-word breaks like "CHI-CKEN"
+            // Word-boundary wrapping is preferred for marketing text
         });
+        
+        // For autoFitText, add a clipPath to absolutely ensure text stays within container bounds
+        if (textEl.autoFitText && textEl.height) {
+            textbox.clipPath = new Rect({
+                width: textEl.width,
+                height: textEl.height,
+                left: 0,
+                top: 0,
+                originX: 'left',
+                originY: 'top',
+            });
+        }
 
         if (textEl.shadowColor) {
             textbox.shadow = new Shadow({

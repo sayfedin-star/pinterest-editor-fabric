@@ -14,7 +14,7 @@ import { getFonts, loadCustomFont, Font } from '@/lib/db/fonts';
 
 interface FontPickerProps {
     value: string;
-    onChange: (fontFamily: string, provider: 'system' | 'google' | 'custom') => void;
+    onChange: (fontFamily: string, provider: 'system' | 'google' | 'custom', fontUrl?: string) => void;
     className?: string;
 }
 
@@ -89,7 +89,8 @@ export function FontPicker({ value, onChange, className }: FontPickerProps) {
             console.error('Failed to load custom font:', error);
         }
         setLoadingFont(null);
-        onChange(font.family, 'custom');
+        // Pass fontUrl for server-side rendering
+        onChange(font.family, 'custom', font.file_url);
         setIsOpen(false);
         setSearch('');
     }, [onChange]);

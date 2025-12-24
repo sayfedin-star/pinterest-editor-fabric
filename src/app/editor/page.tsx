@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, Suspense } from 'react';
+import { useEffect, Suspense } from 'react';
 import { useRouter } from 'next/navigation';
 import { ErrorBoundary } from 'react-error-boundary';
 import { Header } from '@/components/layout/Header';
@@ -9,7 +9,7 @@ import { LeftSidebar } from '@/components/layout/LeftSidebar';
 import { Toolbar } from '@/components/layout/Toolbar';
 import { CanvasArea } from '@/components/layout/CanvasArea';
 import { RightPanel } from '@/components/layout/RightPanel';
-import { FontLibraryPanel } from '@/components/panels/FontLibraryPanel';
+
 import { KeyboardShortcutsModal, useKeyboardShortcutsModal } from '@/components/ui/KeyboardShortcutsModal';
 import { DesktopOnlyMessage, useIsMobile } from '@/components/ui/DesktopOnlyMessage';
 import { CanvasErrorBoundary } from '@/components/ui/ErrorBoundary';
@@ -46,7 +46,7 @@ function EditorContent() {
     // Keyboard shortcuts modal
     const { isOpen: isShortcutsOpen, close: closeShortcuts } = useKeyboardShortcutsModal();
 
-    const [isFontLibraryOpen, setFontLibraryOpen] = useState(false);
+
 
     // Redirect to login if not authenticated
     useEffect(() => {
@@ -93,20 +93,13 @@ function EditorContent() {
                     <div className="flex-1 flex overflow-hidden">
                         {/* Left Sidebar - Wrapped for isolation */}
                         <ErrorBoundary FallbackComponent={PanelErrorFallback} onError={logError}>
-                            <div className="relative">
-                                <LeftSidebar />
-                                {/* Font Library Panel - slides over left sidebar */}
-                                <FontLibraryPanel
-                                    isOpen={isFontLibraryOpen}
-                                    onClose={() => setFontLibraryOpen(false)}
-                                />
-                            </div>
+                            <LeftSidebar />
                         </ErrorBoundary>
 
                         {/* Center Area */}
                         <div className="flex-1 flex flex-col overflow-hidden">
-                            {/* Toolbar with font library toggle */}
-                            <Toolbar onOpenFontLibrary={() => setFontLibraryOpen(true)} />
+                            {/* Toolbar */}
+                            <Toolbar />
 
                             {/* Canvas - Wrapped with Error Boundary */}
                             <CanvasErrorBoundary>

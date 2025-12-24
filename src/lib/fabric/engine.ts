@@ -38,6 +38,87 @@ export interface FieldMapping {
     [templateField: string]: string;
 }
 
+// --- Auto-Fit Text Calculation ---
+
+// Internal padding for auto-fit text (prevents text from touching container edges)
+const AUTOFIT_PADDING = 15;
+
+/**
+ * Calculate optimal font size to fit text within container
+ * Uses Fabric.js Textbox for ACCURATE measurement - IDENTICAL to ObjectFactory.ts and serverEngine.ts
+ * Binary search finds the LARGEST font size that fits within container height
+ * 
+ * Enhancements:
+ * - 15px internal padding on all sides for visual breathing room
+ * - Lower default maxFontSize (48px) for better visual consistency across pins
+ */
+function calculateFitFontSize(
+    text: string,
+    containerWidth: number,
+    containerHeight: number,
+    fontFamily: string,
+    fontWeight: string | number = 400,
+    lineHeight: number = 1.2,
+    letterSpacing: number = 0,
+    maxFontSize: number = 48  // Lowered from 200 for visual balance
+): number {
+    if (!text || !containerWidth || !containerHeight) return 16;
+    
+    // Apply internal padding - text should not touch container edges
+    const paddedWidth = containerWidth - (AUTOFIT_PADDING * 2);
+    const paddedHeight = containerHeight - (AUTOFIT_PADDING * 2);
+    
+    // Ensure padded dimensions are positive
+    if (paddedWidth <= 0 || paddedHeight <= 0) return 16;
+    
+    const minSize = 8;
+    let low = minSize;
+    let high = maxFontSize;
+    let optimalSize = minSize;
+    
+    // Additional safety margin on padded height
+    const safePaddedHeight = paddedHeight - 5;
+    
+    /**
+     * Measure text height using Fabric.js Textbox
+     * CRITICAL: Settings MUST match rendering to get accurate height
+     * Uses paddedWidth for accurate measurement with internal padding
+     */
+    const measureHeight = (fontSize: number): number => {
+        const testTextbox = new fabric.Textbox(text, {
+            width: paddedWidth,  // Use padded width for measurement
+            fontSize: fontSize,
+            fontFamily: fontFamily,
+            fontWeight: fontWeight,
+            lineHeight: lineHeight,
+            charSpacing: letterSpacing * 10,
+            // NO splitByGrapheme - must match rendering settings
+        });
+        return testTextbox.height || 0;
+    };
+    
+    // Binary search: find the LARGEST font size that fits
+    for (let i = 0; i < 15; i++) {
+        const testSize = Math.floor((low + high) / 2);
+        const textHeight = measureHeight(testSize);
+        
+        if (textHeight <= safePaddedHeight) {  // Use safe padded height
+            optimalSize = testSize;
+            low = testSize + 1;
+        } else {
+            high = testSize - 1;
+        }
+        
+        if (low > high) break;
+    }
+    
+    if (DEBUG_RENDER) {
+        console.log(`[Engine] AutoFit: "${text.substring(0, 30)}..." => ${optimalSize}px (container: ${containerWidth}x${containerHeight})`);
+    }
+    
+    return Math.max(minSize, Math.min(optimalSize, maxFontSize));
+}
+
 // --- Helper Functions ---
 
 function createErrorPlaceholder(width: number = 200, height: number = 200): fabric.Group {
@@ -470,10 +551,25 @@ async function createFabricObject(
         // Step 2: Apply text transform AFTER field substitution (Phase 1)
         text = applyTextTransform(text, textEl.textTransform);
 
+        // Step 3: Calculate font size - use auto-fit if enabled
+        let fontSize = textEl.fontSize || 16;
+        if (textEl.autoFitText && text && textEl.width && textEl.height) {
+            fontSize = calculateFitFontSize(
+                text,
+                textEl.width,
+                textEl.height,
+                textEl.fontFamily || 'Arial',
+                textEl.fontWeight || 400,
+                textEl.lineHeight || 1.2,
+                textEl.letterSpacing || 0,
+                textEl.maxFontSize || 200
+            );
+        }
+
         // Build textbox WITHOUT position - position is set conditionally
         const textbox = new fabric.Textbox(text, {
             width: textEl.width,
-            fontSize: textEl.fontSize || 16,
+            fontSize: fontSize,  // Use calculated fontSize
             fontFamily: textEl.fontFamily || 'Arial',
             // Hollow text: transparent fill, otherwise use specified fill
             fill: textEl.hollowText ? 'transparent' : (textEl.fill || '#000000'), 
@@ -485,6 +581,8 @@ async function createFabricObject(
             fontStyle: textEl.fontStyle?.includes('italic') ? 'italic' : 'normal',
             underline: textEl.textDecoration === 'underline',
             linethrough: textEl.textDecoration === 'line-through',
+            // NOTE: splitByGrapheme removed to prevent ugly mid-word breaks like "CHI-CKEN"
+            // Word-boundary wrapping is preferred for marketing text
         });
 
         if (textEl.shadowColor) {

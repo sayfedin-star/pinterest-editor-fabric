@@ -256,6 +256,57 @@ export const TextPropertiesSection = memo(function TextPropertiesSection({ eleme
                         <p className="text-xs text-gray-500">Automatically resize font to fit box</p>
                     </div>
                 </label>
+
+                {/* Auto-fit Settings - shown when Auto-fit is enabled */}
+                {liveElement.autoFitText && (
+                    <div className="ml-2 pl-3 border-l-2 border-blue-200 space-y-3">
+                        {/* Current Font Size (read-only) */}
+                        <div className="flex items-center justify-between">
+                            <span className="text-sm text-gray-600">Current Size</span>
+                            <div className="flex items-center gap-2">
+                                <span className="text-lg font-semibold text-blue-600">
+                                    {liveElement.fontSize || 16}
+                                </span>
+                                <span className="text-xs text-gray-400">px (auto)</span>
+                            </div>
+                        </div>
+                        
+                        {/* Maximum Font Size */}
+                        <div className="flex items-center justify-between">
+                            <span className="text-sm text-gray-600">Max Size</span>
+                            <input
+                                type="number"
+                                min={8}
+                                max={500}
+                                value={liveElement.maxFontSize || 200}
+                                onChange={(e) => handleChange({ maxFontSize: parseInt(e.target.value) || 200 })}
+                                className="w-20 px-3 py-1.5 text-sm border border-gray-200 rounded-lg bg-white focus:border-blue-400 focus:ring-2 focus:ring-blue-100 outline-none text-center"
+                            />
+                        </div>
+                        
+                        <p className="text-[10px] text-gray-400">
+                            Font size auto-adjusts between 8px and max size to fit the text box.
+                        </p>
+                    </div>
+                )}
+
+                {/* Manual Font Size - shown when Auto-fit is OFF */}
+                {!liveElement.autoFitText && (
+                    <div className="flex items-center justify-between">
+                        <label className="text-sm text-gray-600">Font Size</label>
+                        <div className="flex items-center gap-2">
+                            <input
+                                type="number"
+                                min={8}
+                                max={500}
+                                value={liveElement.fontSize || 16}
+                                onChange={(e) => handleChange({ fontSize: parseInt(e.target.value) || 16 })}
+                                className="w-20 px-3 py-1.5 text-sm border border-gray-200 rounded-lg bg-white focus:border-blue-400 focus:ring-2 focus:ring-blue-100 outline-none text-center"
+                            />
+                            <span className="text-xs text-gray-400">px</span>
+                        </div>
+                    </div>
+                )}
             </div>
         </div>
     );

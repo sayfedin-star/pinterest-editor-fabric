@@ -127,6 +127,8 @@ export interface TextElement extends BaseElement {
     curvedPower?: number;
     // Auto-fit text - shrink/grow font to fit box
     autoFitText?: boolean;
+    /** Maximum font size when auto-fit is enabled (caps the upper limit) */
+    maxFontSize?: number;
     // Dynamic field - now supports any field name (text1, text2, etc.)
     isDynamic: boolean;
     dynamicField?: string;
@@ -141,6 +143,8 @@ export interface TextElement extends BaseElement {
     fontWeight?: 100 | 200 | 300 | 400 | 500 | 600 | 700 | 800 | 900;
     /** Font provider for tracking source */
     fontProvider?: 'system' | 'google' | 'custom';
+    /** Font file URL for server-side rendering (custom fonts) */
+    fontUrl?: string;
     
     // Rich text enhancements (Phase 2)
     /** Enable rich text mode with per-character styling */

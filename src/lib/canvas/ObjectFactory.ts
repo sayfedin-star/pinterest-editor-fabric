@@ -8,6 +8,7 @@
 import * as fabric from 'fabric';
 import { Element, TextElement, ShapeElement, ImageElement } from '@/types/editor';
 import { convertToFabricStyles } from '@/lib/text/characterStyles';
+import { useEditorStore } from '@/stores/editorStore';
 
 /**
  * Extended Fabric.js object with custom properties for async loading
@@ -46,6 +47,87 @@ function applyTextTransform(
     }
 }
 
+// Internal padding for auto-fit text (prevents text from touching container edges)
+const AUTOFIT_PADDING = 15;
+
+/**
+ * Calculate the optimal font size to fit text within a container
+ * Uses Fabric.js Textbox for ACCURATE measurement - IDENTICAL to server-side
+ * Binary search finds the LARGEST font size that keeps text within bounds
+ * 
+ * Enhancements:
+ * - 15px internal padding on all sides for visual breathing room
+ * - Lower default maxFontSize (48px) for better visual consistency across pins
+ */
+function calculateFitFontSize(
+    text: string,
+    containerWidth: number,
+    containerHeight: number,
+    fontFamily: string,
+    fontWeight: string | number = 400,
+    lineHeight: number = 1.2,
+    letterSpacing: number = 0,
+    maxFontSize: number = 48  // Lowered from 200 for visual balance
+): number {
+    if (!text || !containerWidth || !containerHeight) {
+        return 16;
+    }
+    
+    // Apply internal padding - text should not touch container edges
+    const paddedWidth = containerWidth - (AUTOFIT_PADDING * 2);
+    const paddedHeight = containerHeight - (AUTOFIT_PADDING * 2);
+    
+    // Ensure padded dimensions are positive
+    if (paddedWidth <= 0 || paddedHeight <= 0) return 16;
+    
+    const minSize = 8;
+    let low = minSize;
+    let high = maxFontSize;
+    let optimalSize = minSize;
+    
+    // Additional safety margin on padded height
+    const safePaddedHeight = paddedHeight - 5;
+    
+    /**
+     * Measure text height using Fabric.js Textbox
+     * CRITICAL: Settings MUST match rendering to get accurate height
+     * Uses paddedWidth for accurate measurement with internal padding
+     */
+    const measureHeight = (fontSize: number): number => {
+        const testTextbox = new fabric.Textbox(text, {
+            width: paddedWidth,  // Use padded width for measurement
+            fontSize: fontSize,
+            fontFamily: fontFamily,
+            fontWeight: fontWeight,
+            lineHeight: lineHeight,
+            charSpacing: letterSpacing * 10,
+            // NO splitByGrapheme - must match rendering settings
+        });
+        return testTextbox.height || 0;
+    };
+    
+    // Binary search: find the LARGEST font size that fits
+    for (let i = 0; i < 15; i++) {
+        const testSize = Math.floor((low + high) / 2);
+        const textHeight = measureHeight(testSize);
+        
+        if (textHeight <= safePaddedHeight) {  // Use safe padded height
+            // Text fits! Try larger
+            optimalSize = testSize;
+            low = testSize + 1;
+        } else {
+            // Text doesn't fit, try smaller
+            high = testSize - 1;
+        }
+        
+        if (low > high) break;
+    }
+    
+    console.log(`[AutoFit] "${text.substring(0, 30)}..." => ${optimalSize}px (container: ${containerWidth}x${containerHeight}, padded: ${paddedWidth}x${paddedHeight})`);
+    
+    return Math.max(minSize, Math.min(optimalSize, maxFontSize));
+}
+
 
 /**
  * Create a Fabric.js object from an Element
@@ -69,12 +151,27 @@ export function createFabricObject(element: Element): fabric.FabricObject | null
                 displayText = applyTextTransform(displayText, textEl.textTransform);
             }
             
+            // Calculate font size - use auto-fit if enabled
+            let fontSize = textEl.fontSize || 16;
+            if (textEl.autoFitText && displayText && element.width && element.height) {
+                fontSize = calculateFitFontSize(
+                    displayText,
+                    element.width,
+                    element.height,
+                    textEl.fontFamily || 'Arial',
+                    textEl.fontWeight || 400,
+                    textEl.lineHeight || 1.2,
+                    textEl.letterSpacing || 0,
+                    textEl.maxFontSize || 200
+                );
+            }
+            
             // Build textbox with ALL styling properties (matching engine.ts)
             // NOTE: Position is set conditionally - for Group, use relative (0,0)
             // For standalone textbox, use absolute element.x/y
             const textbox = new fabric.Textbox(displayText, {
                 width: element.width,
-                fontSize: textEl.fontSize || 16,
+                fontSize: fontSize,
                 fontFamily: textEl.fontFamily || 'Arial',
                 // Font weight: use fontWeight property (100-900), fallback to fontStyle for backward compatibility
                 fontWeight: textEl.fontWeight || (textEl.fontStyle?.includes('bold') ? 'bold' : 'normal'),
@@ -86,7 +183,21 @@ export function createFabricObject(element: Element): fabric.FabricObject | null
                 charSpacing: (textEl.letterSpacing || 0) * 10, // Fabric.js uses 1/1000 of em
                 underline: textEl.textDecoration === 'underline',
                 linethrough: textEl.textDecoration === 'line-through',
+                // NOTE: splitByGrapheme removed to prevent ugly mid-word breaks like "CHI-CKEN"
+                // Word-boundary wrapping is preferred for marketing text
             });
+            
+            // For autoFitText, add a clipPath to absolutely ensure text stays within container bounds  
+            if (textEl.autoFitText && element.height) {
+                textbox.clipPath = new fabric.Rect({
+                    width: element.width,
+                    height: element.height,
+                    left: 0,
+                    top: 0,
+                    originX: 'left',
+                    originY: 'top',
+                });
+            }
             
             // Apply shadow effect
             if (textEl.shadowColor && (textEl.shadowBlur || textEl.shadowOffsetX || textEl.shadowOffsetY)) {
@@ -388,6 +499,61 @@ export function syncElementToFabric(
         // Reduces ~15 individual set() calls to 1, saving ~30% on dirty checks
         const batchedUpdates: Record<string, unknown> = {};
         
+        // AUTO-FIT TEXT: Recalculate font size when dimensions change
+        if ((updates.width !== undefined || updates.height !== undefined) && storedEl?.autoFitText) {
+            const newWidth = updates.width ?? storedEl.width ?? fabricObject.width ?? 100;
+            const newHeight = updates.height ?? storedEl.height ?? fabricObject.height ?? 50;
+            const displayText = storedEl.previewText || storedEl.text || '';
+            const fontFamily = storedEl.fontFamily || 'Arial';
+            const lineHeight = storedEl.lineHeight || 1.2;
+            const maxFontSize = storedEl.maxFontSize || 200;
+            
+            if (displayText) {
+                // Recalculate optimal font size for new dimensions
+                const optimalFontSize = calculateFitFontSize(
+                    displayText,
+                    newWidth,
+                    newHeight,
+                    fontFamily,
+                    storedEl.fontWeight || 400,
+                    lineHeight,
+                    storedEl.letterSpacing || 0,
+                    maxFontSize
+                );
+                
+                console.log('[SyncAutoFit] Applied font size:', {
+                    from: storedEl.fontSize,
+                    to: optimalFontSize,
+                    dimensions: { width: newWidth, height: newHeight },
+                    maxFontSize
+                });
+                
+                batchedUpdates.fontSize = optimalFontSize;
+                // Also update the textbox width to match new container width
+                batchedUpdates.width = newWidth;
+                
+                // CRITICAL: Update stored element data so store stays in sync
+                extFabric._elementData = {
+                    ...storedEl,
+                    fontSize: optimalFontSize,
+                    width: newWidth,
+                    height: newHeight,
+                } as Element;
+                
+                // ALSO update the Zustand store so toolbar shows correct fontSize
+                // Import is at top: import { useEditorStore } from '@/stores/editorStore';
+                const elementId = (fabricObject as ExtendedFabricObject).id;
+                if (elementId) {
+                    // Use setTimeout to avoid triggering during render cycle
+                    setTimeout(() => {
+                        useEditorStore.getState().updateElement(elementId, {
+                            fontSize: optimalFontSize,
+                        });
+                    }, 0);
+                }
+            }
+        }
+        
         // Font properties
         if (textUpdates.fontWeight !== undefined) {
             batchedUpdates.fontWeight = textUpdates.fontWeight;
@@ -395,7 +561,8 @@ export function syncElementToFabric(
         if (textUpdates.fontFamily !== undefined) {
             batchedUpdates.fontFamily = textUpdates.fontFamily;
         }
-        if (textUpdates.fontSize !== undefined) {
+        if (textUpdates.fontSize !== undefined && !storedEl?.autoFitText) {
+            // Only apply manual fontSize if NOT autoFitText (autoFitText calculates above)
             batchedUpdates.fontSize = textUpdates.fontSize;
         }
         if (textUpdates.fontStyle !== undefined) {
@@ -491,7 +658,13 @@ export function syncElementToFabric(
         
         // Apply all batched updates in a single set() call
         if (Object.keys(batchedUpdates).length > 0) {
+            console.log('[SyncAutoFit] Applying to textbox:', {
+                fontSize: batchedUpdates.fontSize,
+                width: batchedUpdates.width,
+                allUpdates: Object.keys(batchedUpdates)
+            });
             targetTextbox.set(batchedUpdates);
+            console.log('[SyncAutoFit] After set, textbox.fontSize =', targetTextbox.fontSize);
         }
         
         // Text transform - requires re-applying to display text
@@ -512,7 +685,58 @@ export function syncElementToFabric(
             
             const transform = textUpdates.textTransform ?? (storedEl?.textTransform) ?? 'none';
             const displayText = applyTextTransform(originalText, transform);
-            targetTextbox.set('text', displayText);
+            
+            // AUTO-FIT: When text content changes, recalculate font size to fit FIXED container
+            if (storedEl?.autoFitText && displayText) {
+                const containerWidth = storedEl.width ?? fabricObject.width ?? 100;
+                const containerHeight = storedEl.height ?? fabricObject.height ?? 50;
+                const fontFamily = storedEl.fontFamily || 'Arial';
+                const lineHeight = storedEl.lineHeight || 1.2;
+                const maxFontSize = storedEl.maxFontSize || 200;
+                
+                const optimalFontSize = calculateFitFontSize(
+                    displayText,
+                    containerWidth,
+                    containerHeight,
+                    fontFamily,
+                    storedEl.fontWeight || 400,
+                    lineHeight,
+                    storedEl.letterSpacing || 0,
+                    maxFontSize
+                );
+                
+                console.log('[AutoFit] Text content changed, recalculating font:', {
+                    text: displayText.substring(0, 30) + '...',
+                    container: `${containerWidth}x${containerHeight}`,
+                    newFontSize: optimalFontSize
+                });
+                
+                // Apply text, font size, AND width to prevent Fabric.js from auto-expanding
+                // CRITICAL: Must set width to fix the container size!
+                targetTextbox.set({
+                    text: displayText,
+                    fontSize: optimalFontSize,
+                    width: containerWidth,  // LOCK the width!
+                });
+                
+                // Also update the parent fabric object width if it's different
+                if (fabricObject !== targetTextbox) {
+                    fabricObject.set({ width: containerWidth });
+                }
+                
+                // Update store with new fontSize (but NOT width - keep it fixed)
+                const elementId = (fabricObject as ExtendedFabricObject).id;
+                if (elementId) {
+                    setTimeout(() => {
+                        useEditorStore.getState().updateElement(elementId, {
+                            fontSize: optimalFontSize,
+                        });
+                    }, 0);
+                }
+            } else {
+                // Not auto-fit, just update the text normally
+                targetTextbox.set('text', displayText);
+            }
             
             // Update stored original if text changed
             if (textUpdates.text !== undefined) {
@@ -619,8 +843,16 @@ export function syncFabricToElement(fabricObject: fabric.FabricObject): Element 
         // BUGFIX: Merge metadata from stored element (preserves dynamicField, textTransform, etc.)
         if (storedElement && storedElement.type === 'text') {
             const storedText = storedElement as TextElement;
+            
+            // CRITICAL FIX for autoFitText: Preserve original container dimensions
+            // Don't let Fabric's expanded textbox size overwrite the fixed container size
+            const preservedWidth = storedText.autoFitText ? storedText.width : textElement.width;
+            const preservedHeight = storedText.autoFitText ? storedText.height : textElement.height;
+            
             return {
                 ...textElement,
+                width: preservedWidth,    // Use stored width for autoFit
+                height: preservedHeight,  // Use stored height for autoFit
                 isDynamic: storedText.isDynamic,
                 dynamicField: storedText.dynamicField,
                 textTransform: storedText.textTransform,
@@ -631,6 +863,7 @@ export function syncFabricToElement(fabricObject: fabric.FabricObject): Element 
                 curvedEnabled: storedText.curvedEnabled,
                 curvedPower: storedText.curvedPower,
                 autoFitText: storedText.autoFitText,
+                maxFontSize: storedText.maxFontSize,  // Also preserve maxFontSize
                 fontProvider: storedText.fontProvider,
                 richTextEnabled: storedText.richTextEnabled,
                 characterStyles: storedText.characterStyles,

@@ -26,13 +26,19 @@ const CONFIG = {
   // Template has: "Text 1", "Image 1", "Image 2"
   // Sheet has: "Image1", "Image2", "Image Text"
   FIELD_MAPPING: {
-    'Text 1': 'Image Text',   // Template text field → Sheet column
-    'Image 1': 'Image1',      // Template image field → Sheet column  
-    'Image 2': 'Image2',      // Template image field → Sheet column
+    'text1': 'Image Text',    // Template text field → Sheet column
+    'image1': 'Image1',       // Template image field → Sheet column  
+    'image2': 'Image2',       // Template image field → Sheet column
   },
   
-  OUTPUT_COLUMN: 'H',  // Where to write generated URLs
-  BATCH_SIZE: 10,
+  OUTPUT_COLUMN: 'D',  // Where to write generated URLs
+  
+  // IMPORTANT: Set to 1 to avoid Vercel 60s timeout
+  // Each row takes ~10-20 seconds due to external image fetching
+  BATCH_SIZE: 1,
+  
+  // Delay between batches in milliseconds (prevent rate limiting)
+  BATCH_DELAY_MS: 2000,
 };
 
 // ============================================
@@ -77,36 +83,78 @@ function generatePins() {
   
   if (dataRows.length === 0) { SpreadsheetApp.getUi().alert('No data rows found!'); return; }
   
-  Logger.log('Processing ' + dataRows.length + ' rows');
+  // Check for existing URLs and filter out already-processed rows
+  const outputCol = CONFIG.OUTPUT_COLUMN.charCodeAt(0) - 64;
+  const rowsToProcess = dataRows.filter(row => {
+    const existingValue = sheet.getRange(row.rowNumber, outputCol).getValue().toString();
+    // Skip if already has a URL (starts with http)
+    return !existingValue.startsWith('http');
+  });
   
-  const batches = chunkArray(dataRows, CONFIG.BATCH_SIZE);
-  let totalGenerated = 0, totalFailed = 0;
+  const alreadyDone = dataRows.length - rowsToProcess.length;
   
-  for (let i = 0; i < batches.length; i++) {
-    const batch = batches[i];
-    Logger.log('Batch ' + (i + 1) + '/' + batches.length);
+  if (rowsToProcess.length === 0) {
+    SpreadsheetApp.getUi().alert('✅ All rows already processed!\n\n' + alreadyDone + ' rows have URLs.');
+    return;
+  }
+  
+  const ui = SpreadsheetApp.getUi();
+  const response = ui.alert(
+    '🎨 Generate Pins',
+    (alreadyDone > 0 ? '📋 Resuming: ' + alreadyDone + ' rows already done\n' : '') +
+    '🔄 Rows to process: ' + rowsToProcess.length + '\n\n' +
+    '⏱️ Estimated time: ' + Math.ceil(rowsToProcess.length * 15 / 60) + '-' + Math.ceil(rowsToProcess.length * 25 / 60) + ' minutes\n\n' +
+    'Continue?',
+    ui.ButtonSet.YES_NO
+  );
+  
+  if (response !== ui.Button.YES) return;
+  
+  Logger.log('Processing ' + rowsToProcess.length + ' rows (skipping ' + alreadyDone + ' already done)');
+  let totalGenerated = 0, totalFailed = 0, totalSkipped = alreadyDone;
+  
+  // Process one row at a time to avoid timeout
+  for (let i = 0; i < rowsToProcess.length; i++) {
+    const row = rowsToProcess[i];
+    Logger.log('Processing row ' + (i + 1) + '/' + rowsToProcess.length + ' (sheet row ' + row.rowNumber + ')');
+    
+    // Update status in sheet (optional - shows progress)
+    SpreadsheetApp.getActiveSpreadsheet().toast(
+      'Processing ' + (i + 1) + '/' + rowsToProcess.length + ' (skipped ' + totalSkipped + ')', 
+      '🎨 Pin Generator'
+    );
     
     try {
-      const result = callGenerateApi(batch.map(r => r.data));
+      const result = callGenerateApi([row.data]);
       
-      if (result.success) {
-        result.generated.forEach(gen => {
-          writeOutputUrl(sheet, batch[gen.row_index].rowNumber, gen.url);
-        });
-        totalGenerated += result.meta.successful;
-        totalFailed += result.meta.failed;
+      if (result.success && result.generated.length > 0) {
+        writeOutputUrl(sheet, row.rowNumber, result.generated[0].url);
+        totalGenerated++;
+        Logger.log('Row ' + row.rowNumber + ' success: ' + result.generated[0].url);
       } else {
-        totalFailed += batch.length;
+        const errorMsg = result.error || (result.failed[0]?.error) || 'Unknown';
+        Logger.log('Row ' + row.rowNumber + ' failed: ' + errorMsg);
+        writeOutputUrl(sheet, row.rowNumber, 'ERROR: ' + errorMsg);
+        totalFailed++;
       }
-      
-      if (i < batches.length - 1) Utilities.sleep(1000);
     } catch (error) {
-      Logger.log('Batch error: ' + error.message);
-      totalFailed += batch.length;
+      Logger.log('Row ' + row.rowNumber + ' error: ' + error.message);
+      writeOutputUrl(sheet, row.rowNumber, 'ERROR: ' + error.message);
+      totalFailed++;
+    }
+    
+    // Delay between rows to prevent rate limiting
+    if (i < rowsToProcess.length - 1) {
+      Utilities.sleep(CONFIG.BATCH_DELAY_MS);
     }
   }
   
-  SpreadsheetApp.getUi().alert('Generation Complete!\n\n✅ Generated: ' + totalGenerated + '\n❌ Failed: ' + totalFailed);
+  SpreadsheetApp.getUi().alert(
+    '✅ Generation Complete!\n\n' +
+    '✅ Generated: ' + totalGenerated + '\n' +
+    '❌ Failed: ' + totalFailed + '\n' +
+    '⏭️ Skipped (already done): ' + totalSkipped
+  );
 }
 
 function debugApiConnection() {

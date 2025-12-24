@@ -13,7 +13,7 @@ import { useEditorStore } from '@/stores/editorStore';
 import { TextElement } from '@/types/editor';
 import { cn } from '@/lib/utils';
 import { SectionHeader, SliderRow } from './shared';
-import { FontPicker } from '@/components/ui/FontPicker';
+import { FontPickerBox } from '@/components/editor/FontPickerModal';
 import {
     FONT_WEIGHT_NAMES,
     getAvailableWeights,
@@ -53,7 +53,7 @@ export const TypographySection = memo(function TypographySection({ element }: Ty
     }, [element.id, updateElement]);
 
     // Handle font family change
-    const handleFontChange = useCallback(async (fontFamily: string, provider: 'system' | 'google' | 'custom') => {
+    const handleFontChange = useCallback(async (fontFamily: string, provider: 'system' | 'google' | 'custom', fontUrl?: string) => {
         // Load font if it's a Google Font
         if (provider === 'google') {
             await loadGoogleFont(fontFamily);
@@ -62,6 +62,8 @@ export const TypographySection = memo(function TypographySection({ element }: Ty
         handleChange({
             fontFamily,
             fontProvider: provider,
+            // Save fontUrl for custom fonts (needed for server-side rendering)
+            fontUrl: provider === 'custom' ? fontUrl : undefined,
         });
     }, [handleChange]);
 
@@ -74,11 +76,11 @@ export const TypographySection = memo(function TypographySection({ element }: Ty
             <SectionHeader title="TYPOGRAPHY" />
 
             {/* Font Family */}
-            <div className="space-y-2">
+            <div className="space-y-1">
                 <label className="text-xs text-gray-600 font-medium">Font Family</label>
-                <FontPicker
+                <FontPickerBox
                     value={element.fontFamily}
-                    onChange={handleFontChange}
+                    onChange={(font) => handleFontChange(font.family, font.provider, font.url)}
                 />
             </div>
 

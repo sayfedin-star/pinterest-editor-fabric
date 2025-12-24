@@ -13,53 +13,48 @@ export const EffectsSection = memo(function EffectsSection({ element }: EffectsS
     const updateElement = useEditorStore((s) => s.updateElement);
     const pushHistory = useEditorStore((s) => s.pushHistory);
 
-    // Determine current active style
-    const activeStyle = element.backgroundEnabled ? 'background' :
-        element.stroke ? 'outline' :
-            element.shadowColor ? 'shadow' : 'none';
+    // Check which styles are currently enabled (can be multiple)
+    const hasShadow = !!element.shadowColor;
+    const hasOutline = !!element.stroke;
 
-    const handleStyleChange = (style: 'none' | 'shadow' | 'outline' | 'background') => {
-        const baseUpdates: Partial<TextElement> = {
-            shadowColor: undefined,
-            shadowBlur: undefined,
-            shadowOffsetX: undefined,
-            shadowOffsetY: undefined,
-            shadowOpacity: undefined,
-            stroke: undefined,
-            strokeWidth: undefined,
-            backgroundEnabled: false,
-        };
+    // Toggle shadow effect
+    const handleToggleShadow = () => {
+        if (hasShadow) {
+            // Disable shadow
+            updateElement(element.id, {
+                shadowColor: undefined,
+                shadowBlur: undefined,
+                shadowOffsetX: undefined,
+                shadowOffsetY: undefined,
+                shadowOpacity: undefined,
+            });
+        } else {
+            // Enable shadow with defaults
+            updateElement(element.id, {
+                shadowColor: '#000000',
+                shadowBlur: 10,
+                shadowOffsetX: 0,
+                shadowOffsetY: 4,
+                shadowOpacity: 0.3,
+            });
+        }
+        pushHistory();
+    };
 
-        switch (style) {
-            case 'shadow':
-                updateElement(element.id, {
-                    ...baseUpdates,
-                    shadowColor: '#000000',
-                    shadowBlur: 10,
-                    shadowOffsetX: 0,
-                    shadowOffsetY: 4,
-                    shadowOpacity: 0.3
-                });
-                break;
-            case 'outline':
-                updateElement(element.id, {
-                    ...baseUpdates,
-                    stroke: '#000000',
-                    strokeWidth: 2
-                });
-                break;
-            case 'background':
-                updateElement(element.id, {
-                    ...baseUpdates,
-                    backgroundEnabled: true,
-                    backgroundColor: '#FFEB3B',
-                    backgroundCornerRadius: 0,
-                    backgroundPadding: 16
-                });
-                break;
-            case 'none':
-                updateElement(element.id, baseUpdates);
-                break;
+    // Toggle outline effect
+    const handleToggleOutline = () => {
+        if (hasOutline) {
+            // Disable outline
+            updateElement(element.id, {
+                stroke: undefined,
+                strokeWidth: undefined,
+            });
+        } else {
+            // Enable outline with defaults
+            updateElement(element.id, {
+                stroke: '#000000',
+                strokeWidth: 2,
+            });
         }
         pushHistory();
     };
@@ -68,37 +63,37 @@ export const EffectsSection = memo(function EffectsSection({ element }: EffectsS
         <div className="space-y-6">
             <div>
                 <SectionHeader title="STYLE" />
-                <div className="grid grid-cols-4 gap-2">
-                    <StyleButton
-                        label="None"
-                        isActive={activeStyle === 'none'}
-                        onClick={() => handleStyleChange('none')}
-                        preview={<span className="text-gray-400">Aa</span>}
-                    />
-                    <StyleButton
-                        label="Shadow"
-                        isActive={activeStyle === 'shadow'}
-                        onClick={() => handleStyleChange('shadow')}
-                        preview={<span style={{ textShadow: '2px 2px 0px rgba(0,0,0,0.2)' }}>Aa</span>}
-                    />
-                    <StyleButton
-                        label="Outline"
-                        isActive={activeStyle === 'outline'}
-                        onClick={() => handleStyleChange('outline')}
-                        preview={<span style={{ WebkitTextStroke: '1px #000' }}>Aa</span>}
-                    />
-                    <StyleButton
-                        label="Bg"
-                        isActive={activeStyle === 'background'}
-                        onClick={() => handleStyleChange('background')}
-                        preview={<span className="bg-gray-200 px-1 rounded">Aa</span>}
-                    />
+                <div className="space-y-2">
+                    {/* Shadow Toggle */}
+                    <label className="flex items-center gap-3 cursor-pointer p-2 hover:bg-gray-50 rounded-lg">
+                        <input
+                            type="checkbox"
+                            checked={hasShadow}
+                            onChange={handleToggleShadow}
+                            className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                        />
+                        <span style={{ textShadow: '2px 2px 0px rgba(0,0,0,0.2)' }} className="font-semibold text-lg">Aa</span>
+                        <span className="text-sm text-gray-700">Shadow</span>
+                    </label>
+
+                    {/* Outline Toggle */}
+                    <label className="flex items-center gap-3 cursor-pointer p-2 hover:bg-gray-50 rounded-lg">
+                        <input
+                            type="checkbox"
+                            checked={hasOutline}
+                            onChange={handleToggleOutline}
+                            className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                        />
+                        <span style={{ WebkitTextStroke: '1px #000' }} className="font-semibold text-lg">Aa</span>
+                        <span className="text-sm text-gray-700">Outline</span>
+                    </label>
                 </div>
             </div>
 
-            {/* Contextual Controls */}
-            {activeStyle === 'shadow' && (
+            {/* Shadow Controls (shown when shadow is enabled) */}
+            {hasShadow && (
                 <div className="space-y-3 p-3 bg-gray-50 rounded-lg border border-gray-100">
+                    <div className="text-xs font-medium text-gray-500 uppercase">Shadow Settings</div>
                     <SliderRow
                         label="Blur"
                         value={element.shadowBlur || 0}
@@ -138,8 +133,10 @@ export const EffectsSection = memo(function EffectsSection({ element }: EffectsS
                 </div>
             )}
 
-            {activeStyle === 'outline' && (
+            {/* Outline Controls (shown when outline is enabled) */}
+            {hasOutline && (
                 <div className="space-y-3 p-3 bg-gray-50 rounded-lg border border-gray-100">
+                    <div className="text-xs font-medium text-gray-500 uppercase">Outline Settings</div>
                     <SliderRow
                         label="Thickness"
                         value={element.strokeWidth || 2}
@@ -155,39 +152,6 @@ export const EffectsSection = memo(function EffectsSection({ element }: EffectsS
                             value={element.stroke || '#000000'}
                             onChange={(e) => {
                                 updateElement(element.id, { stroke: e.target.value });
-                                pushHistory();
-                            }}
-                            className="w-full h-8 rounded cursor-pointer"
-                        />
-                    </div>
-                </div>
-            )}
-
-            {activeStyle === 'background' && (
-                <div className="space-y-3 p-3 bg-gray-50 rounded-lg border border-gray-100">
-                    <SliderRow
-                        label="Roundness"
-                        value={element.backgroundCornerRadius || 0}
-                        min={0}
-                        max={100}
-                        onChange={(v) => updateElement(element.id, { backgroundCornerRadius: v })}
-                        onDone={pushHistory}
-                    />
-                    <SliderRow
-                        label="Spread"
-                        value={element.backgroundPadding || 0}
-                        min={0}
-                        max={100}
-                        onChange={(v) => updateElement(element.id, { backgroundPadding: v })}
-                        onDone={pushHistory}
-                    />
-                    <div className="flex items-center gap-2">
-                        <label className="text-sm text-gray-600 w-16">Color</label>
-                        <input
-                            type="color"
-                            value={element.backgroundColor || '#FFEB3B'}
-                            onChange={(e) => {
-                                updateElement(element.id, { backgroundColor: e.target.value });
                                 pushHistory();
                             }}
                             className="w-full h-8 rounded cursor-pointer"
