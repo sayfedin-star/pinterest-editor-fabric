@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import * as fabric from 'fabric';
+import { StaticCanvas } from 'fabric/node';
 import { v4 as uuidv4 } from 'uuid';
 import { Element } from '@/types/editor';
 import { renderTemplate, RenderConfig, FieldMapping } from '@/lib/fabric/engine';
@@ -98,8 +98,8 @@ async function renderAndUploadPin(
 ): Promise<{ url: string }> {
     const supabase = createServiceRoleClient();
 
-    // Initialize Headless Canvas
-    const canvas = new fabric.StaticCanvas(undefined, {
+    // Initialize Headless Canvas using fabric/node for server-side rendering
+    const canvas = new StaticCanvas(undefined, {
         width: canvasSize.width,
         height: canvasSize.height,
     });
@@ -112,7 +112,8 @@ async function renderAndUploadPin(
             backgroundColor,
         };
 
-        await renderTemplate(canvas, elements, config, rowData, fieldMapping);
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        await renderTemplate(canvas as any, elements, config, rowData, fieldMapping);
 
         // Export to data URL
         const dataUrl = canvas.toDataURL({
