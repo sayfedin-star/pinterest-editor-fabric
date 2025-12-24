@@ -15,6 +15,7 @@ export const dynamic = 'force-dynamic';
 // Constants
 const MAX_ROWS_PER_REQUEST = 50;
 const DEFAULT_MULTIPLIER = 1; // 1x for original canvas size (use 2 for high quality)
+const PARALLEL_BATCH_SIZE = 5; // Process 5 rows in parallel for speed
 
 // Error codes
 type ErrorCode = 'INVALID_API_KEY' | 'TEMPLATE_NOT_FOUND' | 'VALIDATION_ERROR' | 'RATE_LIMIT' | 'SERVER_ERROR';
@@ -95,9 +96,9 @@ async function renderAndUploadPin(
     rowData: Record<string, string>,
     fieldMapping: FieldMapping,
     userId: string,
-    multiplier: number
+    multiplier: number,
+    supabase: ReturnType<typeof createServiceRoleClient> // Reuse client for performance
 ): Promise<{ url: string }> {
-    const supabase = createServiceRoleClient();
 
     // Initialize Headless Canvas using fabric/node for server-side rendering
     const canvas = new StaticCanvas(undefined, {
@@ -234,37 +235,48 @@ export async function POST(request: NextRequest): Promise<NextResponse<GenerateR
             );
         }
 
-        // 5. Process each row
+        // 5. Process rows in parallel batches for speed
         const generated: GeneratedResult[] = [];
         const failed: FailedResult[] = [];
 
-        for (let i = 0; i < rows.length; i++) {
-            const rowData = rows[i];
+        for (let i = 0; i < rows.length; i += PARALLEL_BATCH_SIZE) {
+            const batch = rows.slice(i, Math.min(i + PARALLEL_BATCH_SIZE, rows.length));
+            
+            // Process batch in parallel
+            const results = await Promise.allSettled(
+                batch.map(async (rowData, batchIndex) => {
+                    const rowIndex = i + batchIndex;
+                    const { url } = await renderAndUploadPin(
+                        template.elements,
+                        template.canvas_size,
+                        template.background_color,
+                        rowData,
+                        field_mapping,
+                        userId,
+                        multiplier,
+                        supabase // Pass shared client
+                    );
+                    return { rowIndex, url };
+                })
+            );
 
-            try {
-                const { url } = await renderAndUploadPin(
-                    template.elements,
-                    template.canvas_size,
-                    template.background_color,
-                    rowData,
-                    field_mapping,
-                    userId,
-                    multiplier
-                );
-
-                generated.push({
-                    row_index: i,
-                    url,
-                    status: 'success',
-                });
-            } catch (error) {
-                const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-                failed.push({
-                    row_index: i,
-                    error: errorMessage,
-                    status: 'error',
-                });
-            }
+            // Collect results
+            results.forEach((result, batchIndex) => {
+                const rowIndex = i + batchIndex;
+                if (result.status === 'fulfilled') {
+                    generated.push({
+                        row_index: rowIndex,
+                        url: result.value.url,
+                        status: 'success',
+                    });
+                } else {
+                    failed.push({
+                        row_index: rowIndex,
+                        error: result.reason?.message || 'Unknown error',
+                        status: 'error',
+                    });
+                }
+            });
         }
 
         // 6. Return aggregated response

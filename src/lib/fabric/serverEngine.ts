@@ -28,8 +28,8 @@ export interface FieldMapping {
     [templateField: string]: string;
 }
 
-// Debug flag - enabled for debugging API issues
-const DEBUG = true; // Temporarily enabled for debugging
+// Debug flag - set to false in production for performance
+const DEBUG = false;
 
 // Track registered fonts to avoid duplicate registration
 const registeredFonts = new Set<string>();
