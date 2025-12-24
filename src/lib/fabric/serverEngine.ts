@@ -12,6 +12,7 @@ import { StaticCanvas, Rect, FabricImage, Textbox, Circle, Path, Shadow, Group }
 import { Element, TextElement, ImageElement, ShapeElement, FrameElement } from '@/types/editor';
 import * as path from 'path';
 import * as fs from 'fs';
+import * as os from 'os';
 
 // Use require for canvas to avoid TypeScript type errors
 // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -177,7 +178,8 @@ async function loadFontFromUrl(fontUrl: string, familyName: string): Promise<boo
         else if (fontUrl.includes('.woff')) extension = 'woff';
         
         // Write to temp file (registerFont requires file path)
-        const tempPath = path.join('/tmp', `font_${Date.now()}_${familyName.replace(/\s+/g, '_')}.${extension}`);
+        // Use os.tmpdir() for cross-platform support (Windows/Linux/Vercel)
+        const tempPath = path.join(os.tmpdir(), `font_${Date.now()}_${familyName.replace(/\s+/g, '_')}.${extension}`);
         fs.writeFileSync(tempPath, Buffer.from(buffer));
         
         // Register font
@@ -189,6 +191,103 @@ async function loadFontFromUrl(fontUrl: string, familyName: string): Promise<boo
     } catch (error) {
         console.error(`[ServerEngine] Failed to load font from URL:`, error);
         return false;
+    }
+}
+
+/**
+ * Extract unique font families from template elements
+ */
+function extractFontsFromElements(elements: Element[]): string[] {
+    const fonts = new Set<string>();
+    for (const el of elements) {
+        if (el.type === 'text') {
+            const textEl = el as TextElement;
+            if (textEl.fontFamily) {
+                // Get base family name (without fallbacks)
+                const baseFamily = textEl.fontFamily.split(',')[0].trim().replace(/["']/g, '');
+                fonts.add(baseFamily);
+            }
+        }
+    }
+    return Array.from(fonts);
+}
+
+// Cache for font URLs fetched from Supabase
+const fontUrlCache = new Map<string, string>();
+
+/**
+ * Load custom fonts from Supabase for template elements
+ * Fetches font URLs from database and registers them with node-canvas
+ * 
+ * @param elements - Template elements to extract fonts from
+ * @param supabaseUrl - Supabase project URL
+ * @param supabaseKey - Supabase service role key
+ */
+export async function loadCustomFontsForTemplate(
+    elements: Element[],
+    supabaseUrl: string,
+    supabaseKey: string
+): Promise<void> {
+    const fontFamilies = extractFontsFromElements(elements);
+    
+    if (fontFamilies.length === 0) {
+        console.log('[ServerEngine] No fonts to load from template');
+        return;
+    }
+    
+    console.log(`[ServerEngine] Loading custom fonts: ${fontFamilies.join(', ')}`);
+    
+    // Find fonts that aren't already registered
+    const fontsToLoad = fontFamilies.filter(family => {
+        const fontKey = `${family}-url`;
+        return !registeredFonts.has(fontKey) && 
+               !registeredFonts.has(`${family}-normal-normal`) &&
+               !registeredFonts.has(`${family}-bold-normal`);
+    });
+    
+    if (fontsToLoad.length === 0) {
+        console.log('[ServerEngine] All fonts already registered');
+        return;
+    }
+    
+    // Fetch font URLs from Supabase
+    for (const family of fontsToLoad) {
+        // Check cache first
+        if (fontUrlCache.has(family)) {
+            const cachedUrl = fontUrlCache.get(family)!;
+            await loadFontFromUrl(cachedUrl, family);
+            continue;
+        }
+        
+        try {
+            // Query Supabase for font by family name
+            const response = await fetch(
+                `${supabaseUrl}/rest/v1/custom_fonts?family=eq.${encodeURIComponent(family)}&select=family,file_url`,
+                {
+                    headers: {
+                        'apikey': supabaseKey,
+                        'Authorization': `Bearer ${supabaseKey}`,
+                    }
+                }
+            );
+            
+            if (!response.ok) {
+                console.warn(`[ServerEngine] Failed to fetch font from DB: ${family}`);
+                continue;
+            }
+            
+            const fonts = await response.json();
+            
+            if (fonts && fonts.length > 0 && fonts[0].file_url) {
+                const fontUrl = fonts[0].file_url;
+                fontUrlCache.set(family, fontUrl);
+                await loadFontFromUrl(fontUrl, family);
+            } else {
+                console.log(`[ServerEngine] Font not found in DB: ${family} (will use fallback)`);
+            }
+        } catch (error) {
+            console.error(`[ServerEngine] Error fetching font ${family}:`, error);
+        }
     }
 }
 

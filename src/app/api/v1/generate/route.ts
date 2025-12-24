@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { StaticCanvas } from 'fabric/node';
 import { v4 as uuidv4 } from 'uuid';
 import { Element } from '@/types/editor';
-import { renderTemplateServer, RenderConfig, FieldMapping } from '@/lib/fabric/serverEngine';
+import { renderTemplateServer, RenderConfig, FieldMapping, loadCustomFontsForTemplate } from '@/lib/fabric/serverEngine';
 import { createServiceRoleClient } from '@/lib/supabaseServer';
 import { validateApiKey } from '@/lib/db/apiKeys';
 import { getTemplateByShortId } from '@/lib/db/templates';
@@ -235,7 +235,12 @@ export async function POST(request: NextRequest): Promise<NextResponse<GenerateR
             );
         }
 
-        // 5. Process rows in parallel batches for speed
+        // 5. Load custom fonts used in template (from Supabase)
+        const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+        const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
+        await loadCustomFontsForTemplate(template.elements, supabaseUrl, supabaseServiceKey);
+
+        // 6. Process rows in parallel batches for speed
         const generated: GeneratedResult[] = [];
         const failed: FailedResult[] = [];
 

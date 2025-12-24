@@ -87,7 +87,7 @@ export async function uploadFont(
     };
 
     const { data, error } = await supabase
-        .from('fonts')
+        .from('custom_fonts')
         .insert({
             ...fontData,
             user_id: userId,
@@ -116,7 +116,7 @@ export async function getFonts(): Promise<Font[]> {
     if (!userId) return [];
 
     const { data, error } = await supabase
-        .from('fonts')
+        .from('custom_fonts')
         .select('*')
         .eq('user_id', userId)
         .order('created_at', { ascending: false });
@@ -162,7 +162,7 @@ export async function deleteFont(fontId: string): Promise<boolean> {
 
     // Get font data first to retrieve file URL
     const { data: font, error: fetchError } = await supabase
-        .from('fonts')
+        .from('custom_fonts')
         .select('file_url, user_id')
         .eq('id', fontId)
         .single();
@@ -181,7 +181,7 @@ export async function deleteFont(fontId: string): Promise<boolean> {
 
     // Delete from database
     const { error: deleteError } = await supabase
-        .from('fonts')
+        .from('custom_fonts')
         .delete()
         .eq('id', fontId)
         .eq('user_id', userId);
