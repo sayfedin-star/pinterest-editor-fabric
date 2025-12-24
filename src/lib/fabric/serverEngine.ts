@@ -116,9 +116,17 @@ initializeFonts();
 function getServerSafeFont(fontFamily: string): string {
     // Check if font is registered
     const baseFamily = fontFamily.split(',')[0].trim().replace(/["']/g, '');
+    
+    // Check for bundled fonts (pattern: familyName-weight-style)
     if (registeredFonts.has(`${baseFamily}-normal-normal`) || 
         registeredFonts.has(`${baseFamily}-bold-normal`)) {
         console.log(`[ServerEngine] Using registered font: "${baseFamily}"`);
+        return baseFamily;
+    }
+    
+    // Check for fonts loaded from URLs (pattern: familyName-url)
+    if (registeredFonts.has(`${baseFamily}-url`)) {
+        console.log(`[ServerEngine] Using custom font loaded from URL: "${baseFamily}"`);
         return baseFamily;
     }
     
