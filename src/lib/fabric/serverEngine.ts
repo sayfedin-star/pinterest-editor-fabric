@@ -190,8 +190,13 @@ async function loadFontFromUrl(fontUrl: string, familyName: string): Promise<boo
         const tempPath = path.join(os.tmpdir(), `font_${Date.now()}_${familyName.replace(/\s+/g, '_')}.${extension}`);
         fs.writeFileSync(tempPath, Buffer.from(buffer));
         
-        // Register font
-        registerFont(tempPath, { family: familyName });
+        // Register font with node-canvas
+        // IMPORTANT: Specify weight and style for proper glyph rendering
+        registerFont(tempPath, { 
+            family: familyName,
+            weight: 'normal',  // Let font's native weight through
+            style: 'normal'    // Let font's native style through
+        });
         registeredFonts.add(fontKey);
         
         console.log(`[ServerEngine] Successfully loaded font from URL: ${familyName}`);
