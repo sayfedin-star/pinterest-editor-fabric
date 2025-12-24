@@ -5,7 +5,6 @@ import dynamic from 'next/dynamic';
 import { useEditorStore } from '@/stores/editorStore';
 import { Hand } from 'lucide-react';
 import { EmptyCanvasState } from '@/components/canvas/EmptyCanvasState';
-import { FloatingToolbar } from '@/components/canvas/FloatingToolbar';
 
 // EditorCanvas is now the v2 architecture (renamed from EditorCanvas.v2)
 const EditorCanvas = dynamic(
@@ -165,9 +164,6 @@ export function CanvasArea() {
     return (
         <div className="flex-1 bg-gray-100 relative overflow-hidden flex flex-col" ref={containerRef}>
             
-            {/* Top Toolbar (Floating Pill) */}
-            <FloatingToolbar />
-
             {/* Main Canvas Container */}
             <div className="flex-1 relative">
                 {/* Empty Canvas State */}

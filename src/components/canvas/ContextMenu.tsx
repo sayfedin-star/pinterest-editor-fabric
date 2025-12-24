@@ -4,11 +4,12 @@ import React, { useEffect, useRef, useState } from 'react';
 import { useEditorStore } from '@/stores/editorStore';
 import {
     Copy, Palette, ClipboardPaste, CopyPlus, Trash2,
-    Lock, Unlock, Layers,
+    Lock, Unlock, Layers, Pencil, Zap,
     AlignLeft, AlignCenter, AlignRight, AlignStartVertical, AlignEndVertical,
     ChevronRight, ArrowUpFromLine, ArrowDownFromLine, ArrowUp, ArrowDown
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { TextElement } from '@/types/editor';
 
 interface ContextMenuProps {
     x: number;
@@ -67,6 +68,7 @@ export function ContextMenu({ x, y, isOpen, onClose }: ContextMenuProps) {
     const deleteElement = useEditorStore((s) => s.deleteElement);
     const duplicateElement = useEditorStore((s) => s.duplicateElement);
     const lockElement = useEditorStore((s) => s.lockElement);
+    const updateElement = useEditorStore((s) => s.updateElement);
 
     // Clipboard, layer, and alignment from editorStore
     const {
@@ -81,6 +83,11 @@ export function ContextMenu({ x, y, isOpen, onClose }: ContextMenuProps) {
     const hasSelection = !!selectedElement;
     const canPaste = !!clipboard;
     const canPasteStyle = !!styleClipboard && selectedElement?.type === 'text';
+    
+    // Check if element is a text element and if it's dynamic (has {{...}} pattern)
+    const isTextElement = selectedElement?.type === 'text';
+    const textElement = isTextElement ? selectedElement as TextElement : null;
+    const isDynamic = textElement?.text?.includes('{{') && textElement?.text?.includes('}}');
 
     useEffect(() => {
         const handleClickOutside = (event: MouseEvent) => {
@@ -116,7 +123,7 @@ export function ContextMenu({ x, y, isOpen, onClose }: ContextMenuProps) {
     return (
         <div
             ref={menuRef}
-            className="fixed z-50 bg-white rounded-lg shadow-lg border border-gray-200 py-1 w-56 select-none"
+            className="fixed z-[9999] bg-white rounded-lg shadow-xl border border-gray-200 py-1 w-56 select-none"
             style={{ top: adjustedY, left: adjustedX }}
             onContextMenu={(e) => e.preventDefault()}
         >
@@ -175,6 +182,51 @@ export function ContextMenu({ x, y, isOpen, onClose }: ContextMenuProps) {
                 disabled={!hasSelection}
                 onClick={() => handleAction(() => selectedId && lockElement(selectedId, !isLocked))}
             />
+            
+            {/* Rename */}
+            <MenuItem
+                icon={Pencil}
+                label="Rename"
+                shortcut="F2"
+                disabled={!hasSelection}
+                onClick={() => {
+                    if (selectedElement) {
+                        const newName = prompt('Enter new name:', selectedElement.name || `${selectedElement.type}-${selectedElement.id.slice(0, 4)}`);
+                        if (newName !== null && newName.trim() !== '') {
+                            handleAction(() => updateElement(selectedElement.id, { name: newName.trim() }));
+                        } else {
+                            onClose();
+                        }
+                    }
+                }}
+            />
+            
+            {/* Dynamic Toggle - Only for text elements */}
+            {isTextElement && (
+                <MenuItem
+                    icon={Zap}
+                    label={isDynamic ? "Remove Dynamic" : "Make Dynamic"}
+                    disabled={!hasSelection}
+                    onClick={() => {
+                        if (textElement) {
+                            if (isDynamic) {
+                                // Remove the dynamic field wrapper (simple case)
+                                const text = textElement.text.replace(/\{\{([^}]+)\}\}/g, '$1');
+                                handleAction(() => updateElement(textElement.id, { text }));
+                            } else {
+                                // Wrap current text in dynamic field
+                                const fieldName = prompt('Enter field name:', 'field_name');
+                                if (fieldName !== null && fieldName.trim() !== '') {
+                                    const text = `{{${fieldName.trim()}}}`;
+                                    handleAction(() => updateElement(textElement.id, { text }));
+                                } else {
+                                    onClose();
+                                }
+                            }
+                        }
+                    }}
+                />
+            )}
 
             <div className="h-px bg-gray-100 my-1" />
 

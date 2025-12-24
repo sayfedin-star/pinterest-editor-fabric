@@ -9,7 +9,7 @@ import { CanvasManager, CanvasConfig } from '@/lib/canvas/CanvasManager';
 import { useSynchronizationBridge } from '@/hooks/useSynchronizationBridge';
 import { detectElementChange } from '@/lib/canvas/elementChangeDetection';
 import { DimensionBadge } from './DimensionBadge';
-import { ElementToolbar } from './ElementToolbar';
+import { ContextMenu } from './ContextMenu';
 import { RichTextEditor } from './RichTextEditor';
 
 interface EditorCanvasProps {
@@ -298,7 +298,8 @@ export function EditorCanvasV2({ containerWidth, containerHeight }: EditorCanvas
 
         const manager = canvasManagerRef.current;
 
-        const updateBadge = (e: fabric.IEvent<MouseEvent>) => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const updateBadge = (e: any) => {
             const obj = e.target;
             if (!obj) return;
 
@@ -375,7 +376,8 @@ export function EditorCanvasV2({ containerWidth, containerHeight }: EditorCanvas
         if (!isCanvasReady || !canvasManagerRef.current) return;
         const manager = canvasManagerRef.current;
 
-        const handleDblClick = (e: fabric.IEvent<MouseEvent>) => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const handleDblClick = (e: any) => {
             const target = e.target;
             if (!target) return;
 
@@ -482,7 +484,8 @@ export function EditorCanvasV2({ containerWidth, containerHeight }: EditorCanvas
         if (!isCanvasReady || !canvasManagerRef.current) return;
         const manager = canvasManagerRef.current;
 
-        const updateToolbarPosition = (e: fabric.IEvent<MouseEvent>) => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const updateToolbarPosition = (e: any) => {
             const obj = e.target;
             if (!obj) return;
             const rect = obj.getBoundingRect(true, true);
@@ -597,82 +600,13 @@ export function EditorCanvasV2({ containerWidth, containerHeight }: EditorCanvas
                     }}
                 />
 
-                {/* Element Toolbar - Hidden during drag/resize for clean UX, and HIDDEN IF LOCKED or BACKGROUND */}
-                {toolbarVisible && selectedElement && 
-                 !isDragging && 
-                 !isResizing && 
-                 !selectedElement.locked && 
-                 !(selectedElement.type === 'image' && (selectedElement as any).isCanvaBackground) && (
-                    <ElementToolbar
-                        x={toolbarPosition.x}
-                        y={toolbarPosition.y}
-                        width={toolbarPosition.width}
-                        height={toolbarPosition.height}
-                        visible={true}
-                        zoom={zoom}
-                        isLocked={!!selectedElement.locked}
-                        elementName={selectedElement.name || 'Untitled'}
-                        elementId={selectedElement.id}
-                        elementType={selectedElement.type as 'image' | 'text' | 'shape'}
-                        isDynamic={
-                            selectedElement.type === 'image' 
-                                ? !!(selectedElement as ImageElement).isDynamic 
-                                : selectedElement.type === 'text' 
-                                    ? !!(selectedElement as TextElement).isDynamic 
-                                    : false
-                        }
-                        dynamicFieldName={
-                            selectedElement.type === 'image' 
-                                ? (selectedElement as ImageElement).dynamicSource 
-                                : selectedElement.type === 'text' 
-                                    ? (selectedElement as TextElement).dynamicField 
-                                    : undefined
-                        }
-                        elements={elements}
-                        onDelete={() => {
-                            if (selectedElement && !selectedElement.locked) {
-                                deleteElement(selectedElement.id);
-                            }
-                        }}
-                        onDuplicate={() => {
-                            duplicateElement(selectedElement.id);
-                        }}
-                        onToggleLock={() => {
-                            updateElement(selectedElement.id, { locked: !selectedElement.locked });
-                        }}
-                        onRename={(newName) => {
-                            updateElement(selectedElement.id, { name: newName });
-                        }}
-                        onDynamicChange={(fieldName, isDynamic) => {
-                            if (selectedElement.type === 'image') {
-                                updateElement(selectedElement.id, { 
-                                    isDynamic, 
-                                    dynamicSource: isDynamic ? fieldName : undefined 
-                                });
-                            } else if (selectedElement.type === 'text') {
-                                const textEl = selectedElement as TextElement;
-                                // When disabling dynamic, replace {{field}} with static text
-                                // When enabling, set text to {{fieldName}}
-                                let newText = textEl.text;
-                                if (isDynamic) {
-                                    newText = `{{${fieldName}}}`;
-                                } else {
-                                    // Remove template syntax if present, or use field name as placeholder
-                                    const templateMatch = textEl.text.match(/^\{\{(.+)\}\}$/);
-                                    newText = templateMatch ? templateMatch[1] : textEl.text;
-                                }
-                                updateElement(selectedElement.id, { 
-                                    isDynamic, 
-                                    dynamicField: isDynamic ? fieldName : undefined,
-                                    text: newText
-                                });
-                            }
-                        }}
-                        onMore={() => {
-                            console.log('More options clicked');
-                        }}
-                    />
-                )}
+                {/* Right-Click Context Menu */}
+                <ContextMenu
+                    x={contextMenu.x}
+                    y={contextMenu.y}
+                    isOpen={contextMenu.isOpen}
+                    onClose={() => setContextMenu({ x: 0, y: 0, isOpen: false })}
+                />
 
                 {/* Dimension Badge for Resizing */}
                 <DimensionBadge
