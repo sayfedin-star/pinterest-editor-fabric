@@ -19,8 +19,8 @@ export interface FieldMapping {
     [templateField: string]: string;
 }
 
-// Debug flag
-const DEBUG = process.env.DEBUG_RENDER === 'true';
+// Debug flag - enabled for debugging API issues
+const DEBUG = true; // Temporarily enabled for debugging
 
 /**
  * Replace dynamic fields in text with values from row data
@@ -143,9 +143,19 @@ async function renderElement(
         const textEl = el as TextElement;
         let text = textEl.text;
         
+        console.log(`[ServerEngine] TEXT: name="${el.name}", original="${text?.substring(0, 50)}"`);
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        console.log(`[ServerEngine] TEXT: isDynamic=${'isDynamic' in textEl ? (textEl as any).isDynamic : false}`);
+        console.log(`[ServerEngine] TEXT: fieldMapping=`, fieldMapping);
+        console.log(`[ServerEngine] TEXT: rowData keys=`, Object.keys(rowData));
+        
         // Replace dynamic fields
         text = replaceDynamicFields(text, rowData, fieldMapping);
         text = applyTextTransform(text, textEl.textTransform);
+        
+        console.log(`[ServerEngine] TEXT: final text="${text?.substring(0, 50)}"`);
+        console.log(`[ServerEngine] TEXT: position x=${el.x}, y=${el.y}, width=${textEl.width}`);
+        console.log(`[ServerEngine] TEXT: font=${textEl.fontFamily}, size=${textEl.fontSize}, fill=${textEl.fill}`);
 
         const textbox = new Textbox(text, {
             ...commonOptions,
@@ -193,17 +203,21 @@ async function renderElement(
             
             const group = new Group([bgRect, textbox], commonOptions);
             canvas.add(group);
+            console.log(`[ServerEngine] TEXT: Added text group with background`);
         } else {
             canvas.add(textbox);
+            console.log(`[ServerEngine] TEXT: Added textbox to canvas`);
         }
     }
     else if (el.type === 'image') {
         const imageEl = el as ImageElement;
+        
+        console.log(`[ServerEngine] IMAGE: name="${el.name}", isDynamic=${imageEl.isDynamic}`);
+        console.log(`[ServerEngine] IMAGE: dynamicSource="${imageEl.dynamicSource}", imageUrl="${imageEl.imageUrl?.substring(0, 60)}"`);
+        
         const src = getDynamicImageUrl(imageEl, rowData, fieldMapping);
         
-        if (DEBUG) {
-            console.log(`[ServerEngine] Loading image: ${src?.substring(0, 80)}`);
-        }
+        console.log(`[ServerEngine] IMAGE: Resolved URL="${src?.substring(0, 100)}"`);
         
         const img = await loadImageServer(src);
         
@@ -214,6 +228,8 @@ async function renderElement(
             
             const naturalWidth = img.width || 100;
             const naturalHeight = img.height || 100;
+            
+            console.log(`[ServerEngine] IMAGE: Loaded successfully, natural=${naturalWidth}x${naturalHeight}, target=${targetWidth}x${targetHeight}, fitMode=${fitMode}`);
             
             if (fitMode === 'fill') {
                 img.set({
@@ -257,7 +273,9 @@ async function renderElement(
             }
             
             canvas.add(img);
+            console.log(`[ServerEngine] IMAGE: Added to canvas at (${img.left}, ${img.top})`);
         } else {
+            console.error(`[ServerEngine] IMAGE: FAILED to load "${el.name}" from ${src?.substring(0, 80)}`);
             // Placeholder for failed image
             const placeholder = new Rect({
                 ...commonOptions,
