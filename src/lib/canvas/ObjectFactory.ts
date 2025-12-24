@@ -186,18 +186,8 @@ export function createFabricObject(element: Element): fabric.FabricObject | null
                 // NOTE: splitByGrapheme removed to prevent ugly mid-word breaks like "CHI-CKEN"
                 // Word-boundary wrapping is preferred for marketing text
             });
-            
-            // For autoFitText, add a clipPath to absolutely ensure text stays within container bounds  
-            if (textEl.autoFitText && element.height) {
-                textbox.clipPath = new fabric.Rect({
-                    width: element.width,
-                    height: element.height,
-                    left: 0,
-                    top: 0,
-                    originX: 'left',
-                    originY: 'top',
-                });
-            }
+            // NOTE: clipPath removed - it caused display issues with Fabric.js 6.x
+            // The calculateFitFontSize function already ensures text fits within container
             
             // Apply shadow effect
             if (textEl.shadowColor && (textEl.shadowBlur || textEl.shadowOffsetX || textEl.shadowOffsetY)) {
@@ -532,25 +522,17 @@ export function syncElementToFabric(
                 // Also update the textbox width to match new container width
                 batchedUpdates.width = newWidth;
                 
-                // CRITICAL: Update stored element data so store stays in sync
+                // NOTE: We intentionally do NOT update storedElement.fontSize or the Zustand store
+                // The stored fontSize is the user's original setting, optimalFontSize is a DERIVED value
+                // that is calculated fresh each time based on container dimensions.
+                // Updating the store would cause an infinite oscillation loop.
+                
+                // Just update width/height in stored element (NOT fontSize)
                 extFabric._elementData = {
                     ...storedEl,
-                    fontSize: optimalFontSize,
                     width: newWidth,
                     height: newHeight,
                 } as Element;
-                
-                // ALSO update the Zustand store so toolbar shows correct fontSize
-                // Import is at top: import { useEditorStore } from '@/stores/editorStore';
-                const elementId = (fabricObject as ExtendedFabricObject).id;
-                if (elementId) {
-                    // Use setTimeout to avoid triggering during render cycle
-                    setTimeout(() => {
-                        useEditorStore.getState().updateElement(elementId, {
-                            fontSize: optimalFontSize,
-                        });
-                    }, 0);
-                }
             }
         }
         
@@ -853,6 +835,12 @@ export function syncFabricToElement(fabricObject: fabric.FabricObject): Element 
                 ...textElement,
                 width: preservedWidth,    // Use stored width for autoFit
                 height: preservedHeight,  // Use stored height for autoFit
+                // CRITICAL FIX: Preserve original text (including {{field}} placeholders)
+                // Without this, dragging/resizing would overwrite original text with display text
+                text: storedText.text,
+                // FIX: For autoFit text, preserve original fontSize (canvas shows calculated value)
+                // This prevents oscillation between 64/65 etc.
+                fontSize: storedText.autoFitText ? storedText.fontSize : textElement.fontSize,
                 isDynamic: storedText.isDynamic,
                 dynamicField: storedText.dynamicField,
                 textTransform: storedText.textTransform,
