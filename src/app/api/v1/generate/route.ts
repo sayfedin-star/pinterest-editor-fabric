@@ -14,7 +14,7 @@ export const dynamic = 'force-dynamic';
 
 // Constants
 const MAX_ROWS_PER_REQUEST = 50;
-const DEFAULT_MULTIPLIER = 2; // 2x resolution for high quality
+const DEFAULT_MULTIPLIER = 1; // 1x for original canvas size (use 2 for high quality)
 
 // Error codes
 type ErrorCode = 'INVALID_API_KEY' | 'TEMPLATE_NOT_FOUND' | 'VALIDATION_ERROR' | 'RATE_LIMIT' | 'SERVER_ERROR';
@@ -115,9 +115,10 @@ async function renderAndUploadPin(
 
         await renderTemplateServer(canvas, elements, config, rowData, fieldMapping);
 
-        // Export to data URL
+        // Export to data URL - JPEG 0.7 quality for speed and smaller files
         const dataUrl = canvas.toDataURL({
-            format: 'png',
+            format: 'jpeg',
+            quality: 0.7,
             multiplier,
         });
 
@@ -127,11 +128,11 @@ async function renderAndUploadPin(
 
         // Upload to Tebi S3 Storage (preferred) or fall back to Supabase
         const timestamp = Date.now();
-        const fileName = `pins/${userId}/${timestamp}_${uuidv4()}.png`;
+        const fileName = `pins/${userId}/${timestamp}_${uuidv4()}.jpg`;
 
         if (isTebiConfigured()) {
             // Use Tebi S3
-            const publicUrl = await uploadToS3(fileName, buffer, 'image/png');
+            const publicUrl = await uploadToS3(fileName, buffer, 'image/jpeg');
             if (publicUrl) {
                 console.log(`[API] Uploaded to Tebi S3: ${publicUrl}`);
                 return { url: publicUrl };
@@ -145,7 +146,7 @@ async function renderAndUploadPin(
         const { error: uploadError } = await supabase.storage
             .from(bucketName)
             .upload(fileName, buffer, {
-                contentType: 'image/png',
+                contentType: 'image/jpeg',
                 upsert: false,
             });
 
