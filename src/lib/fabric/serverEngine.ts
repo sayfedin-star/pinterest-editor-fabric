@@ -3,6 +3,9 @@
  * 
  * Uses fabric/node for Node.js server-side canvas operations.
  * This module is specifically for the /api/v1/generate endpoint.
+ * 
+ * IMPORTANT: Fonts must be registered BEFORE creating canvas objects.
+ * On Vercel, only system fonts are available by default.
  */
 
 import { StaticCanvas, Rect, FabricImage, Textbox, Circle, Path, Shadow, Group } from 'fabric/node';
@@ -21,6 +24,59 @@ export interface FieldMapping {
 
 // Debug flag - enabled for debugging API issues
 const DEBUG = true; // Temporarily enabled for debugging
+
+/**
+ * Map custom fonts to server-safe fallbacks
+ * Vercel serverless doesn't have custom fonts installed
+ */
+function getServerSafeFont(fontFamily: string): string {
+    // Map common custom fonts to system fonts available on Vercel/Linux
+    const fontMap: Record<string, string> = {
+        // Google Fonts -> System fallbacks
+        'Roboto': 'sans-serif',
+        'Open Sans': 'sans-serif',
+        'Lato': 'sans-serif',
+        'Montserrat': 'sans-serif',
+        'Poppins': 'sans-serif',
+        'Inter': 'sans-serif',
+        'Oswald': 'sans-serif',
+        'Playfair Display': 'serif',
+        'Merriweather': 'serif',
+        'Georgia': 'serif',
+        'Times New Roman': 'serif',
+        'Lobster': 'cursive',
+        'Pacifico': 'cursive',
+        'Dancing Script': 'cursive',
+        'Courier New': 'monospace',
+        'Consolas': 'monospace',
+        'Monaco': 'monospace',
+        // Common fonts
+        'Arial': 'sans-serif',
+        'Helvetica': 'sans-serif',
+        'Verdana': 'sans-serif',
+        'Impact': 'sans-serif',
+    };
+    
+    // Check if font is in map
+    const lowercaseFont = fontFamily.toLowerCase();
+    for (const [key, value] of Object.entries(fontMap)) {
+        if (lowercaseFont.includes(key.toLowerCase())) {
+            console.log(`[ServerEngine] Font fallback: "${fontFamily}" -> "${value}"`);
+            return value;
+        }
+    }
+    
+    // Default fallback
+    if (fontFamily.includes('serif') || fontFamily.includes('Serif')) {
+        return 'serif';
+    }
+    if (fontFamily.includes('mono') || fontFamily.includes('Mono')) {
+        return 'monospace';
+    }
+    
+    console.log(`[ServerEngine] Font fallback: "${fontFamily}" -> "sans-serif" (default)`);
+    return 'sans-serif';
+}
 
 /**
  * Replace dynamic fields in text with values from row data
@@ -161,7 +217,7 @@ async function renderElement(
             ...commonOptions,
             width: textEl.width,
             fontSize: textEl.fontSize || 16,
-            fontFamily: textEl.fontFamily || 'Arial',
+            fontFamily: getServerSafeFont(textEl.fontFamily || 'Arial'),
             fill: textEl.hollowText ? 'transparent' : (textEl.fill || '#000000'),
             textAlign: textEl.align || 'left',
             lineHeight: textEl.lineHeight || 1.2,
