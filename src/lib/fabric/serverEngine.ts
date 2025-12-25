@@ -14,6 +14,13 @@ import * as path from 'path';
 import * as fs from 'fs';
 import * as os from 'os';
 
+// CRITICAL: Force node-canvas to use FontConfig for proper font rendering
+// Without this, custom fonts will render as box characters (▯▯▯)
+// See: https://github.com/Automattic/node-canvas/issues/1779
+if (!process.env.PANGOCAIRO_BACKEND) {
+    process.env.PANGOCAIRO_BACKEND = 'fontconfig';
+}
+
 // Use require for canvas to avoid TypeScript type errors
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const { registerFont } = require('canvas');
