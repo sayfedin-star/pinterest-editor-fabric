@@ -125,9 +125,7 @@ function initializeFonts(): void {
 // Initialize fonts on module load
 initializeFonts();
 
-        return false;
-    }
-}
+
 
 /**
  * Download a Google Font from the official GitHub repository (raw content)
