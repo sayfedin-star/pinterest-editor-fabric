@@ -42,8 +42,6 @@ export interface FieldMapping {
 // --- Auto-Fit Text Calculation ---
 
 // Internal padding for auto-fit text (prevents text from touching container edges)
-const AUTOFIT_PADDING = 15;
-
 // Local implementation removed in favor of shared utility
 // See src/lib/canvas/textUtils.ts
 
@@ -482,16 +480,28 @@ async function createFabricObject(
         // Step 3: Calculate font size - use auto-fit if enabled
         let fontSize = textEl.fontSize || 16;
         if (textEl.autoFitText && text && textEl.width && textEl.height) {
-            fontSize = calculateFitFontSize(
-                text,
-                textEl.width,
-                textEl.height,
-                textEl.fontFamily || 'Arial',
-                textEl.fontWeight || 400,
-                textEl.lineHeight || 1.2,
-                textEl.letterSpacing || 0,
-                textEl.maxFontSize || 200
-            );
+            const config = {
+                containerWidth: textEl.width,
+                containerHeight: textEl.height,
+                minFontSize: textEl.minFontSize || 8,
+                maxFontSize: textEl.maxFontSize || 48,
+                padding: textEl.autoFitPadding ?? 15
+            };
+            
+            // Measurement callback using Fabric.js Textbox
+            const measureHeight = (size: number): number => {
+                const testTextbox = new fabric.Textbox(text, {
+                    width: config.containerWidth - (config.padding * 2),
+                    fontSize: size,
+                    fontFamily: textEl.fontFamily || 'Arial',
+                    fontWeight: textEl.fontWeight || 400,
+                    lineHeight: textEl.lineHeight || 1.2,
+                    charSpacing: (textEl.letterSpacing || 0) * 10,
+                });
+                return testTextbox.height || 0;
+            };
+            
+            fontSize = calculateFitFontSize(text, config, measureHeight);
         }
 
         // Build textbox WITHOUT position - position is set conditionally

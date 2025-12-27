@@ -6,7 +6,7 @@ import { useEditorStore } from '@/stores/editorStore';
 import { TextElement } from '@/types/editor';
 import { cn } from '@/lib/utils';
 import { SectionHeader } from './shared';
-import { calculateFitFontSize } from '@/lib/canvas/textUtils';
+// import { calculateFitFontSize } from '@/lib/canvas/textUtils'; // Not needed - inline approximation used
 
 interface TextPropertiesSectionProps {
     element: TextElement;
@@ -21,18 +21,43 @@ export const TextPropertiesSection = memo(function TextPropertiesSection({ eleme
     ) || element;
 
     // Calculate display font size for auto-fit mode (read-only)
-    const displayFontSize = liveElement.autoFitText ? calculateFitFontSize(
-        liveElement.previewText || liveElement.text || '',
-        liveElement.width,
-        liveElement.height,
-        liveElement.fontFamily || 'Arial',
-        liveElement.fontWeight || 400,
-        liveElement.lineHeight || 1.2,
-        liveElement.letterSpacing || 0,
-        liveElement.maxFontSize,
-        liveElement.minFontSize,
-        liveElement.autoFitPadding
-    ) : liveElement.fontSize;
+    const displayFontSize = (() => {
+        if (!liveElement.autoFitText) return liveElement.fontSize;
+        
+        const text = liveElement.previewText || liveElement.text || '';
+        if (!text || !liveElement.width || !liveElement.height) return liveElement.fontSize;
+        
+        const config = {
+            containerWidth: liveElement.width,
+            containerHeight: liveElement.height,
+            minFontSize: liveElement.minFontSize || 8,
+            maxFontSize: liveElement.maxFontSize || 48,
+            padding: liveElement.autoFitPadding ?? 15
+        };
+        
+        
+        // Simple binary search approximation without Fabric
+        let low = config.minFontSize;
+        let high = config.maxFontSize;
+        let optimalSize = config.minFontSize;
+        
+        for (let i = 0; i < 10; i++) {
+            const testSize = Math.floor((low + high) / 2);
+            // Rough estimate: each line is roughly fontSize * lineHeight
+            const estimatedLines = Math.ceil(text.length * testSize * 0.6 / (config.containerWidth - config.padding * 2));
+            const estimatedHeight = estimatedLines * testSize * (liveElement.lineHeight || 1.2);
+            
+            if (estimatedHeight <= config.containerHeight - config.padding * 2) {
+                optimalSize = testSize;
+                low = testSize + 1;
+            } else {
+                high = testSize - 1;
+            }
+            if (low > high) break;
+        }
+        
+        return Math.max(config.minFontSize, Math.min(optimalSize, config.maxFontSize));
+    })();
     
     // Local state for preview mode toggle
     const [showPreview, setShowPreview] = useState(!!liveElement.previewText);
