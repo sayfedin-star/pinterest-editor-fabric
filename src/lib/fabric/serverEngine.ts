@@ -13,6 +13,7 @@ import { Element, TextElement, ImageElement, ShapeElement, FrameElement } from '
 import * as path from 'path';
 import * as fs from 'fs';
 import * as os from 'os';
+import * as opentype from 'opentype.js';
 import { calculateFitFontSize } from '../canvas/textUtils';
 import { AutoFitConfig } from '@/types/editor';
 import { replaceDynamicFields, applyTextTransform } from './text-shared';
@@ -343,26 +344,47 @@ async function loadFontFromUrl(fontUrl: string, familyName: string): Promise<boo
             return false;
         }
         
-        const buffer = await response.arrayBuffer();
+        let buffer = Buffer.from(await response.arrayBuffer());
         
-        // Determine file extension from URL or content-type
+        // Determine file extension from URL
         let extension = 'ttf';
-        if (fontUrl.includes('.otf')) extension = 'otf';
-        else if (fontUrl.includes('.woff2')) extension = 'woff2';
-        else if (fontUrl.includes('.woff')) extension = 'woff';
+        const lowerUrl = fontUrl.toLowerCase();
+        if (lowerUrl.includes('.otf')) extension = 'otf';
+        else if (lowerUrl.includes('.woff2')) extension = 'woff2';
+        else if (lowerUrl.includes('.woff')) extension = 'woff';
+        
+        // CONVERSION: node-canvas only supports TTF/OTF.
+        // If we have WOFF/WOFF2, we must convert it to TTF.
+        if (extension === 'woff' || extension === 'woff2') {
+            try {
+                console.log(`[ServerEngine] Converting ${extension.toUpperCase()} to TTF for: ${familyName}`);
+                
+                // opentype.js .parse() accepts an ArrayBuffer. 
+                // It creates an OpenType Font object which we can then export as TTF.
+                const font = opentype.parse(buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength));
+                
+                // Export as TTF (toArrayBuffer defaults to generating a TTF)
+                const ttfBuffer = font.toArrayBuffer();
+                buffer = Buffer.from(ttfBuffer);
+                extension = 'ttf'; // Update extension to reflect conversion
+                
+                console.log(`[ServerEngine] Conversion successful for ${familyName}`);
+            } catch (conversionError) {
+                console.warn(`[ServerEngine] WOFF conversion failed for ${familyName}:`, conversionError);
+                // Fallback: Try to use the original file, maybe node-canvas/fontconfig on this system supports it?
+                // (Unlikely, but better than throwing immediately)
+            }
+        }
         
         // Write to temp file (registerFont requires file path)
-        // Use os.tmpdir() for cross-platform support (Windows/Linux/Vercel)
         const tempPath = path.join(os.tmpdir(), `font_${Date.now()}_${familyName.replace(/\s+/g, '_')}.${extension}`);
-        fs.writeFileSync(tempPath, Buffer.from(buffer));
+        fs.writeFileSync(tempPath, buffer);
         
         // Register font with node-canvas
-        // IMPORTANT: Specify weight and style for proper glyph rendering
-        // Extract basic weight/style from filename if possible to hint registerFont
+        // Extract basic weight/style from filename/URL to hint registerFont
         let weightStr = 'normal';
         let styleStr = 'normal';
         
-        const lowerUrl = fontUrl.toLowerCase();
         if (lowerUrl.includes('bold')) weightStr = 'bold';
         if (lowerUrl.includes('italic')) styleStr = 'italic';
 
