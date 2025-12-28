@@ -417,8 +417,6 @@ export function CanvaImportModal({ isOpen, onClose, onImportComplete }: CanvaImp
                 fontStyle: 'normal' as const,
                 verticalAlign: 'top' as const,
                 textDecoration: '',
-                // Enable auto-fit by default for "Image-like" behavior
-                autoFitText: true
             });
         });
 

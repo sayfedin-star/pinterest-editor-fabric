@@ -14,8 +14,6 @@ import * as path from 'path';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as opentype from 'opentype.js';
-import { calculateFitFontSize } from '../canvas/textUtils';
-import { AutoFitConfig } from '@/types/editor';
 import { replaceDynamicFields, applyTextTransform } from './text-shared';
 
 // CRITICAL: Configure FontConfig for serverless environment (Vercel)
@@ -693,40 +691,9 @@ async function renderElement(
         
         const safeFontFamily = await getServerSafeFont(textEl.fontFamily || 'Arial', String(fontWeight), fontStyle);
         
-        // Calculate font size - use auto-fit if enabled
-        let fontSize = textEl.fontSize || 16;
+        // Calculate font size
+        const fontSize = textEl.fontSize || 16;
         
-        // DEBUG: Log autoFitText status
-        console.log(`[ServerEngine] TEXT: autoFitText=${textEl.autoFitText}, width=${textEl.width}, height=${textEl.height}`);
-        
-        if (textEl.autoFitText && text && textEl.width && textEl.height) {
-            const config: AutoFitConfig = {
-                containerWidth: textEl.width,
-                containerHeight: textEl.height,
-                minFontSize: textEl.minFontSize || 8,
-                maxFontSize: textEl.maxFontSize || 48,
-                padding: textEl.autoFitPadding ?? 15
-            };
-            
-            // Log font being used for calc to catch mismatches
-            console.log(`[ServerEngine:Diagnostic] AutoFit Calculation: Font "${safeFontFamily}" (REQ: "${textEl.fontFamily}")`);
-
-            const measureHeight = (size: number): number => {
-                const testTextbox = new Textbox(text, {
-                    width: config.containerWidth - (config.padding * 2),
-                    fontSize: size,
-                    fontFamily: safeFontFamily,
-                    fontWeight: textEl.fontWeight || 400,
-                    lineHeight: textEl.lineHeight || 1.2,
-                    charSpacing: (textEl.letterSpacing || 0) * 10,
-                });
-                return testTextbox.height || 0;
-            };
-
-            fontSize = calculateFitFontSize(text, config, measureHeight);
-            console.log(`[ServerEngine] TEXT: Auto-fit font size calculated: ${fontSize} (original: ${textEl.fontSize}, max: ${textEl.maxFontSize || 48})`);
-        }
-
         const textbox = new Textbox(text, {
             ...commonOptions,
             width: textEl.width,

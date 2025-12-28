@@ -77,17 +77,6 @@ export interface FabricTextStyles {
     };
 }
 
-/**
- * Configuration for auto-fit text calculations
- * Used for dynamic resizing of text to fit containers
- */
-export interface AutoFitConfig {
-    containerWidth: number;
-    containerHeight: number;
-    minFontSize: number;
-    maxFontSize: number;
-    padding: number;
-}
 
 // ============================================
 // Core Element Types
@@ -137,14 +126,6 @@ export interface TextElement extends BaseElement {
     // Curved text
     curvedEnabled?: boolean;
     curvedPower?: number;
-    // Auto-fit text - shrink/grow font to fit box
-    autoFitText?: boolean;
-    /** Maximum font size when auto-fit is enabled (caps the upper limit) */
-    maxFontSize?: number;
-    /** Minimum font size when auto-fit is enabled (floors the lower limit) */
-    minFontSize?: number;
-    /** Internal padding for auto-fit text (prevents text from touching container edges) */
-    autoFitPadding?: number;
     // Dynamic field - now supports any field name (text1, text2, etc.)
     isDynamic: boolean;
     dynamicField?: string;

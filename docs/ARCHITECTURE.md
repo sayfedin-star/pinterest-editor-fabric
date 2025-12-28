@@ -278,7 +278,6 @@ src/
 │   │   ├── csvParser.ts            # Parse CSV files
 │   │   ├── csvValidator.ts         # Validate CSV structure
 │   │   ├── fieldNameParser.ts      # Parse {{fieldName}} syntax
-│   │   ├── textAutoFit.ts          # Auto-fit text to box
 │   │   └── debug.ts                # Debug logging
 │   │
 │   ├── config/                # Configuration

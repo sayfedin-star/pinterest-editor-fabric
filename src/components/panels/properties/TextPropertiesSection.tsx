@@ -6,7 +6,6 @@ import { useEditorStore } from '@/stores/editorStore';
 import { TextElement } from '@/types/editor';
 import { cn } from '@/lib/utils';
 import { SectionHeader } from './shared';
-// import { calculateFitFontSize } from '@/lib/canvas/textUtils'; // Not needed - inline approximation used
 
 interface TextPropertiesSectionProps {
     element: TextElement;
@@ -20,45 +19,6 @@ export const TextPropertiesSection = memo(function TextPropertiesSection({ eleme
         state.elements.find(el => el.id === element.id) as TextElement | undefined
     ) || element;
 
-    // Calculate display font size for auto-fit mode (read-only)
-    const displayFontSize = (() => {
-        if (!liveElement.autoFitText) return liveElement.fontSize;
-        
-        const text = liveElement.previewText || liveElement.text || '';
-        if (!text || !liveElement.width || !liveElement.height) return liveElement.fontSize;
-        
-        const config = {
-            containerWidth: liveElement.width,
-            containerHeight: liveElement.height,
-            minFontSize: liveElement.minFontSize || 8,
-            maxFontSize: liveElement.maxFontSize || 48,
-            padding: liveElement.autoFitPadding ?? 15
-        };
-        
-        
-        // Simple binary search approximation without Fabric
-        let low = config.minFontSize;
-        let high = config.maxFontSize;
-        let optimalSize = config.minFontSize;
-        
-        for (let i = 0; i < 10; i++) {
-            const testSize = Math.floor((low + high) / 2);
-            // Rough estimate: each line is roughly fontSize * lineHeight
-            const estimatedLines = Math.ceil(text.length * testSize * 0.6 / (config.containerWidth - config.padding * 2));
-            const estimatedHeight = estimatedLines * testSize * (liveElement.lineHeight || 1.2);
-            
-            if (estimatedHeight <= config.containerHeight - config.padding * 2) {
-                optimalSize = testSize;
-                low = testSize + 1;
-            } else {
-                high = testSize - 1;
-            }
-            if (low > high) break;
-        }
-        
-        return Math.max(config.minFontSize, Math.min(optimalSize, config.maxFontSize));
-    })();
-    
     // Local state for preview mode toggle
     const [showPreview, setShowPreview] = useState(!!liveElement.previewText);
     
@@ -283,105 +243,21 @@ export const TextPropertiesSection = memo(function TextPropertiesSection({ eleme
                     />
                 </div>
 
-                {/* Auto-fit Text Toggle */}
-                <label className="flex items-center gap-3 cursor-pointer py-2 px-3 rounded-lg bg-linear-to-r from-blue-50 to-purple-50 border border-blue-200">
-                    <input
-                        type="checkbox"
-                        checked={liveElement.autoFitText || false}
-                        onChange={(e) => handleChange({ autoFitText: e.target.checked })}
-                        className="w-4 h-4 rounded border-gray-300 text-blue-600"
-                    />
-                    <div className="flex-1">
-                        <span className="text-sm font-medium text-gray-700">Auto-fit text</span>
-                        <p className="text-xs text-gray-500">Automatically resize font to fit box</p>
+                {/* Manual Font Size - ALWAYS visible now */}
+                <div className="flex items-center justify-between">
+                    <label className="text-sm text-gray-600">Font Size</label>
+                    <div className="flex items-center gap-2">
+                        <input
+                            type="number"
+                            min={8}
+                            max={500}
+                            value={liveElement.fontSize || 16}
+                            onChange={(e) => handleChange({ fontSize: parseInt(e.target.value) || 16 })}
+                            className="w-20 px-3 py-1.5 text-sm border border-gray-200 rounded-lg bg-white focus:border-blue-400 focus:ring-2 focus:ring-blue-100 outline-none text-center"
+                        />
+                        <span className="text-xs text-gray-400">px</span>
                     </div>
-                </label>
-
-                {/* Auto-fit Settings - shown when Auto-fit is enabled */}
-                {liveElement.autoFitText && (
-                    <div className="ml-2 pl-3 border-l-2 border-blue-200 space-y-3">
-                        {/* Current Font Size (read-only) */}
-                        <div className="flex items-center justify-between">
-                            <span className="text-sm text-gray-600">Current Size</span>
-                            <div className="flex items-center gap-2">
-                                <span className="text-lg font-semibold text-blue-600">
-                                    {displayFontSize || 16}
-                                </span>
-                                <span className="text-xs text-gray-400">px (auto)</span>
-                            </div>
-                        </div>
-                        
-                        {/* Max Size Control */}
-                        <div className="flex items-center justify-between">
-                            <span className="text-sm text-gray-600">Max Size</span>
-                            <div className="flex items-center gap-2">
-                                <input
-                                    type="number"
-                                    min={8}
-                                    max={500}
-                                    value={liveElement.maxFontSize || 48}
-                                    onChange={(e) => handleChange({ maxFontSize: parseInt(e.target.value) || 48 })}
-                                    className="w-16 px-2 py-1 text-sm border border-gray-200 rounded text-center focus:border-blue-400 focus:ring-1 focus:ring-blue-100 outline-none"
-                                />
-                                <span className="text-xs text-gray-400">px</span>
-                            </div>
-                        </div>
-
-                        {/* Min Size Control */}
-                        <div className="flex items-center justify-between">
-                            <span className="text-sm text-gray-600">Min Size</span>
-                            <div className="flex items-center gap-2">
-                                <input
-                                    type="number"
-                                    min={1}
-                                    max={100}
-                                    value={liveElement.minFontSize || 8}
-                                    onChange={(e) => handleChange({ minFontSize: parseInt(e.target.value) || 8 })}
-                                    className="w-16 px-2 py-1 text-sm border border-gray-200 rounded text-center focus:border-blue-400 focus:ring-1 focus:ring-blue-100 outline-none"
-                                />
-                                <span className="text-xs text-gray-400">px</span>
-                            </div>
-                        </div>
-
-                        {/* Padding Control */}
-                        <div className="flex items-center justify-between">
-                            <span className="text-sm text-gray-600">Padding</span>
-                            <div className="flex items-center gap-2">
-                                <input
-                                    type="number"
-                                    min={0}
-                                    max={100}
-                                    value={liveElement.autoFitPadding ?? 15}
-                                    onChange={(e) => handleChange({ autoFitPadding: parseInt(e.target.value) || 0 })}
-                                    className="w-16 px-2 py-1 text-sm border border-gray-200 rounded text-center focus:border-blue-400 focus:ring-1 focus:ring-blue-100 outline-none"
-                                />
-                                <span className="text-xs text-gray-400">px</span>
-                            </div>
-                        </div>
-                        
-                        <p className="text-[10px] text-gray-400 leading-tight">
-                            Adjusts font between min/max sizes to fit box with padding.
-                        </p>
-                    </div>
-                )}
-
-                {/* Manual Font Size - shown when Auto-fit is OFF */}
-                {!liveElement.autoFitText && (
-                    <div className="flex items-center justify-between">
-                        <label className="text-sm text-gray-600">Font Size</label>
-                        <div className="flex items-center gap-2">
-                            <input
-                                type="number"
-                                min={8}
-                                max={500}
-                                value={liveElement.fontSize || 16}
-                                onChange={(e) => handleChange({ fontSize: parseInt(e.target.value) || 16 })}
-                                className="w-20 px-3 py-1.5 text-sm border border-gray-200 rounded-lg bg-white focus:border-blue-400 focus:ring-2 focus:ring-blue-100 outline-none text-center"
-                            />
-                            <span className="text-xs text-gray-400">px</span>
-                        </div>
-                    </div>
-                )}
+                </div>
             </div>
         </div>
     );

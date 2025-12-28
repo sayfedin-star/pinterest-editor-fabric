@@ -1,4 +1,4 @@
-import { TextElement, AutoFitConfig } from '@/types/editor';
+import { TextElement } from '@/types/editor';
 
 /**
  * Shared Text Processing Logic
@@ -62,47 +62,3 @@ export function applyTextTransform(
     }
 }
 
-// --- 3. Font Size Calculation (Auto-Fit) ---
-
-// Interface for the measurement function (platform specific)
-// Client uses canvas context or hidden DOM element
-// Server uses fabric.node Textbox or node-canvas measureText
-export type TextMeasureFn = (fontSize: number, text: string, fontFamily: string, fontWeight: string | number) => { width: number, height: number };
-
-export function calculateAutoFitFontSize(
-    text: string,
-    config: AutoFitConfig,
-    measureFn: TextMeasureFn,
-    fontFamily: string,
-    fontWeight: string | number
-): number {
-    const { 
-        containerWidth, 
-        containerHeight, 
-        minFontSize = 8, 
-        maxFontSize = 200, 
-        padding = 0 
-    } = config;
-
-    const availWidth = containerWidth - (padding * 2);
-    const availHeight = containerHeight - (padding * 2);
-
-    let low = minFontSize;
-    let high = maxFontSize;
-    let bestFit = minFontSize;
-
-    // Binary search for optimal size
-    while (low <= high) {
-        const mid = Math.floor((low + high) / 2);
-        const dim = measureFn(mid, text, fontFamily, fontWeight);
-
-        if (dim.width <= availWidth && dim.height <= availHeight) {
-            bestFit = mid;
-            low = mid + 1;
-        } else {
-            high = mid - 1;
-        }
-    }
-
-    return bestFit;
-}

@@ -127,9 +127,7 @@ function hasPropertiesChanged(prev: Element, curr: Element): boolean {
             prev.stroke !== curr.stroke ||
             prev.strokeWidth !== curr.strokeWidth ||
             prev.hollowText !== curr.hollowText ||
-            // Rich text
-            prev.richTextEnabled !== curr.richTextEnabled ||
-            prev.autoFitText !== curr.autoFitText) {
+            prev.richTextEnabled !== curr.richTextEnabled) {
             return true;
         }
     }

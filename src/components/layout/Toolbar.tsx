@@ -70,33 +70,20 @@ export function Toolbar() {
                         }}
                     />
 
-                    {/* Font Size - disabled when autoFitText is on */}
+                    {/* Font Size */}
                     <div className="relative group">
                         <input
                             type="number"
                             value={textElement.fontSize}
                             onChange={(e) => {
-                                if (!textElement.autoFitText) {
-                                    updateElement(textElement.id, { fontSize: parseInt(e.target.value) || 12 });
-                                    pushHistory();
-                                }
+                                updateElement(textElement.id, { fontSize: parseInt(e.target.value) || 12 });
+                                pushHistory();
                             }}
-                            disabled={textElement.autoFitText}
-                            className={cn(
-                                "h-8 w-12 px-1 border rounded text-xs text-center transition-all",
-                                textElement.autoFitText 
-                                    ? "border-blue-200 bg-blue-50 text-blue-600 cursor-not-allowed"
-                                    : "border-gray-300 bg-white"
-                            )}
+                            className="h-8 w-12 px-1 border border-gray-300 rounded text-xs text-center transition-all bg-white"
                             min={8}
                             max={200}
-                            title={textElement.autoFitText ? "Size auto-calculated (auto-fit enabled)" : "Font size"}
+                            title="Font size"
                         />
-                        {textElement.autoFitText && (
-                            <div className="absolute -bottom-5 left-1/2 -translate-x-1/2 text-[9px] text-blue-500 whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity">
-                                auto
-                            </div>
-                        )}
                     </div>
 
                     {/* Bold/Italic/Underline */}

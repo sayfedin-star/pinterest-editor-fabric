@@ -329,8 +329,7 @@ export function syncElementToFabric(
         if (textUpdates.fontFamily !== undefined) {
             batchedUpdates.fontFamily = textUpdates.fontFamily;
         }
-        if (textUpdates.fontSize !== undefined && !storedEl?.autoFitText) {
-            // Only apply manual fontSize if NOT autoFitText (autoFitText calculates above)
+        if (textUpdates.fontSize !== undefined) {
             batchedUpdates.fontSize = textUpdates.fontSize;
         }
         if (textUpdates.fontStyle !== undefined) {
@@ -559,21 +558,11 @@ export function syncFabricToElement(fabricObject: fabric.FabricObject): Element 
         if (storedElement && storedElement.type === 'text') {
             const storedText = storedElement as TextElement;
             
-            // CRITICAL FIX for autoFitText: Preserve original container dimensions
-            // Don't let Fabric's expanded textbox size overwrite the fixed container size
-            const preservedWidth = storedText.autoFitText ? storedText.width : textElement.width;
-            const preservedHeight = storedText.autoFitText ? storedText.height : textElement.height;
-            
             return {
                 ...textElement,
-                width: preservedWidth,    // Use stored width for autoFit
-                height: preservedHeight,  // Use stored height for autoFit
                 // CRITICAL FIX: Preserve original text (including {{field}} placeholders)
                 // Without this, dragging/resizing would overwrite original text with display text
                 text: storedText.text,
-                // FIX: For autoFit text, preserve original fontSize (canvas shows calculated value)
-                // This prevents oscillation between 64/65 etc.
-                fontSize: storedText.autoFitText ? storedText.fontSize : textElement.fontSize,
                 isDynamic: storedText.isDynamic,
                 dynamicField: storedText.dynamicField,
                 textTransform: storedText.textTransform,
@@ -583,8 +572,6 @@ export function syncFabricToElement(fabricObject: fabric.FabricObject): Element 
                 backgroundPadding: storedText.backgroundPadding,
                 curvedEnabled: storedText.curvedEnabled,
                 curvedPower: storedText.curvedPower,
-                autoFitText: storedText.autoFitText,
-                maxFontSize: storedText.maxFontSize,  // Also preserve maxFontSize
                 fontProvider: storedText.fontProvider,
                 richTextEnabled: storedText.richTextEnabled,
                 characterStyles: storedText.characterStyles,
