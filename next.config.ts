@@ -25,7 +25,7 @@ const nextConfig: NextConfig = {
   },
   // Bundle fonts for serverless functions (needed for canvas text rendering)
   outputFileTracingIncludes: {
-    '/api/v1/generate': ['./public/fonts/**/*'],
+    '/api/v1/generate': ['./public/fonts/**/*', './fonts.conf'],
   },
   // Prevent bundling of native modules
   serverExternalPackages: ['canvas'],

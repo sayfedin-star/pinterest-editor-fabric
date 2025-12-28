@@ -21,9 +21,28 @@ import { replaceDynamicFields, applyTextTransform } from './text-shared';
 // Without this, you get: "Fontconfig error: Cannot load default config file"
 // This causes custom fonts to render as box characters
 
-// Point FontConfig to our custom config file in project root
+// Point FontConfig to our custom config file
 if (!process.env.FONTCONFIG_FILE) {
-    process.env.FONTCONFIG_FILE = path.resolve(process.cwd(), 'fonts.conf');
+    const possibleConfigPaths = [
+        path.resolve(process.cwd(), 'fonts.conf'),
+        path.resolve(process.cwd(), '.next/server/fonts.conf'),
+        '/var/task/fonts.conf',
+    ];
+    
+    let configPath = null;
+    for (const p of possibleConfigPaths) {
+        if (fs.existsSync(p)) {
+            configPath = p;
+            break;
+        }
+    }
+    
+    if (configPath) {
+        process.env.FONTCONFIG_FILE = configPath;
+        console.log(`[ServerEngine] Using FontConfig file: ${configPath}`);
+    } else {
+        console.warn('[ServerEngine] fonts.conf not found! Font rendering may fail.');
+    }
 }
 
 // Force use of FontConfig backend
