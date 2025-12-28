@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
-import * as fabric from 'fabric';
+import { StaticCanvas } from 'fabric/node';
 import { createClient } from '@supabase/supabase-js';
 import { v4 as uuidv4 } from 'uuid';
 import { Element } from '@/types/editor';
-import { renderTemplate, RenderConfig, FieldMapping } from '@/lib/fabric/engine';
+import { renderTemplateServer, RenderConfig, FieldMapping } from '@/lib/fabric/serverEngine';
 
 // Vercel Serverless Config
 export const maxDuration = 10;
@@ -40,7 +40,7 @@ export async function POST(req: NextRequest) {
         }
 
         // Initialize Headless Canvas (StaticCanvas)
-        const canvas = new fabric.StaticCanvas(undefined, {
+        const canvas = new StaticCanvas(undefined, {
             width: canvasSize.width,
             height: canvasSize.height
         });
@@ -52,7 +52,7 @@ export async function POST(req: NextRequest) {
             backgroundColor
         };
 
-        await renderTemplate(canvas, elements, config, rowData, fieldMapping);
+        await renderTemplateServer(canvas, elements, config, rowData, fieldMapping);
 
         // Export to data URL
         const dataUrl = canvas.toDataURL({

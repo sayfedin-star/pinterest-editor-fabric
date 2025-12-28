@@ -96,6 +96,7 @@ export async function POST(req: NextRequest) {
         // STEP 2: Dynamic import of fabric-dependent modules AFTER polyfills
         // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
         const { renderTemplate, setServerImageCache, clearServerImageCache } = await import('@/lib/fabric/engine');
+        const { prepareElementsForServerRendering } = await import('@/lib/fabric/serverEngine');
         const { CanvasPool } = await import('@/lib/fabric/CanvasPool');
 
         const body: RenderBatchRequest = await req.json();
@@ -116,6 +117,11 @@ export async function POST(req: NextRequest) {
                 { status: 400 }
             );
         }
+        
+        // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+        // 🚀 FONT FIX: Ensure all required fonts are loaded/registered
+        // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+        const preparedElements = await prepareElementsForServerRendering(elements);
 
         console.log(`[Server Render] Processing batch of ${csvRows.length} pins for campaign ${campaignId}`);
 
@@ -141,7 +147,7 @@ export async function POST(req: NextRequest) {
             const imageCache = new Map<string, string>(); // URL -> base64 data URL
             
             // Extract unique image URLs from elements and CSV data
-            const imageElements = elements.filter(el => el.type === 'image' && el.visible);
+            const imageElements = preparedElements.filter(el => el.type === 'image' && el.visible);
             const uniqueUrls = new Set<string>();
             
             for (const el of imageElements) {
@@ -214,7 +220,7 @@ export async function POST(req: NextRequest) {
                     };
 
                     // Pass image cache to renderTemplate
-                    await renderTemplate(canvas, elements, config, rowData, fieldMapping);
+                    await renderTemplate(canvas, preparedElements, config, rowData, fieldMapping);
                     const t2 = Date.now();
 
                     // Export to JPEG - this is synchronous and CPU-intensive

@@ -133,13 +133,15 @@ function initializeFonts(): void {
             if (registeredFonts.has(fontKey)) continue;
             
             try {
-                registerFont(fontPath, {
-                    family: familyName,
-                    weight: weight,
-                    style: style,
-                });
-                registeredFonts.add(fontKey);
-                console.log(`[ServerEngine:Check:Reg] Registered font: ${familyName} (${weight}, ${style}) from ${file}`);
+                if (registerFont) {
+                    registerFont(fontPath, {
+                        family: familyName,
+                        weight: weight,
+                        style: style,
+                    });
+                    registeredFonts.add(fontKey);
+                    console.log(`[ServerEngine:Check:Reg] Registered font: ${familyName} (${weight}, ${style}) from ${file}`);
+                }
             } catch (err) {
                 console.error(`[ServerEngine:Error:Reg] Failed to register font ${file}:`, err);
             }
@@ -199,7 +201,9 @@ async function downloadGoogleFont(family: string, weight: string = 'normal', sty
         const cachedPath = path.join(cacheDir, filename);
         if (fs.existsSync(cachedPath)) {
             try {
-                registerFont(cachedPath, { family, weight, style });
+                if (registerFont) {
+                    registerFont(cachedPath, { family, weight, style });
+                }
                 registeredFonts.add(fontKey);
                 console.log(`[ServerEngine:Font] CACHE HIT: Registered ${family} from ${cachedPath}`);
                 return true;
@@ -224,7 +228,9 @@ async function downloadGoogleFont(family: string, weight: string = 'normal', sty
                 const buffer = await response.arrayBuffer();
                 fs.writeFileSync(cachedPath, Buffer.from(buffer));
                 
-                registerFont(cachedPath, { family, weight, style });
+                if (registerFont) {
+                    registerFont(cachedPath, { family, weight, style });
+                }
                 registeredFonts.add(fontKey);
                 
                 console.log(`[ServerEngine:Font] DOWNLOAD SUCCESS: ${family} saved to ${cachedPath}`);
@@ -356,11 +362,13 @@ async function loadFontFromUrl(fontUrl: string, familyName: string): Promise<boo
         if (lowerUrl.includes('bold')) weightStr = 'bold';
         if (lowerUrl.includes('italic')) styleStr = 'italic';
 
-        registerFont(tempPath, { 
-            family: familyName,
-            weight: weightStr,
-            style: styleStr
-        });
+        if (registerFont) {
+            registerFont(tempPath, { 
+                family: familyName,
+                weight: weightStr,
+                style: styleStr
+            });
+        }
         registeredFonts.add(fontKey);
         
         console.log(`[ServerEngine:Check:Net] Successfully loaded font from URL: ${familyName}`);
@@ -469,6 +477,43 @@ export async function loadCustomFontsForTemplate(
 }
 
 
+
+/**
+ * Prepare elements for server-side rendering
+ * 1. Ensures fonts are downloaded/registered
+ * 2. Updates element font families to the resolved safe font
+ * 3. Returns new array of elements (does not mutate original)
+ */
+export async function prepareElementsForServerRendering(elements: Element[]): Promise<Element[]> {
+    const preparedElements = JSON.parse(JSON.stringify(elements)); // Deep clone
+    
+    // Collect all unique fonts to process
+    // We process sequentially to avoid overwhelming the network/fs with parallel downloads
+    for (const el of preparedElements) {
+        if (el.type === 'text') {
+            const textEl = el as TextElement;
+            if (textEl.fontFamily) {
+                const fontWeight = textEl.fontWeight || (textEl.fontStyle?.includes('bold') ? 'bold' : 'normal');
+                const fontStyle = textEl.fontStyle?.includes('italic') ? 'italic' : 'normal';
+                
+                // Ensure font is loaded and get the safe family name
+                const safeFamily = await getServerSafeFont(textEl.fontFamily, String(fontWeight), fontStyle);
+                
+                // Update element to use the safe family
+                textEl.fontFamily = safeFamily;
+                
+                // Also load custom font URL if present (legacy support)
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                const fontUrl = (textEl as any).fontUrl;
+                if (fontUrl) {
+                    await loadFontFromUrl(fontUrl, safeFamily);
+                }
+            }
+        }
+    }
+    
+    return preparedElements;
+}
 
 /**
  * Get dynamic image URL from element and row data
