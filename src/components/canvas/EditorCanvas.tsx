@@ -9,7 +9,6 @@ import { useSynchronizationBridge } from '@/hooks/useSynchronizationBridge';
 import { detectElementChange } from '@/lib/canvas/elementChangeDetection';
 import { DimensionBadge } from './DimensionBadge';
 import { ContextMenu } from './ContextMenu';
-import { RichTextEditor } from './RichTextEditor';
 
 interface EditorCanvasProps {
     containerWidth: number;
@@ -325,48 +324,6 @@ export function EditorCanvasV2({ containerWidth, containerHeight }: EditorCanvas
         };
     }, [isCanvasReady]);
 
-    // Rich Text Editor state
-    const [richTextEditorState, setRichTextEditorState] = useState<{
-        isOpen: boolean;
-        element: TextElement | null;
-        position: { x: number; y: number };
-    }>({ isOpen: false, element: null, position: { x: 0, y: 0 } });
-
-    // Handle double-click for rich text editing
-    useEffect(() => {
-        if (!isCanvasReady || !canvasManagerRef.current) return;
-        const manager = canvasManagerRef.current;
-
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const handleDblClick = (e: any) => {
-            const target = e.target;
-            if (!target) return;
-
-            const elementId = (target as any).id;
-            const element = elements.find(el => el.id === elementId);
-
-            // Only open rich text editor for text elements with rich text enabled
-            if (element?.type === 'text' && (element as TextElement).richTextEnabled) {
-                const rect = target.getBoundingRect(true, true);
-                setRichTextEditorState({
-                    isOpen: true,
-                    element: element as TextElement,
-                    position: { x: rect.left, y: rect.top + rect.height + 10 }
-                });
-            }
-        };
-
-        manager.on('mouse:dblclick', handleDblClick);
-        return () => {
-            manager.off('mouse:dblclick', handleDblClick);
-        };
-    }, [isCanvasReady, elements]);
-
-    // Callback to close rich text editor
-    const handleCloseRichTextEditor = useCallback(() => {
-        setRichTextEditorState(prev => ({ ...prev, isOpen: false }));
-    }, []);
-
     // Update canvas size when dimensions or zoom changes
     useEffect(() => {
         if (canvasManagerRef.current && isCanvasReady) {
@@ -587,18 +544,6 @@ export function EditorCanvasV2({ containerWidth, containerHeight }: EditorCanvas
                     </div>
                 )}
             </div>
-
-            {/* Rich Text Editor Modal */}
-            {richTextEditorState.isOpen && richTextEditorState.element && (
-                <RichTextEditor
-                    element={richTextEditorState.element}
-                    isOpen={richTextEditorState.isOpen}
-                    position={richTextEditorState.position}
-                    zoom={zoom}
-                    onClose={handleCloseRichTextEditor}
-                    onUpdate={(updates) => updateElement(richTextEditorState.element!.id, updates)}
-                />
-            )}
         </div>
     );
 };

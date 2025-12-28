@@ -126,8 +126,7 @@ function hasPropertiesChanged(prev: Element, curr: Element): boolean {
             prev.shadowOffsetY !== curr.shadowOffsetY ||
             prev.stroke !== curr.stroke ||
             prev.strokeWidth !== curr.strokeWidth ||
-            prev.hollowText !== curr.hollowText ||
-            prev.richTextEnabled !== curr.richTextEnabled) {
+            prev.hollowText !== curr.hollowText) {
             return true;
         }
     }

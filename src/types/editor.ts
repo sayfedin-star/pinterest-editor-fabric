@@ -1,84 +1,6 @@
 // Element types for the Pinterest Template Editor
 
 // ============================================
-// PHASE 2: Character-Level Formatting Types
-// ============================================
-
-/**
- * Character-level style definition for rich text
- * 
- * Enables per-character styling within text elements.
- * Uses absolute indices (0-based) across the entire text including newlines.
- * 
- * @example
- * // Text: "CREAMY BAKED MUSHROOM"
- * // Style "BAKED" (chars 7-11) as bold and red:
- * { id: 'style-1', start: 7, end: 11, fill: '#FF0000', fontWeight: 700 }
- */
-export interface CharacterStyle {
-    /** Unique ID for React keys and reference */
-    id: string;
-    /** Start index (inclusive, 0-based absolute position) */
-    start: number;
-    /** End index (inclusive, 0-based absolute position) */
-    end: number;
-    
-    // Style properties (undefined = inherit from element defaults)
-    /** Text color */
-    fill?: string;
-    /** Font weight (100-900) */
-    fontWeight?: 100 | 200 | 300 | 400 | 500 | 600 | 700 | 800 | 900;
-    /** Font size in pixels */
-    fontSize?: number;
-    /** Font style (normal or italic) */
-    fontStyle?: 'normal' | 'italic';
-    /** Text decoration (underline, strikethrough, or none) */
-    textDecoration?: 'underline' | 'line-through' | 'none';
-    /** Background/highlight color */
-    backgroundColor?: string;
-}
-
-/**
- * Text selection state for rich text editor
- * Tracks cursor position or selected range
- */
-export interface TextSelection {
-    /** Start index of selection (0-based) */
-    start: number;
-    /** End index of selection (0-based) */
-    end: number;
-    /** True if start === end (cursor position, no text selected) */
-    isCollapsed: boolean;
-}
-
-/**
- * Fabric.js styles object structure for per-character styling
- * 
- * Fabric.js uses line-relative indices, so we need to convert
- * from absolute indices when syncing to canvas.
- * 
- * @example
- * // For text "HELLO\nWORLD" with "LO W" styled:
- * {
- *   0: { 3: { fill: 'red' }, 4: { fill: 'red' } },  // "LO" on line 0
- *   1: { 0: { fill: 'red' } }                        // "W" on line 1
- * }
- */
-export interface FabricTextStyles {
-    [lineIndex: number]: {
-        [charIndex: number]: {
-            fill?: string;
-            fontWeight?: string | number;
-            fontSize?: number;
-            fontStyle?: string;
-            textDecoration?: string;
-            textBackgroundColor?: string;
-        };
-    };
-}
-
-
-// ============================================
 // Core Element Types
 // ============================================
 
@@ -142,12 +64,6 @@ export interface TextElement extends BaseElement {
     fontProvider?: 'system' | 'google' | 'custom';
     /** Font file URL for server-side rendering (custom fonts) */
     fontUrl?: string;
-    
-    // Rich text enhancements (Phase 2)
-    /** Enable rich text mode with per-character styling */
-    richTextEnabled?: boolean;
-    /** Array of character styles (only used when richTextEnabled is true) */
-    characterStyles?: CharacterStyle[];
 }
 
 export interface ImageElement extends BaseElement {

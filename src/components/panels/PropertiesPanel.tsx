@@ -10,7 +10,6 @@ import {
     ImagePropertiesSection,
     EffectsSection,
     TypographySection,
-    CharacterStylesSection,
 } from './properties';
 
 /**
@@ -68,11 +67,6 @@ export function PropertiesPanel() {
             {/* Typography (font family, weight, transform) */}
             {isText && (
                 <TypographySection element={selectedElement as TextElement} />
-            )}
-
-            {/* Character Styles (Phase 2 - rich text) */}
-            {isText && (
-                <CharacterStylesSection element={selectedElement as TextElement} />
             )}
 
             {/* Image Properties */}

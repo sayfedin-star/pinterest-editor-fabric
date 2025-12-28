@@ -7,7 +7,6 @@
 
 import * as fabric from 'fabric';
 import { Element, TextElement, ShapeElement, ImageElement } from '@/types/editor';
-import { convertToFabricStyles } from '@/lib/text/characterStyles';
 import { applyTextTransform } from '@/lib/fabric/text-shared';
 
 /**
@@ -457,18 +456,6 @@ export function syncElementToFabric(
                 extFabric._originalText = textUpdates.text;
             }
         }
-        
-        // Character styles - apply per-character formatting
-        if (textUpdates.characterStyles !== undefined || textUpdates.richTextEnabled !== undefined) {
-            if (textUpdates.richTextEnabled && textUpdates.characterStyles && textUpdates.characterStyles.length > 0) {
-                const currentText = targetTextbox.text || '';
-                const styles = convertToFabricStyles(currentText, textUpdates.characterStyles);
-                targetTextbox.set('styles', styles);
-            } else {
-                // Clear styles when rich text is disabled
-                targetTextbox.set('styles', {});
-            }
-        }
     }
 
 
@@ -573,8 +560,6 @@ export function syncFabricToElement(fabricObject: fabric.FabricObject): Element 
                 curvedEnabled: storedText.curvedEnabled,
                 curvedPower: storedText.curvedPower,
                 fontProvider: storedText.fontProvider,
-                richTextEnabled: storedText.richTextEnabled,
-                characterStyles: storedText.characterStyles,
                 shadowColor: storedText.shadowColor,
                 shadowBlur: storedText.shadowBlur,
                 shadowOffsetX: storedText.shadowOffsetX,
