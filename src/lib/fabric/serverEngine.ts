@@ -215,33 +215,37 @@ async function downloadGoogleFont(family: string, weight: string = 'normal', sty
     }
 
     // 2. Download if not cached
-    const baseUrl = `https://github.com/google/fonts/raw/main/ofl/${repoName}`;
-    console.log(`[ServerEngine:Font] Cache MISS. Attempting download...`);
+    const licenseTypes = ['ofl', 'apache', 'ufl'];
+    console.log(`[ServerEngine:Font] Cache MISS. Attempting download for ${family}...`);
 
-    for (const filename of possibleFilenames) {
-        const url = `${baseUrl}/${filename}`;
-        const cachedPath = path.join(cacheDir, filename);
+    for (const license of licenseTypes) {
+        const baseUrl = `https://github.com/google/fonts/raw/main/${license}/${repoName}`;
         
-        try {
-            const response = await fetch(url);
-            if (response.ok) {
-                const buffer = await response.arrayBuffer();
-                fs.writeFileSync(cachedPath, Buffer.from(buffer));
-                
-                if (registerFont) {
-                    registerFont(cachedPath, { family, weight, style });
+        for (const filename of possibleFilenames) {
+            const url = `${baseUrl}/${filename}`;
+            const cachedPath = path.join(cacheDir, filename);
+            
+            try {
+                const response = await fetch(url);
+                if (response.ok) {
+                    const buffer = await response.arrayBuffer();
+                    fs.writeFileSync(cachedPath, Buffer.from(buffer));
+                    
+                    if (registerFont) {
+                        registerFont(cachedPath, { family, weight, style });
+                    }
+                    registeredFonts.add(fontKey);
+                    
+                    console.log(`[ServerEngine:Font] DOWNLOAD SUCCESS: ${family} saved to ${cachedPath} (License: ${license})`);
+                    return true;
                 }
-                registeredFonts.add(fontKey);
-                
-                console.log(`[ServerEngine:Font] DOWNLOAD SUCCESS: ${family} saved to ${cachedPath}`);
-                return true;
+            } catch (e) {
+                // Continue to next variant/license
             }
-        } catch (e) {
-            // Continue to next variant
         }
     }
 
-    console.warn(`[ServerEngine:Font] FAILED to download ${family}. Tried variants: ${possibleFilenames.join(', ')}`);
+    console.warn(`[ServerEngine:Font] FAILED to download ${family}. Tried variants: ${possibleFilenames.join(', ')} across licenses: ${licenseTypes.join(', ')}`);
     return false;
 }
 
