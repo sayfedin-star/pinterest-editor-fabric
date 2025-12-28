@@ -13,7 +13,9 @@ import { Element, TextElement, ImageElement, ShapeElement, FrameElement } from '
 import * as path from 'path';
 import * as fs from 'fs';
 import * as os from 'os';
-import { calculateFitFontSize, AutoFitConfig } from '../canvas/textUtils';
+import { calculateFitFontSize } from '../canvas/textUtils';
+import { AutoFitConfig } from '@/types/editor';
+import { replaceDynamicFields, applyTextTransform } from './text-shared';
 
 // CRITICAL: Configure FontConfig for serverless environment (Vercel)
 // Without this, you get: "Fontconfig error: Cannot load default config file"
@@ -31,7 +33,13 @@ if (!process.env.PANGOCAIRO_BACKEND) {
 
 // Use require for canvas to avoid TypeScript type errors
 // eslint-disable-next-line @typescript-eslint/no-require-imports
-const { registerFont } = require('canvas');
+let canvasModule: any = null;
+try {
+    canvasModule = typeof require === 'function' ? eval('require')('canvas') : null;
+} catch (e) {
+    console.warn('[ServerEngine] Canvas module not found (this is expected during build time)');
+}
+const { registerFont } = canvasModule || {};
 
 // Types
 export interface RenderConfig {
@@ -130,17 +138,22 @@ initializeFonts();
 /**
  * Download a Google Font from the official GitHub repository (raw content)
  * Fallback strategy for serverless environments where local files are missing
+ * 
+ * ENHANCED: Caches fonts to /tmp directory to persist across warm Lambda invocations.
  */
 async function downloadGoogleFont(family: string, weight: string = 'normal', style: string = 'normal'): Promise<boolean> {
     const fontKey = `${family}-${weight}-${style}`;
     if (registeredFonts.has(fontKey)) return true;
 
-    // Map common font names to Google Fonts GitHub directory names (usually lowercase, no spaces)
-    // Most follow the pattern: "Open Sans" -> "opensans"
+    // Standardize cache directory
+    const cacheDir = path.join(os.tmpdir(), 'font-cache');
+    if (!fs.existsSync(cacheDir)) {
+        try { fs.mkdirSync(cacheDir, { recursive: true }); } catch (e) { /* ignore race */ }
+    }
+
+    // Map common font names to Google Fonts GitHub directory names
     const repoName = family.toLowerCase().replace(/\s+/g, '');
     
-    // Map usage weights to filename patterns
-    // This is a heuristic; actual filenames vary but this covers 90% of cases in OFL
     let filenamePart = '-Regular';
     if (weight === 'bold') filenamePart = '-Bold';
     else if (weight === '300') filenamePart = '-Light';
@@ -154,35 +167,52 @@ async function downloadGoogleFont(family: string, weight: string = 'normal', sty
         else filenamePart += 'Italic';
     }
 
-    // Construct common filename variants to try
-    // Google Fonts repo structure: ofl/fontname/FontName-Variant.ttf
-    const familyPascalCase = family.replace(/\s+/g, ''); // "Open Sans" -> "OpenSans"
     const possibleFilenames = [
-        `${familyPascalCase}${filenamePart}.ttf`,       // OpenSans-Regular.ttf
+        `${family.replace(/\s+/g, '')}${filenamePart}.ttf`, // OpenSans-Regular.ttf
         `${family}${filenamePart}.ttf`,                   // Open Sans-Regular.ttf
         `${repoName}${filenamePart}.ttf`                  // opensans-Regular.ttf
     ];
 
+    console.log(`[ServerEngine:Font] Checking cache for ${family} (${weight}, ${style})...`);
+
+    // 1. Check Local Cache First
+    for (const filename of possibleFilenames) {
+        const cachedPath = path.join(cacheDir, filename);
+        if (fs.existsSync(cachedPath)) {
+            try {
+                registerFont(cachedPath, { family, weight, style });
+                registeredFonts.add(fontKey);
+                console.log(`[ServerEngine:Font] CACHE HIT: Registered ${family} from ${cachedPath}`);
+                return true;
+            } catch (err) {
+                console.error(`[ServerEngine:Font] Corrupt cache file ${cachedPath}, deleting...`);
+                try { fs.unlinkSync(cachedPath); } catch (e) {}
+            }
+        }
+    }
+
+    // 2. Download if not cached
     const baseUrl = `https://github.com/google/fonts/raw/main/ofl/${repoName}`;
+    console.log(`[ServerEngine:Font] Cache MISS. Attempting download...`);
 
-    console.log(`[ServerEngine:Font] Attempting dynamic download for ${family} (${weight}, ${style})...`);
-
-    // Try to find a valid URL
     for (const filename of possibleFilenames) {
         const url = `${baseUrl}/${filename}`;
+        const cachedPath = path.join(cacheDir, filename);
+        
         try {
-            const success = await loadFontFromUrl(url, family);
-            if (success) {
-                console.log(`[ServerEngine:Font] SUCCESS: Downloaded ${family} from ${url}`);
+            const response = await fetch(url);
+            if (response.ok) {
+                const buffer = await response.arrayBuffer();
+                fs.writeFileSync(cachedPath, Buffer.from(buffer));
                 
-                // CRITICAL: Register specific weight/style mapping
-                // loadFontFromUrl registers as 'normal'/'normal' by default if we don't handle it
-                // We need to ensure the system knows this specific requested weight is now available
+                registerFont(cachedPath, { family, weight, style });
                 registeredFonts.add(fontKey);
+                
+                console.log(`[ServerEngine:Font] DOWNLOAD SUCCESS: ${family} saved to ${cachedPath}`);
                 return true;
             }
         } catch (e) {
-            // Continue to next filename variant
+            // Continue to next variant
         }
     }
 
@@ -419,28 +449,7 @@ export async function loadCustomFontsForTemplate(
     }
 }
 
-/**
- * Replace dynamic fields in text with values from row data
- */
-function replaceDynamicFields(text: string, rowData: Record<string, string>, fieldMapping: FieldMapping): string {
-    let result = text;
-    const matches = text.match(/\{\{([^}]+)\}\}/g);
-    if (matches) {
-        matches.forEach((match) => {
-            const fieldName = match.replace(/\{\{|\}\}/g, '').trim();
-            const csvColumn = fieldMapping[fieldName];
-            if (csvColumn && rowData[csvColumn] !== undefined) {
-                result = result.replace(match, rowData[csvColumn]);
-            } else if (rowData[fieldName] !== undefined) {
-                // Direct match without mapping
-                result = result.replace(match, rowData[fieldName]);
-            } else {
-                result = result.replace(match, '');
-            }
-        });
-    }
-    return result;
-}
+
 
 /**
  * Get dynamic image URL from element and row data
@@ -518,18 +527,7 @@ async function loadImageServer(url: string): Promise<FabricImage | null> {
     }
 }
 
-/**
- * Apply text transformation
- */
-function applyTextTransform(text: string, transform?: 'none' | 'uppercase' | 'lowercase' | 'capitalize'): string {
-    if (!transform || transform === 'none') return text;
-    switch (transform) {
-        case 'uppercase': return text.toUpperCase();
-        case 'lowercase': return text.toLowerCase();
-        case 'capitalize': return text.replace(/\b\w/g, (c) => c.toUpperCase());
-        default: return text;
-    }
-}
+
 
 /**
  * Calculate optimal font size to fit text within container (server-side)

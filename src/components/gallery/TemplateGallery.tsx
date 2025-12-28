@@ -19,6 +19,7 @@ import {
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import { getTemplatesFiltered, getTemplate, TemplateListItem, TemplateFilters } from '@/lib/db/templates';
+import { preloadTemplateFonts } from '@/lib/fonts/fontLoader';
 import { useEditorStore } from '@/stores/editorStore';
 import { useCategoryStore } from '@/stores/categoryStore';
 import { useTagStore } from '@/stores/tagStore';
@@ -298,6 +299,11 @@ export function TemplateGallery({ isOpen, onClose }: TemplateGalleryProps) {
             const fullTemplate = await getTemplate(template.id);
 
             if (fullTemplate) {
+                // Preload custom fonts before rendering
+                if (fullTemplate.elements && Array.isArray(fullTemplate.elements)) {
+                    await preloadTemplateFonts(fullTemplate.elements);
+                }
+                
                 loadTemplate({
                     id: generateId(),
                     name: `${fullTemplate.name} (Copy)`,

@@ -1,10 +1,9 @@
 'use client';
 
 import React, { useRef, useEffect, useState, useCallback } from 'react';
-import * as fabric from 'fabric';
 import { useEditorStore } from '@/stores/editorStore';
 import { useSnappingSettingsStore } from '@/stores/snappingSettingsStore';
-import { Element, ImageElement, TextElement } from '@/types/editor';
+import { Element, TextElement } from '@/types/editor';
 import { CanvasManager, CanvasConfig } from '@/lib/canvas/CanvasManager';
 import { useSynchronizationBridge } from '@/hooks/useSynchronizationBridge';
 import { detectElementChange } from '@/lib/canvas/elementChangeDetection';
@@ -64,72 +63,32 @@ export function EditorCanvasV2({ containerWidth, containerHeight }: EditorCanvas
         const manager = canvasManagerRef.current;
         if (!manager || !isCanvasReady) return;
 
-        // Handle scaling - apply ghost effect during resize
-        // For ALL TEXT: prevent scaling transform, resize dimensions directly
+        // MINIMAL: Just apply ghost effect during scaling - no special text handling
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const handleScaling = (e: any) => {
             setIsResizing(true);
             const target = e.target || e.transform?.target;
             if (!target) return;
-            
             activeObjectRef.current = target;
-            
-            // Check if this is a text element (regardless of auto-fit setting)
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            const elementId = (target as any).id;
-            const storeState = useEditorStore.getState();
-            const element = storeState.elements.find(el => el.id === elementId);
-            
-            if (element?.type === 'text') {
-                // For ALL text: update dimensions directly instead of scaling
-                // This prevents the stretched appearance
-                const scaleX = target.scaleX || 1;
-                const scaleY = target.scaleY || 1;
-                const baseWidth = target.width || element.width || 100;
-                const baseHeight = target.height || element.height || 50;
-                
-                // Calculate new dimensions
-                const newWidth = Math.max(50, Math.round(baseWidth * scaleX));
-                const newHeight = Math.max(30, Math.round(baseHeight * scaleY));
-                
-                // Update dimensions without scaling
-                target.set({
-                    scaleX: 1,
-                    scaleY: 1,
-                    width: newWidth,
-                    height: newHeight,
-                });
-                target.setCoords();
-                
-                // Update store - for auto-fit text, this triggers font recalculation
-                // For regular text, just updates box dimensions
-                storeState.updateElement(elementId, {
-                    width: newWidth,
-                    height: newHeight,
-                });
-                
-                (manager as any).canvas?.requestRenderAll();
-                return; // Skip opacity effect for text
-            }
-            
-            // Apply ghost effect during scaling for other elements (shapes, images)
+            // Ghost effect during scaling
             target.set({ opacity: 0.5 });
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             (manager as any).canvas?.requestRenderAll();
         };
 
-        // Ghost effect: set opacity to 50% during moving
+        // Ghost effect during moving
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const handleMoving = (e: any) => {
             setIsDragging(true);
             const target = e.target || e.transform?.target;
             if (target && target.opacity !== 0.5) {
                 target.set({ opacity: 0.5 });
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
                 (manager as any).canvas?.requestRenderAll();
             }
         };
 
-        // Restore opacity when operation ends
-        // Also handle auto-fit text recalculation after resize
+        // MINIMAL: Just restore opacity when operation ends - no special text handling
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const handleOperationEnd = (e: any) => {
             setIsResizing(false);
@@ -137,44 +96,7 @@ export function EditorCanvasV2({ containerWidth, containerHeight }: EditorCanvas
             const target = e.target || e.transform?.target;
             if (target) {
                 target.set({ opacity: 1 });
-                
-                // Handle autoFitText elements - recalculate dimensions and font
                 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                const elementId = (target as any).id;
-                const storeState = useEditorStore.getState();
-                const element = storeState.elements.find(el => el.id === elementId);
-                
-                if (element?.type === 'text') {
-                    const textEl = element as TextElement;
-                    if (textEl.autoFitText) {
-                        // Get the NEW dimensions after scaling
-                        const scaleX = target.scaleX || 1;
-                        const scaleY = target.scaleY || 1;
-                        const baseWidth = target.width || element.width || 100;
-                        const baseHeight = target.height || element.height || 50;
-                        
-                        // Calculate new actual dimensions
-                        const newWidth = Math.max(50, Math.round(baseWidth * scaleX));
-                        const newHeight = Math.max(30, Math.round(baseHeight * scaleY));
-                        
-                        // Reset scale on fabric object
-                        target.set({
-                            scaleX: 1,
-                            scaleY: 1,
-                            width: newWidth,
-                            height: newHeight,
-                        });
-                        target.setCoords();
-                        
-                        // Update store with new dimensions - this triggers re-render 
-                        // and ObjectFactory will recalculate the optimal font size
-                        storeState.updateElement(elementId, {
-                            width: newWidth,
-                            height: newHeight,
-                        });
-                    }
-                }
-                
                 (manager as any).canvas?.requestRenderAll();
             }
         };

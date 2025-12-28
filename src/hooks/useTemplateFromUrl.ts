@@ -13,6 +13,7 @@ import { useSearchParams } from 'next/navigation';
 import { useEditorStore } from '@/stores/editorStore';
 import { useTemplateStore } from '@/stores/templateStore';
 import { getTemplate } from '@/lib/db/templates';
+import { preloadTemplateFonts } from '@/lib/fonts/fontLoader';
 import { toast } from 'sonner';
 import { v4 as uuidv4 } from 'uuid';
 
@@ -62,6 +63,9 @@ export function useTemplateFromUrl() {
                     }
                     
                     if (template.elements && Array.isArray(template.elements)) {
+                        // Preload custom fonts before rendering
+                        // This ensures fonts with fontUrl are loaded via FontFace API
+                        await preloadTemplateFonts(template.elements);
                         setElements(template.elements);
                     }
                     

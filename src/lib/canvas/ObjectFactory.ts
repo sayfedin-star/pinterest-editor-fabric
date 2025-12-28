@@ -8,8 +8,7 @@
 import * as fabric from 'fabric';
 import { Element, TextElement, ShapeElement, ImageElement } from '@/types/editor';
 import { convertToFabricStyles } from '@/lib/text/characterStyles';
-import { useEditorStore } from '@/stores/editorStore';
-import { calculateFitFontSize, AutoFitConfig } from '@/lib/canvas/textUtils';
+import { applyTextTransform } from '@/lib/fabric/text-shared';
 
 /**
  * Extended Fabric.js object with custom properties for async loading
@@ -28,25 +27,7 @@ interface ExtendedFabricObject extends fabric.FabricObject {
     _isImagePlaceholder?: boolean;
 }
 
-/**
- * Apply text transformation (uppercase, lowercase, capitalize)
- */
-function applyTextTransform(
-    text: string,
-    transform: 'none' | 'uppercase' | 'lowercase' | 'capitalize'
-): string {
-    switch (transform) {
-        case 'uppercase':
-            return text.toUpperCase();
-        case 'lowercase':
-            return text.toLowerCase();
-        case 'capitalize':
-            return text.replace(/\b\w/g, (char) => char.toUpperCase());
-        case 'none':
-        default:
-            return text;
-    }
-}
+
 
 
 
@@ -65,135 +46,32 @@ export function createFabricObject(element: Element): fabric.FabricObject | null
         case 'text': {
             const textEl = element as TextElement;
             
-            // For dynamic text elements, use previewText for canvas display if available
-            // This shows custom preview while keeping the {{placeholder}} stored
+            // Get display text
             let displayText = textEl.text || '';
             if (textEl.isDynamic && textEl.previewText) {
                 displayText = textEl.previewText;
             }
-            
-            // Apply text transform if specified
             if (textEl.textTransform) {
                 displayText = applyTextTransform(displayText, textEl.textTransform);
             }
             
-            
-            // Calculate font size - use auto-fit if enabled
-            let fontSize = textEl.fontSize || 16;
-            if (textEl.autoFitText && displayText && element.width && element.height) {
-                const config: AutoFitConfig = {
-                    containerWidth: element.width,
-                    containerHeight: element.height,
-                    minFontSize: textEl.minFontSize || 8,
-                    maxFontSize: textEl.maxFontSize || 48,
-                    padding: textEl.autoFitPadding ?? 15
-                };
-
-                // Measure callback using Fabric.js Textbox
-                const measureHeight = (size: number): number => {
-                    const testTextbox = new fabric.Textbox(displayText, {
-                        width: config.containerWidth - (config.padding * 2), // Use padded width
-                        fontSize: size,
-                        fontFamily: textEl.fontFamily || 'Arial',
-                        fontWeight: textEl.fontWeight || 400,
-                        lineHeight: textEl.lineHeight || 1.2,
-                        charSpacing: (textEl.letterSpacing || 0) * 10,
-                    });
-                    return testTextbox.height || 0;
-                };
-
-                fontSize = calculateFitFontSize(displayText, config, measureHeight);
-            }
-            
-            // Build textbox with ALL styling properties (matching engine.ts)
-            // NOTE: Position is set conditionally - for Group, use relative (0,0)
-            // For standalone textbox, use absolute element.x/y
+            // MINIMAL: Just create a basic textbox
             const textbox = new fabric.Textbox(displayText, {
+                left: element.x,
+                top: element.y,
                 width: element.width,
-                fontSize: fontSize,
+                fontSize: textEl.fontSize || 24,
                 fontFamily: textEl.fontFamily || 'Arial',
-                // Font weight: For custom fonts, use native weight from font file (don't apply synthetic weight)
-                // For other fonts, use fontWeight property (100-900), fallback to fontStyle for backward compatibility
-                fontWeight: textEl.fontProvider === 'custom' ? 'normal' : (textEl.fontWeight || (textEl.fontStyle?.includes('bold') ? 'bold' : 'normal')),
+                fontWeight: textEl.fontWeight || 'normal',
                 fontStyle: textEl.fontStyle?.includes('italic') ? 'italic' : 'normal',
-                // Hollow text: transparent fill, otherwise use specified fill
-                fill: textEl.hollowText ? 'transparent' : (textEl.fill || '#000000'),
+                fill: textEl.fill || '#000000',
                 textAlign: textEl.align || 'left',
                 lineHeight: textEl.lineHeight || 1.2,
-                charSpacing: (textEl.letterSpacing || 0) * 10, // Fabric.js uses 1/1000 of em
-                underline: textEl.textDecoration === 'underline',
-                linethrough: textEl.textDecoration === 'line-through',
-                // Enable vertical scaling for text boxes
-                lockScalingY: false,
-                // NOTE: splitByGrapheme removed to prevent ugly mid-word breaks like "CHI-CKEN"
-                // Word-boundary wrapping is preferred for marketing text
-            });
-            // NOTE: clipPath removed - it caused display issues with Fabric.js 6.x
-            // The calculateFitFontSize function already ensures text fits within container
-            
-            // Enable vertical resize controls (mt = middle-top, mb = middle-bottom)
-            // Fabric.js Textbox hides these by default since text auto-reflows
-            textbox.setControlsVisibility({
-                mt: true,  // middle-top handle
-                mb: true,  // middle-bottom handle
+                angle: element.rotation || 0,
+                opacity: element.opacity ?? 1,
             });
             
-            // Apply shadow effect
-            if (textEl.shadowColor && (textEl.shadowBlur || textEl.shadowOffsetX || textEl.shadowOffsetY)) {
-                textbox.shadow = new fabric.Shadow({
-                    color: textEl.shadowColor,
-                    blur: textEl.shadowBlur || 0,
-                    offsetX: textEl.shadowOffsetX || 0,
-                    offsetY: textEl.shadowOffsetY || 0,
-                });
-            }
-            
-            // Apply stroke/outline (required for hollow text, optional otherwise)
-            if (textEl.stroke || textEl.hollowText) {
-                // For hollow text, use the fill color as stroke if no stroke specified
-                textbox.stroke = textEl.stroke || textEl.fill || '#000000';
-                textbox.strokeWidth = textEl.strokeWidth || (textEl.hollowText ? 2 : 1);
-            }
-            
-            // Apply character styles if rich text mode is enabled
-            if (textEl.richTextEnabled && textEl.characterStyles && textEl.characterStyles.length > 0) {
-                textbox.set('styles', convertToFabricStyles(displayText, textEl.characterStyles));
-            }
-            
-            // Text background with padding support (matching engine.ts)
-            if (textEl.backgroundEnabled && textEl.backgroundColor) {
-                const padding = textEl.backgroundPadding || 0;
-                
-                // For Group: textbox uses relative position (0,0), bgRect with negative padding
-                // The Group provides the absolute position
-                textbox.set('left', 0);
-                textbox.set('top', 0);
-                
-                const bgRect = new fabric.Rect({
-                    width: textEl.width + padding * 2,
-                    height: textEl.height + padding * 2,
-                    left: -padding,
-                    top: -padding,
-                    fill: textEl.backgroundColor,
-                    rx: textEl.backgroundCornerRadius || 0,
-                    ry: textEl.backgroundCornerRadius || 0,
-                });
-                obj = new fabric.Group([bgRect, textbox], {
-                    left: element.x,
-                    top: element.y,
-                    angle: element.rotation || 0,
-                    opacity: element.opacity ?? 1,
-                });
-            } else {
-                // Standalone textbox: set absolute position
-                textbox.set('left', element.x);
-                textbox.set('top', element.y);
-                textbox.set('angle', element.rotation || 0);
-                textbox.set('opacity', element.opacity ?? 1);
-                obj = textbox;
-            }
-            
-            // Store original text for text transform switching
+            obj = textbox;
             (obj as ExtendedFabricObject)._originalText = textEl.text || '';
             break;
         }
@@ -434,83 +312,15 @@ export function syncElementToFabric(
         const textUpdates = updates as Partial<TextElement>;
         const storedEl = extFabric._elementData as TextElement | undefined;
 
-        // P1-3 FIX: Build updates object for single batched set() call
-        // Reduces ~15 individual set() calls to 1, saving ~30% on dirty checks
+        // Build updates object for single batched set() call
         const batchedUpdates: Record<string, unknown> = {};
         
-        // AUTO-FIT TEXT: Recalculate font size when dimensions change
-        if ((updates.width !== undefined || updates.height !== undefined) && storedEl?.autoFitText) {
-            const newWidth = updates.width ?? storedEl.width ?? fabricObject.width ?? 100;
-            const newHeight = updates.height ?? storedEl.height ?? fabricObject.height ?? 50;
-            const displayText = storedEl.previewText || storedEl.text || '';
-            const fontFamily = storedEl.fontFamily || 'Arial';
-            const lineHeight = storedEl.lineHeight || 1.2;
-            const maxFontSize = storedEl.maxFontSize || 200;
-            
-            if (displayText) {
-                // Recalculate optimal font size for new dimensions
-                const config: AutoFitConfig = {
-                    containerWidth: newWidth,
-                    containerHeight: newHeight,
-                    minFontSize: storedEl.minFontSize || 8,
-                    maxFontSize: maxFontSize,
-                    padding: storedEl.autoFitPadding ?? 15
-                };
-
-                const measureHeight = (size: number): number => {
-                    const testTextbox = new fabric.Textbox(displayText, {
-                        width: config.containerWidth - (config.padding * 2), // Use padded width
-                        fontSize: size,
-                        fontFamily: fontFamily,
-                        fontWeight: storedEl.fontWeight || 400,
-                        lineHeight: lineHeight,
-                        charSpacing: (storedEl.letterSpacing || 0) * 10,
-                    });
-                    return testTextbox.height || 0;
-                };
-
-                const optimalFontSize = calculateFitFontSize(displayText, config, measureHeight);
-                
-                console.log('[SyncAutoFit] Applied font size:', {
-                    from: storedEl.fontSize,
-                    to: optimalFontSize,
-                    dimensions: { width: newWidth, height: newHeight },
-                    maxFontSize
-                });
-                
-                batchedUpdates.fontSize = optimalFontSize;
-                // Also update the textbox width to match new container width
-                batchedUpdates.width = newWidth;
-                
-                // Enforce vertical resize controls and unlock scaling during updates
-                targetTextbox.setControlsVisibility({
-                    mt: true,
-                    mb: true
-                });
-                batchedUpdates.lockScalingY = false;
-                
-                // NOTE: We intentionally do NOT update storedElement.fontSize or the Zustand store
-                // The stored fontSize is the user's original setting, optimalFontSize is a DERIVED value
-                // that is calculated fresh each time based on container dimensions.
-                // Updating the store would cause an infinite oscillation loop.
-                
-                // Just update width/height in stored element (NOT fontSize)
-                extFabric._elementData = {
-                    ...storedEl,
-                    width: newWidth,
-                    height: newHeight,
-                } as Element;
-            }
+        // MINIMAL: Update width and reset scale to ensure resize works
+        if (updates.width !== undefined) {
+            batchedUpdates.width = updates.width;
+            batchedUpdates.scaleX = 1;
+            batchedUpdates.scaleY = 1;
         }
-        
-        // ALWAYS Enforce vertical resize controls and unlock scaling for text
-        if (targetTextbox) {
-             targetTextbox.setControlsVisibility({
-                mt: true,
-                mb: true
-             });
-        }
-        batchedUpdates.lockScalingY = false;
 
         // Font properties
         if (textUpdates.fontWeight !== undefined) {
@@ -616,18 +426,14 @@ export function syncElementToFabric(
         
         // Apply all batched updates in a single set() call
         if (Object.keys(batchedUpdates).length > 0) {
-            console.log('[SyncAutoFit] Applying to textbox:', {
-                fontSize: batchedUpdates.fontSize,
-                width: batchedUpdates.width,
-                allUpdates: Object.keys(batchedUpdates)
-            });
+            console.log('[syncText] Applying:', Object.keys(batchedUpdates));
             targetTextbox.set(batchedUpdates);
-            console.log('[SyncAutoFit] After set, textbox.fontSize =', targetTextbox.fontSize);
+            // CRITICAL: Recalculate text layout after dimension changes
+            targetTextbox.initDimensions();
+            targetTextbox.setCoords();
         }
         
         // Text transform - requires re-applying to display text
-        // Use stored original text to properly switch transforms
-        // For dynamic elements, use previewText for display if available
         if (textUpdates.textTransform !== undefined || textUpdates.text !== undefined || textUpdates.previewText !== undefined || textUpdates.isDynamic !== undefined) {
             const storedEl = extFabric._elementData as TextElement | undefined;
             const isDynamic = textUpdates.isDynamic ?? storedEl?.isDynamic ?? false;
@@ -644,68 +450,8 @@ export function syncElementToFabric(
             const transform = textUpdates.textTransform ?? (storedEl?.textTransform) ?? 'none';
             const displayText = applyTextTransform(originalText, transform);
             
-            // AUTO-FIT: When text content changes, recalculate font size to fit FIXED container
-            if (storedEl?.autoFitText && displayText) {
-                const containerWidth = storedEl.width ?? fabricObject.width ?? 100;
-                const containerHeight = storedEl.height ?? fabricObject.height ?? 50;
-                const fontFamily = storedEl.fontFamily || 'Arial';
-                const lineHeight = storedEl.lineHeight || 1.2;
-                const maxFontSize = storedEl.maxFontSize || 200;
-                
-                const config: AutoFitConfig = {
-                    containerWidth,
-                    containerHeight,
-                    minFontSize: storedEl.minFontSize || 8,
-                    maxFontSize,
-                    padding: storedEl.autoFitPadding ?? 15
-                };
-
-                const measureHeight = (size: number): number => {
-                    const testTextbox = new fabric.Textbox(displayText, {
-                        width: config.containerWidth - (config.padding * 2),
-                        fontSize: size,
-                        fontFamily: fontFamily,
-                        fontWeight: storedEl.fontWeight || 400,
-                        lineHeight: lineHeight,
-                        charSpacing: (storedEl.letterSpacing || 0) * 10,
-                    });
-                    return testTextbox.height || 0;
-                };
-
-                const optimalFontSize = calculateFitFontSize(displayText, config, measureHeight);
-                
-                console.log('[AutoFit] Text content changed, recalculating font:', {
-                    text: displayText.substring(0, 30) + '...',
-                    container: `${containerWidth}x${containerHeight}`,
-                    newFontSize: optimalFontSize
-                });
-                
-                // Apply text, font size, AND width to prevent Fabric.js from auto-expanding
-                // CRITICAL: Must set width to fix the container size!
-                targetTextbox.set({
-                    text: displayText,
-                    fontSize: optimalFontSize,
-                    width: containerWidth,  // LOCK the width!
-                });
-                
-                // Also update the parent fabric object width if it's different
-                if (fabricObject !== targetTextbox) {
-                    fabricObject.set({ width: containerWidth });
-                }
-                
-                // Update store with new fontSize (but NOT width - keep it fixed)
-                const elementId = (fabricObject as ExtendedFabricObject).id;
-                if (elementId) {
-                    setTimeout(() => {
-                        useEditorStore.getState().updateElement(elementId, {
-                            fontSize: optimalFontSize,
-                        });
-                    }, 0);
-                }
-            } else {
-                // Not auto-fit, just update the text normally
-                targetTextbox.set('text', displayText);
-            }
+            // MINIMAL: Just update text (no auto-fit)
+            targetTextbox.set('text', displayText);
             
             // Update stored original if text changed
             if (textUpdates.text !== undefined) {

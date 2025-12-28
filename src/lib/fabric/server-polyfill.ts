@@ -73,7 +73,14 @@ export function setupFabricServerPolyfills(): void {
 
     try {
         // eslint-disable-next-line @typescript-eslint/no-require-imports
-        const { createCanvas, Image: CanvasImage, ImageData } = require('canvas');
+        let canvasModule: any = null;
+        try {
+            canvasModule = eval('require')('canvas');
+        } catch (e) {
+            console.warn('[Polyfill] Canvas module not found');
+            return;
+        }
+        const { createCanvas, Image: CanvasImage, ImageData } = canvasModule;
 
         // Polyfill global.document
         if (typeof g.document === 'undefined') {

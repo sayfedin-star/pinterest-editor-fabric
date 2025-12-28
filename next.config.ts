@@ -27,6 +27,8 @@ const nextConfig: NextConfig = {
   outputFileTracingIncludes: {
     '/api/v1/generate': ['./public/fonts/**/*'],
   },
+  // Prevent bundling of native modules
+  serverExternalPackages: ['canvas'],
 };
 
 export default nextConfig;

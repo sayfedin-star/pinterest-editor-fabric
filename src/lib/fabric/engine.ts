@@ -1,8 +1,6 @@
 import * as fabric from 'fabric';
 import { Element, TextElement, ImageElement, ShapeElement, FrameElement } from '@/types/editor';
-import { convertToFabricStyles } from '@/lib/text/characterStyles';
 import { getImageCache } from '@/lib/canvas/ImagePreloadCache';
-import { calculateFitFontSize } from '@/lib/canvas/textUtils';
 
 // Debug flag for verbose logging - disabled in production for performance
 const DEBUG_RENDER = process.env.NODE_ENV === 'development' || process.env.DEBUG_RENDER === 'true';
@@ -469,103 +467,28 @@ async function createFabricObject(
         const textEl = el as TextElement;
         let text = textEl.text;
         
-        // Step 1: Replace dynamic fields first (e.g., {{name}} -> "John Smith")
+        // Replace dynamic fields (e.g., {{name}} -> "John Smith")
         if (rowData && Object.keys(rowData).length > 0) {
             text = replaceDynamicFields(text, rowData, fieldMapping);
         }
         
-        // Step 2: Apply text transform AFTER field substitution (Phase 1)
+        // Apply text transform AFTER field substitution
         text = applyTextTransform(text, textEl.textTransform);
 
-        // Step 3: Calculate font size - use auto-fit if enabled
-        let fontSize = textEl.fontSize || 16;
-        if (textEl.autoFitText && text && textEl.width && textEl.height) {
-            const config = {
-                containerWidth: textEl.width,
-                containerHeight: textEl.height,
-                minFontSize: textEl.minFontSize || 8,
-                maxFontSize: textEl.maxFontSize || 48,
-                padding: textEl.autoFitPadding ?? 15
-            };
-            
-            // Measurement callback using Fabric.js Textbox
-            const measureHeight = (size: number): number => {
-                const testTextbox = new fabric.Textbox(text, {
-                    width: config.containerWidth - (config.padding * 2),
-                    fontSize: size,
-                    fontFamily: textEl.fontFamily || 'Arial',
-                    fontWeight: textEl.fontWeight || 400,
-                    lineHeight: textEl.lineHeight || 1.2,
-                    charSpacing: (textEl.letterSpacing || 0) * 10,
-                });
-                return testTextbox.height || 0;
-            };
-            
-            fontSize = calculateFitFontSize(text, config, measureHeight);
-        }
-
-        // Build textbox WITHOUT position - position is set conditionally
+        // MINIMAL: Just create a basic textbox
         const textbox = new fabric.Textbox(text, {
+            ...commonOptions,
             width: textEl.width,
-            fontSize: fontSize,  // Use calculated fontSize
+            fontSize: textEl.fontSize || 24,
             fontFamily: textEl.fontFamily || 'Arial',
-            // Hollow text: transparent fill, otherwise use specified fill
-            fill: textEl.hollowText ? 'transparent' : (textEl.fill || '#000000'), 
+            fontWeight: textEl.fontWeight || 'normal',
+            fontStyle: textEl.fontStyle?.includes('italic') ? 'italic' : 'normal',
+            fill: textEl.fill || '#000000',
             textAlign: textEl.align || 'left',
             lineHeight: textEl.lineHeight || 1.2,
-            charSpacing: (textEl.letterSpacing || 0) * 10,
-            // Phase 1: Use fontWeight property (100-900), fallback to fontStyle for backward compatibility
-            fontWeight: textEl.fontWeight || (textEl.fontStyle?.includes('bold') ? 'bold' : 'normal'),
-            fontStyle: textEl.fontStyle?.includes('italic') ? 'italic' : 'normal',
-            underline: textEl.textDecoration === 'underline',
-            linethrough: textEl.textDecoration === 'line-through',
-            // NOTE: splitByGrapheme removed to prevent ugly mid-word breaks like "CHI-CKEN"
-            // Word-boundary wrapping is preferred for marketing text
         });
 
-        if (textEl.shadowColor) {
-            textbox.shadow = new fabric.Shadow({
-                color: textEl.shadowColor, blur: textEl.shadowBlur || 0,
-                offsetX: textEl.shadowOffsetX || 0, offsetY: textEl.shadowOffsetY || 0,
-            });
-        }
-        // Apply stroke/outline (required for hollow text, optional otherwise)
-        if (textEl.stroke || textEl.hollowText) {
-            // For hollow text, use the fill color as stroke if no stroke specified
-            textbox.stroke = textEl.stroke || textEl.fill || '#000000';
-            textbox.strokeWidth = textEl.strokeWidth || (textEl.hollowText ? 2 : 1);
-        }
-
-        // Phase 2: Apply character-level styles for rich text
-        if (textEl.richTextEnabled && textEl.characterStyles && textEl.characterStyles.length > 0) {
-            const styles = convertToFabricStyles(text, textEl.characterStyles);
-            textbox.set('styles', styles);
-        }
-
-        // Phase 1: Text background with padding support
-        if (textEl.backgroundEnabled) {
-            const padding = textEl.backgroundPadding || 0;
-            
-            // For Group: textbox uses relative position (0,0)
-            // The Group provides the absolute position via commonOptions
-            textbox.set('left', 0);
-            textbox.set('top', 0);
-            
-            const bgRect = new fabric.Rect({
-                width: textEl.width + padding * 2,
-                height: textEl.height + padding * 2,
-                left: -padding,
-                top: -padding,
-                fill: textEl.backgroundColor,
-                rx: textEl.backgroundCornerRadius || 0, ry: textEl.backgroundCornerRadius || 0,
-            });
-            fabricObject = new fabric.Group([bgRect, textbox], { ...commonOptions });
-        } else {
-            // Standalone textbox: apply position from commonOptions
-            textbox.set(commonOptions);
-            fabricObject = textbox;
-        }
-
+        fabricObject = textbox;
     }
     else if (el.type === 'image') {
         const imageEl = el as ImageElement;

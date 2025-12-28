@@ -14,11 +14,7 @@ import { TextElement } from '@/types/editor';
 import { cn } from '@/lib/utils';
 import { SectionHeader, SliderRow } from './shared';
 import { FontPickerBox } from '@/components/editor/FontPickerModal';
-import {
-    FONT_WEIGHT_NAMES,
-    getAvailableWeights,
-    loadGoogleFont,
-} from '@/lib/fonts/googleFonts';
+import { loadGoogleFont } from '@/lib/fonts/googleFonts';
 
 interface TypographySectionProps {
     element: TextElement;
@@ -29,11 +25,8 @@ interface TypographySectionProps {
  * 
  * Features:
  * - Font Family Selector (with Google Fonts)
- * - Font Weight Selector (100-900)
  * - Text Transform Buttons (none, uppercase, lowercase, capitalize)
  * - Text Background Box Controls (collapsible)
- * 
- * Phase 1 of Typography Enhancement
  */
 export const TypographySection = memo(function TypographySection({ element }: TypographySectionProps) {
     const updateElement = useEditorStore((s) => s.updateElement);
@@ -67,10 +60,6 @@ export const TypographySection = memo(function TypographySection({ element }: Ty
         });
     }, [handleChange]);
 
-    // Get available weights for current font
-    const availableWeights = getAvailableWeights(element.fontFamily);
-    const currentWeight = element.fontWeight || 400;
-
     return (
         <div className="space-y-4">
             <SectionHeader title="TYPOGRAPHY" />
@@ -82,32 +71,6 @@ export const TypographySection = memo(function TypographySection({ element }: Ty
                     value={element.fontFamily}
                     onChange={(font) => handleFontChange(font.family, font.provider, font.url)}
                 />
-            </div>
-
-            {/* Font Weight */}
-            <div className="space-y-2">
-                <label className="text-xs text-gray-600 font-medium">Font Weight</label>
-                <select
-                    value={currentWeight}
-                    onChange={(e) => handleChange({ fontWeight: parseInt(e.target.value) as TextElement['fontWeight'] })}
-                    className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg bg-white focus:border-blue-400 focus:ring-2 focus:ring-blue-100 outline-none transition-all duration-150"
-                    aria-label="Select font weight"
-                >
-                    {[100, 200, 300, 400, 500, 600, 700, 800, 900].map((weight) => {
-                        const isAvailable = availableWeights.includes(weight);
-                        return (
-                            <option
-                                key={weight}
-                                value={weight}
-                                disabled={!isAvailable}
-                                className={!isAvailable ? 'text-gray-300' : ''}
-                            >
-                                {FONT_WEIGHT_NAMES[weight]} ({weight})
-                                {!isAvailable ? ' - Not available' : ''}
-                            </option>
-                        );
-                    })}
-                </select>
             </div>
 
             {/* Text Transform */}

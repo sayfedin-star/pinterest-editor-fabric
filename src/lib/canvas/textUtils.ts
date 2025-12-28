@@ -5,13 +5,7 @@
  * between client-side (Fabric.js) and server-side (node-canvas/fabric).
  */
 
-export interface AutoFitConfig {
-    containerWidth: number;
-    containerHeight: number;
-    minFontSize: number;
-    maxFontSize: number;
-    padding: number;
-}
+import { AutoFitConfig } from '@/types/editor';
 
 export type TextMeasurementCallback = (fontSize: number) => number;
 

@@ -77,6 +77,18 @@ export interface FabricTextStyles {
     };
 }
 
+/**
+ * Configuration for auto-fit text calculations
+ * Used for dynamic resizing of text to fit containers
+ */
+export interface AutoFitConfig {
+    containerWidth: number;
+    containerHeight: number;
+    minFontSize: number;
+    maxFontSize: number;
+    padding: number;
+}
+
 // ============================================
 // Core Element Types
 // ============================================
