@@ -120,8 +120,12 @@ export async function POST(req: NextRequest) {
         
         // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
         // 🚀 FONT FIX: Ensure all required fonts are loaded/registered
+        // Includes fetching custom fonts from Supabase if credentials are available
         // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-        const preparedElements = await prepareElementsForServerRendering(elements);
+        const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+        const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+        
+        const preparedElements = await prepareElementsForServerRendering(elements, supabaseUrl, supabaseKey);
 
         console.log(`[Server Render] Processing batch of ${csvRows.length} pins for campaign ${campaignId}`);
 

@@ -488,9 +488,19 @@ export async function loadCustomFontsForTemplate(
  * 2. Updates element font families to the resolved safe font
  * 3. Returns new array of elements (does not mutate original)
  */
-export async function prepareElementsForServerRendering(elements: Element[]): Promise<Element[]> {
+export async function prepareElementsForServerRendering(
+    elements: Element[],
+    supabaseUrl?: string,
+    supabaseKey?: string
+): Promise<Element[]> {
     const preparedElements = JSON.parse(JSON.stringify(elements)); // Deep clone
     
+    // 1. Load custom fonts from Supabase if credentials provided
+    if (supabaseUrl && supabaseKey) {
+        await loadCustomFontsForTemplate(preparedElements, supabaseUrl, supabaseKey);
+    }
+    
+    // 2. Process each element for Google Fonts / Fallbacks
     // Collect all unique fonts to process
     // We process sequentially to avoid overwhelming the network/fs with parallel downloads
     for (const el of preparedElements) {

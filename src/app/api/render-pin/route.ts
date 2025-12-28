@@ -3,7 +3,7 @@ import { StaticCanvas } from 'fabric/node';
 import { createClient } from '@supabase/supabase-js';
 import { v4 as uuidv4 } from 'uuid';
 import { Element } from '@/types/editor';
-import { renderTemplateServer, RenderConfig, FieldMapping } from '@/lib/fabric/serverEngine';
+import { renderTemplateServer, RenderConfig, FieldMapping, prepareElementsForServerRendering } from '@/lib/fabric/serverEngine';
 
 // Vercel Serverless Config
 export const maxDuration = 10;
@@ -39,6 +39,23 @@ export async function POST(req: NextRequest) {
             );
         }
 
+        // Initialize Supabase Client (Moved up for font loading)
+        const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+        const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+        if (!supabaseUrl || !supabaseKey) {
+            throw new Error('Server configuration error: Missing Supabase credentials');
+        }
+
+        const supabase = createClient(supabaseUrl, supabaseKey, {
+            auth: {
+                persistSession: false
+            }
+        });
+
+        // Prepare elements (load fonts including custom Supabase fonts)
+        const preparedElements = await prepareElementsForServerRendering(elements, supabaseUrl, supabaseKey);
+
         // Initialize Headless Canvas (StaticCanvas)
         const canvas = new StaticCanvas(undefined, {
             width: canvasSize.width,
@@ -52,7 +69,7 @@ export async function POST(req: NextRequest) {
             backgroundColor
         };
 
-        await renderTemplateServer(canvas, elements, config, rowData, fieldMapping);
+        await renderTemplateServer(canvas, preparedElements, config, rowData, fieldMapping);
 
         // Export to data URL
         const dataUrl = canvas.toDataURL({
@@ -69,22 +86,7 @@ export async function POST(req: NextRequest) {
         const base64Data = dataUrl.replace(/^data:image\/\w+;base64,/, "");
         const buffer = Buffer.from(base64Data, 'base64');
 
-        // 2. Initialize Supabase Client
-        // Use Service Role Key if available (bypasses RLS), otherwise Anon Key
-        const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-        const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-
-        if (!supabaseUrl || !supabaseKey) {
-            throw new Error('Server configuration error: Missing Supabase credentials');
-        }
-
-        const supabase = createClient(supabaseUrl, supabaseKey, {
-            auth: {
-                persistSession: false
-            }
-        });
-
-        // 3. Upload File
+        // 2. Upload File (Supabase client already initialized)
         const fileName = `${uuidv4()}.png`;
         const bucketName = 'generated_pins';
 
