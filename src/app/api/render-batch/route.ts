@@ -40,7 +40,13 @@ export async function POST(req: NextRequest) {
 
         console.log(`[API] Received batch render request for campaign ${campaignId} (${csvRows.length} rows)`);
 
+        // Debug: Check environment variables (do not log keys)
+        if (!process.env.NEXT_PUBLIC_SUPABASE_URL) console.error('[API] Missing NEXT_PUBLIC_SUPABASE_URL');
+        if (!process.env.SUPABASE_SERVICE_ROLE_KEY) console.error('[API] Missing SUPABASE_SERVICE_ROLE_KEY');
+        if (!process.env.INNGEST_EVENT_KEY) console.warn('[API] Missing INNGEST_EVENT_KEY (required for production)');
+
         // 1. Update Campaign Status to 'processing'
+        console.log('[API] Updating campaign status...');
         const supabase = createServiceRoleClient();
         const { error: updateError } = await supabase
             .from('campaigns')
@@ -53,24 +59,39 @@ export async function POST(req: NextRequest) {
         if (updateError) {
             console.error('[API] Failed to update campaign status:', updateError);
             return NextResponse.json(
-                { success: false, error: 'Failed to update campaign status' },
+                { success: false, error: 'Failed to update campaign status: ' + updateError.message },
                 { status: 500 }
             );
         }
 
         // 2. Send Event to Inngest
-        await inngest.send({
-            name: "campaign/render.requested",
-            data: {
-                campaignId,
-                elements,
-                canvasSize,
-                backgroundColor,
-                fieldMapping,
-                csvRows,
-                startIndex
-            },
-        });
+        console.log('[API] Sending event to Inngest...');
+        try {
+            await inngest.send({
+                name: "campaign/render.requested",
+                data: {
+                    campaignId,
+                    elements,
+                    canvasSize,
+                    backgroundColor,
+                    fieldMapping,
+                    csvRows,
+                    startIndex
+                },
+            });
+        } catch (inngestError: unknown) {
+            console.error('[API] Inngest send failed:', inngestError);
+             const errorMessage = inngestError instanceof Error ? inngestError.message : 'Unknown Inngest error';
+             // Revert campaign status if Inngest fails
+             await supabase.from('campaigns').update({ status: 'failed' }).eq('id', campaignId);
+             
+             return NextResponse.json(
+                { success: false, error: `Failed to trigger background job: ${errorMessage}` },
+                { status: 500 }
+            );
+        }
+
+        console.log('[API] Batch rendering started successfully');
 
         // 3. Return Immediate Success
         return NextResponse.json({
