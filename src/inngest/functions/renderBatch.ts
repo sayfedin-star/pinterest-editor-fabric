@@ -253,33 +253,39 @@ export const renderBatchFunction = inngest.createFunction(
                     }
                 }
                 
-                // Pre-fetch images
-                await Promise.all(Array.from(uniqueUrls).map(async (url) => {
-                    try {
-                        let fetchUrl = url;
-                        if (url.startsWith('/api/proxy-image')) {
-                            const urlParams = new URLSearchParams(url.split('?')[1] || '');
-                            const originalUrl = urlParams.get('url');
-                            if (originalUrl) fetchUrl = decodeURIComponent(originalUrl);
+                // Pre-fetch images with concurrency limit to avoid EMFILE
+                const uniqueUrlArray = Array.from(uniqueUrls);
+                const IMAGE_CONCURRENCY = 20;
+                
+                for (let i = 0; i < uniqueUrlArray.length; i += IMAGE_CONCURRENCY) {
+                    const chunk = uniqueUrlArray.slice(i, i + IMAGE_CONCURRENCY);
+                    await Promise.all(chunk.map(async (url) => {
+                        try {
+                            let fetchUrl = url;
+                            if (url.startsWith('/api/proxy-image')) {
+                                const urlParams = new URLSearchParams(url.split('?')[1] || '');
+                                const originalUrl = urlParams.get('url');
+                                if (originalUrl) fetchUrl = decodeURIComponent(originalUrl);
+                            }
+                            
+                            const response = await fetch(fetchUrl, {
+                                headers: {
+                                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+                                    'Accept': 'image/*',
+                                },
+                            });
+                            
+                            if (response.ok) {
+                                const arrayBuffer = await response.arrayBuffer();
+                                const base64 = Buffer.from(arrayBuffer).toString('base64');
+                                const contentType = response.headers.get('content-type') || 'image/png';
+                                imageCache.set(url, `data:${contentType};base64,${base64}`);
+                            }
+                        } catch (e) {
+                            console.warn(`[Inngest Render] Image prefetch failed: ${url}`, e);
                         }
-                        
-                        const response = await fetch(fetchUrl, {
-                            headers: {
-                                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-                                'Accept': 'image/*',
-                            },
-                        });
-                        
-                        if (response.ok) {
-                            const arrayBuffer = await response.arrayBuffer();
-                            const base64 = Buffer.from(arrayBuffer).toString('base64');
-                            const contentType = response.headers.get('content-type') || 'image/png';
-                            imageCache.set(url, `data:${contentType};base64,${base64}`);
-                        }
-                    } catch (e) {
-                        console.warn(`[Inngest Render] Image prefetch failed: ${url}`, e);
-                    }
-                }));
+                    }));
+                }
                 
                 setServerImageCache(imageCache);
 
