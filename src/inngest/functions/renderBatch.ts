@@ -2,7 +2,7 @@ import { inngest } from "@/inngest/client";
 import Papa from 'papaparse';
 import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
 import { v4 as uuidv4 } from 'uuid';
-import { Element } from '@/types/editor';
+import { Element, ImageElement } from '@/types/editor';
 import { setupFabricServerPolyfills } from '@/lib/fabric/server-polyfill';
 import { createServiceRoleClient } from "@/lib/supabaseServer";
 
@@ -208,7 +208,7 @@ export const renderBatchFunction = inngest.createFunction(
             // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
             // STEP 2: Dynamic import of fabric-dependent modules
             // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-            const { renderTemplate, setServerImageCache, clearServerImageCache } = await import('@/lib/fabric/engine');
+            const { renderTemplate, setServerImageCache, clearServerImageCache, getDynamicImageUrl } = await import('@/lib/fabric/engine');
             const { prepareElementsForServerRendering } = await import('@/lib/fabric/serverEngine');
             const { CanvasPool } = await import('@/lib/fabric/CanvasPool');
 
@@ -241,15 +241,16 @@ export const renderBatchFunction = inngest.createFunction(
                 const uniqueUrls = new Set<string>();
                 
                 for (const el of imageElements) {
-                    const imgEl = el as { imageUrl?: string; isDynamic?: boolean; dynamicSource?: string };
-                    if (imgEl.isDynamic && imgEl.dynamicSource) {
-                        for (const row of csvRows) {
-                            const mappedField = fieldMapping[imgEl.dynamicSource] || imgEl.dynamicSource;
-                            const url = row[mappedField];
+                    const imgEl = el as ImageElement;
+                    
+                    if (imgEl.isDynamic) {
+                        for (const row of csvRows!) {
+                            const url = getDynamicImageUrl(imgEl, row, fieldMapping!);
                             if (url) uniqueUrls.add(url);
                         }
-                    } else if (imgEl.imageUrl) {
-                        uniqueUrls.add(imgEl.imageUrl);
+                    } else {
+                        const url = getDynamicImageUrl(imgEl, {}, {});
+                        if (url) uniqueUrls.add(url);
                     }
                 }
                 

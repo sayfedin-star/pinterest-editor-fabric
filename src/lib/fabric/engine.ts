@@ -202,7 +202,7 @@ function replaceDynamicFields(text: string, rowData: Record<string, string>, fie
     return result;
 }
 
-function getDynamicImageUrl(element: ImageElement, rowData: Record<string, string>, fieldMapping: FieldMapping): string {
+export function getDynamicImageUrl(element: ImageElement, rowData: Record<string, string>, fieldMapping: FieldMapping): string {
     const src = element.imageUrl || '';
     
     // For Canva backgrounds, use proxy but avoid double-encoding
