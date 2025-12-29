@@ -524,6 +524,8 @@ export function GenerationController({
         // Pre-warm canvas pool for batch processing
         canvasPoolRef.current.prewarm(CLIENT_PARALLEL_LIMIT, canvasSize.width, canvasSize.height);
 
+        let serverJobStarted = false; // Track server job status for cleanup in finally block
+
         // ============================================
         // FIX #4: Preload ALL unique images before rendering
         // ============================================
@@ -592,6 +594,8 @@ export function GenerationController({
 
                     console.log(`[Server Mode] Batch job started:`, result.message);
                     
+                    serverJobStarted = true; // Mark as started successfully
+
                     // Show initial toast
                     toast.success('Generation started in background!');
                     
@@ -857,7 +861,7 @@ export function GenerationController({
                 // So activeMode will be nullified.
                 // We should probably check if we are in server mode + processing before resetting.
                 
-                if (!(renderMode === 'server' && status === 'processing')) {
+                if (!(renderMode === 'server' && serverJobStarted)) {
                      setActiveMode(null);
                 }
             }

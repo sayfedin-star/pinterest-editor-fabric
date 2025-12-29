@@ -264,7 +264,7 @@ export const renderBatchFunction = inngest.createFunction(
                         campaign_id: campaignId,
                         user_id: userId,
                         data_row: { ...r.rowData, rowIndex: r.index },
-                        image_url: r.url!,
+                        image_url: (r as any).url,
                         status: 'generated'
                     }))
                 );
