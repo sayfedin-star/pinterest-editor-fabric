@@ -69,8 +69,64 @@ export function createFabricObject(element: Element): fabric.FabricObject | null
                 angle: element.rotation || 0,
                 opacity: element.opacity ?? 1,
             });
+
+            // Apply shadow with opacity
+            if (textEl.shadowColor) {
+                const shadowColor = new fabric.Color(textEl.shadowColor);
+                if (textEl.shadowOpacity !== undefined) {
+                    shadowColor.setAlpha(textEl.shadowOpacity);
+                }
+                
+                textbox.shadow = new fabric.Shadow({
+                    color: shadowColor.toRgba(),
+                    blur: textEl.shadowBlur ?? 5,
+                    offsetX: textEl.shadowOffsetX ?? 2,
+                    offsetY: textEl.shadowOffsetY ?? 2,
+                });
+            }
+
+            // Apply stroke
+            if (textEl.stroke || textEl.hollowText) {
+                textbox.stroke = textEl.stroke || textEl.fill || '#000000';
+                textbox.strokeWidth = textEl.strokeWidth || (textEl.hollowText ? 2 : 1);
+            }
             
-            obj = textbox;
+            // Handle background box (Group logic)
+            if (textEl.backgroundEnabled) {
+                const padding = textEl.backgroundPadding || 0;
+                
+                // Position textbox at 0,0 within the group
+                textbox.set({ left: 0, top: 0 });
+                
+                const bgRect = new fabric.Rect({
+                    width: element.width + padding * 2,
+                    height: (textbox.height || element.height) + padding * 2,
+                    left: -padding,
+                    top: -padding,
+                    fill: textEl.backgroundColor || '#ffff00',
+                    rx: textEl.backgroundCornerRadius || 0,
+                    ry: textEl.backgroundCornerRadius || 0,
+                });
+                
+                const group = new fabric.Group([bgRect, textbox], {
+                    left: element.x,
+                    top: element.y,
+                    angle: element.rotation || 0,
+                    opacity: element.opacity ?? 1,
+                });
+                
+                obj = group;
+            } else {
+                // No background - use direct textbox
+                textbox.set({
+                    left: element.x,
+                    top: element.y,
+                    angle: element.rotation || 0,
+                    opacity: element.opacity ?? 1,
+                });
+                obj = textbox;
+            }
+            
             (obj as ExtendedFabricObject)._originalText = textEl.text || '';
             break;
         }
@@ -365,15 +421,23 @@ export function syncElementToFabric(
         if (textUpdates.shadowColor !== undefined || 
             textUpdates.shadowBlur !== undefined || 
             textUpdates.shadowOffsetX !== undefined || 
-            textUpdates.shadowOffsetY !== undefined) {
-            const shadowColor = textUpdates.shadowColor ?? storedEl?.shadowColor ?? 'rgba(0,0,0,0.5)';
+            textUpdates.shadowOffsetY !== undefined ||
+            textUpdates.shadowOpacity !== undefined) {
+            
+            const shadowColorHex = textUpdates.shadowColor ?? storedEl?.shadowColor;
             const shadowBlur = textUpdates.shadowBlur ?? storedEl?.shadowBlur ?? 5;
             const shadowOffsetX = textUpdates.shadowOffsetX ?? storedEl?.shadowOffsetX ?? 2;
             const shadowOffsetY = textUpdates.shadowOffsetY ?? storedEl?.shadowOffsetY ?? 2;
+            const shadowOpacity = textUpdates.shadowOpacity ?? storedEl?.shadowOpacity;
             
-            if (shadowBlur > 0 || shadowOffsetX !== 0 || shadowOffsetY !== 0) {
+            if (shadowColorHex && (shadowBlur > 0 || shadowOffsetX !== 0 || shadowOffsetY !== 0)) {
+                const shadowColor = new fabric.Color(shadowColorHex);
+                if (shadowOpacity !== undefined) {
+                    shadowColor.setAlpha(shadowOpacity);
+                }
+
                 batchedUpdates.shadow = new fabric.Shadow({
-                    color: shadowColor,
+                    color: shadowColor.toRgba(),
                     blur: shadowBlur,
                     offsetX: shadowOffsetX,
                     offsetY: shadowOffsetY,
@@ -411,12 +475,33 @@ export function syncElementToFabric(
         }
         
         // Background box
-        if (textUpdates.backgroundEnabled !== undefined || textUpdates.backgroundColor !== undefined) {
-            const bgEnabled = textUpdates.backgroundEnabled ?? storedEl?.backgroundEnabled ?? false;
-            const bgColor = textUpdates.backgroundColor ?? storedEl?.backgroundColor ?? 'transparent';
+        if (textUpdates.backgroundEnabled !== undefined || 
+            textUpdates.backgroundColor !== undefined || 
+            textUpdates.backgroundPadding !== undefined || 
+            textUpdates.backgroundCornerRadius !== undefined) {
             
-            if (bgEnabled && bgColor) {
-                batchedUpdates.textBackgroundColor = bgColor;
+            const bgEnabled = textUpdates.backgroundEnabled ?? storedEl?.backgroundEnabled ?? false;
+            const bgColor = textUpdates.backgroundColor ?? storedEl?.backgroundColor ?? '#ffff00';
+            const padding = textUpdates.backgroundPadding ?? storedEl?.backgroundPadding ?? 0;
+            const radius = textUpdates.backgroundCornerRadius ?? storedEl?.backgroundCornerRadius ?? 0;
+            
+            if (bgEnabled) {
+                if (fabricObject instanceof fabric.Group) {
+                    const bgRect = fabricObject.getObjects().find(o => o instanceof fabric.Rect) as fabric.Rect | undefined;
+                    if (bgRect) {
+                        bgRect.set({
+                            fill: bgColor,
+                            rx: radius,
+                            ry: radius,
+                            width: (targetTextbox.width || 0) + padding * 2,
+                            height: (targetTextbox.height || 0) + padding * 2,
+                            left: -padding,
+                            top: -padding
+                        });
+                    }
+                }
+                // Ensure textbox itself doesn't have a background if using Group
+                batchedUpdates.textBackgroundColor = '';
             } else {
                 batchedUpdates.textBackgroundColor = '';
             }
