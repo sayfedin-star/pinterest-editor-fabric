@@ -45,9 +45,6 @@ export interface TextElement extends BaseElement {
     backgroundColor?: string;
     backgroundCornerRadius?: number;
     backgroundPadding?: number;
-    // Curved text
-    curvedEnabled?: boolean;
-    curvedPower?: number;
     // Dynamic field - now supports any field name (text1, text2, etc.)
     isDynamic: boolean;
     dynamicField?: string;

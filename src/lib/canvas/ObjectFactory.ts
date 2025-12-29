@@ -557,8 +557,6 @@ export function syncFabricToElement(fabricObject: fabric.FabricObject): Element 
                 backgroundColor: storedText.backgroundColor,
                 backgroundCornerRadius: storedText.backgroundCornerRadius,
                 backgroundPadding: storedText.backgroundPadding,
-                curvedEnabled: storedText.curvedEnabled,
-                curvedPower: storedText.curvedPower,
                 fontProvider: storedText.fontProvider,
                 shadowColor: storedText.shadowColor,
                 shadowBlur: storedText.shadowBlur,

@@ -159,47 +159,6 @@ export const EffectsSection = memo(function EffectsSection({ element }: EffectsS
                     </div>
                 </div>
             )}
-
-            <div>
-                <SectionHeader title="SHAPE" />
-                <div className="grid grid-cols-4 gap-2">
-                    <StyleButton
-                        label="None"
-                        isActive={!element.curvedEnabled}
-                        onClick={() => {
-                            updateElement(element.id, { curvedEnabled: false });
-                            pushHistory();
-                        }}
-                        preview={<span className="text-gray-400">abc</span>}
-                    />
-                    <StyleButton
-                        label="Curved"
-                        isActive={!!element.curvedEnabled}
-                        onClick={() => {
-                            updateElement(element.id, { curvedEnabled: true, curvedPower: 50 });
-                            pushHistory();
-                        }}
-                        preview={
-                            <svg width="24" height="20" viewBox="0 0 24 20" fill="none">
-                                <path d="M2 15C5 8 12 5 22 15" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-                            </svg>
-                        }
-                    />
-                </div>
-            </div>
-
-            {element.curvedEnabled && (
-                <div className="p-3 bg-gray-50 rounded-lg border border-gray-100">
-                    <SliderRow
-                        label="Curve"
-                        value={element.curvedPower || 50}
-                        min={0}
-                        max={100}
-                        onChange={(v) => updateElement(element.id, { curvedPower: v })}
-                        onDone={pushHistory}
-                    />
-                </div>
-            )}
         </div>
     );
 });
