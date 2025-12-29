@@ -59,9 +59,15 @@ export function detectElementChange(
 
     // No list changes, check for property changes
     const modified: string[] = [];
+    
+    // Build a map of previous elements for O(1) lookup
+    const prevMap = new Map<string, Element>();
+    for (const el of previous) {
+        prevMap.set(el.id, el);
+    }
 
     for (const currEl of current) {
-        const prevEl = previous.find(el => el.id === currEl.id);
+        const prevEl = prevMap.get(currEl.id);
         if (!prevEl) continue;
 
         // Check if any properties changed

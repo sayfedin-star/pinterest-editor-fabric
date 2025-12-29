@@ -1,18 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
-import { v4 as uuidv4 } from 'uuid';
+import { inngest } from "@/inngest/client";
+import { createServiceRoleClient } from "@/lib/supabaseServer";
 import { Element } from '@/types/editor';
-import { setupFabricServerPolyfills } from '@/lib/fabric/server-polyfill';
-// NOTE: CanvasPool imports fabric at module level, so it must be dynamically imported AFTER polyfills
 
-// Vercel Serverless Config - 60 seconds for batch processing
-export const maxDuration = 60;
+// Vercel Serverless Config
+export const maxDuration = 10; // Fast response
 export const dynamic = 'force-dynamic';
 
-// Debug flag for verbose logging - disabled in production for performance
-const DEBUG_RENDER = process.env.NODE_ENV === 'development' || process.env.DEBUG_RENDER === 'true';
-
-// Request body interface
 interface RenderBatchRequest {
     campaignId: string;
     elements: Element[];
@@ -23,82 +17,8 @@ interface RenderBatchRequest {
     startIndex?: number;
 }
 
-interface BatchResult {
-    index: number;
-    success: boolean;
-    url?: string;
-    error?: string;
-    fileName?: string;
-}
-
-// Initialize S3 Client for Tebi
-const getS3Client = () => {
-    // Handle TEBI_ENDPOINT with or without https:// prefix
-    const rawEndpoint = process.env.TEBI_ENDPOINT || '';
-    const endpoint = rawEndpoint.startsWith('https://') || rawEndpoint.startsWith('http://')
-        ? rawEndpoint
-        : `https://${rawEndpoint}`;
-    
-    if (DEBUG_RENDER) {
-        console.log('[S3] Initializing with endpoint:', endpoint);
-    }
-    
-    return new S3Client({
-        region: 'auto',
-        endpoint,
-        credentials: {
-            accessKeyId: process.env.TEBI_ACCESS_KEY!,
-            secretAccessKey: process.env.TEBI_SECRET_KEY!,
-        },
-        forcePathStyle: true,
-    });
-};
-
-// Upload to S3
-async function uploadToS3(
-    s3Client: S3Client,
-    buffer: Buffer,
-    campaignId: string,
-    pinIndex: number
-): Promise<string> {
-    const bucket = process.env.TEBI_BUCKET!;
-    const key = `campaigns/${campaignId}/pin-${pinIndex}-${uuidv4().substring(0, 8)}.jpg`;
-
-    await s3Client.send(
-        new PutObjectCommand({
-            Bucket: bucket,
-            Key: key,
-            Body: buffer,
-            ContentType: 'image/jpeg',
-            ACL: 'public-read',
-        })
-    );
-
-    // Generate public URL - handle TEBI_ENDPOINT with or without https://
-    const rawEndpoint = process.env.TEBI_ENDPOINT || '';
-    const baseUrl = rawEndpoint.startsWith('https://') || rawEndpoint.startsWith('http://')
-        ? rawEndpoint
-        : `https://${rawEndpoint}`;
-    return `${baseUrl}/${bucket}/${key}`;
-}
-
 export async function POST(req: NextRequest) {
-    const startTime = Date.now();
-
     try {
-        // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-        // STEP 1: Setup polyfills BEFORE importing fabric
-        // This must happen inside the handler, not at module level
-        // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-        setupFabricServerPolyfills();
-
-        // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-        // STEP 2: Dynamic import of fabric-dependent modules AFTER polyfills
-        // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-        const { renderTemplate, setServerImageCache, clearServerImageCache } = await import('@/lib/fabric/engine');
-        const { prepareElementsForServerRendering } = await import('@/lib/fabric/serverEngine');
-        const { CanvasPool } = await import('@/lib/fabric/CanvasPool');
-
         const body: RenderBatchRequest = await req.json();
         const {
             campaignId,
@@ -117,213 +37,50 @@ export async function POST(req: NextRequest) {
                 { status: 400 }
             );
         }
-        
-        // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-        // 🚀 FONT FIX: Ensure all required fonts are loaded/registered
-        // Includes fetching custom fonts from Supabase if credentials are available
-        // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-        const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-        const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-        
-        const preparedElements = await prepareElementsForServerRendering(elements, supabaseUrl, supabaseKey);
 
-        console.log(`[Server Render] Processing batch of ${csvRows.length} pins for campaign ${campaignId}`);
+        console.log(`[API] Received batch render request for campaign ${campaignId} (${csvRows.length} rows)`);
 
-        const s3Client = getS3Client();
-        const results: BatchResult[] = [];
+        // 1. Update Campaign Status to 'processing'
+        const supabase = createServiceRoleClient();
+        const { error: updateError } = await supabase
+            .from('campaigns')
+            .update({ 
+                status: 'processing',
+                paused_at: null // Clear any pause state
+            })
+            .eq('id', campaignId);
 
-        // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-        // 🚀 PHASE 1: Create canvas pool for reuse
-        // REDUCED parallelism to avoid CPU contention on serverless
-        // Vercel has limited CPU - too many parallel fabric ops block each other
-        // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-        const PARALLEL_LIMIT = parseInt(process.env.PARALLEL_LIMIT || '4', 10);
-        
-        console.log(`[Server Render] Using PARALLEL_LIMIT: ${PARALLEL_LIMIT}`);
-        
-        const canvasPool = new CanvasPool(PARALLEL_LIMIT, canvasSize.width, canvasSize.height);
-
-        try {
-            // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-            // 🚀 OPTIMIZATION: Pre-load unique images ONCE for entire batch
-            // Images are shared across pins - fetch each URL only once
-            // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-            const imageCache = new Map<string, string>(); // URL -> base64 data URL
-            
-            // Extract unique image URLs from elements and CSV data
-            const imageElements = preparedElements.filter(el => el.type === 'image' && el.visible);
-            const uniqueUrls = new Set<string>();
-            
-            for (const el of imageElements) {
-                const imgEl = el as { imageUrl?: string; isDynamic?: boolean; dynamicSource?: string };
-                if (imgEl.isDynamic && imgEl.dynamicSource) {
-                    // Dynamic images - collect from all rows
-                    for (const row of csvRows) {
-                        const mappedField = fieldMapping[imgEl.dynamicSource] || imgEl.dynamicSource;
-                        const url = row[mappedField];
-                        if (url) uniqueUrls.add(url);
-                    }
-                } else if (imgEl.imageUrl) {
-                    uniqueUrls.add(imgEl.imageUrl);
-                }
-            }
-            
-            // ALWAYS log pre-fetch stats (even in production) for debugging
-            console.log(`[Server Render] Found ${imageElements.length} image elements, ${uniqueUrls.size} unique URLs to pre-fetch`);
-            
-            // Pre-fetch all unique images in parallel
-            const preFetchStart = Date.now();
-            await Promise.all(Array.from(uniqueUrls).map(async (url) => {
-                try {
-                    let fetchUrl = url;
-                    if (url.startsWith('/api/proxy-image')) {
-                        const urlParams = new URLSearchParams(url.split('?')[1] || '');
-                        const originalUrl = urlParams.get('url');
-                        if (originalUrl) fetchUrl = decodeURIComponent(originalUrl);
-                    }
-                    
-                    const response = await fetch(fetchUrl, {
-                        headers: {
-                            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-                            'Accept': 'image/*',
-                        },
-                    });
-                    
-                    if (response.ok) {
-                        const arrayBuffer = await response.arrayBuffer();
-                        const base64 = Buffer.from(arrayBuffer).toString('base64');
-                        const contentType = response.headers.get('content-type') || 'image/png';
-                        imageCache.set(url, `data:${contentType};base64,${base64}`);
-                    }
-                } catch {
-                    if (DEBUG_RENDER) console.warn(`[Server Render] Image prefetch failed: ${url.substring(0, 60)}`);
-                }
-            }));
-            
-            // 🚀 Set the cache so engine.ts loadImageToCanvas can use it
-            setServerImageCache(imageCache);
-            
-            // ALWAYS log for debugging
-            console.log(`[Server Render] Pre-loaded ${imageCache.size}/${uniqueUrls.size} images in ${Date.now() - preFetchStart}ms`);
-
-            // Render function using pool + image cache
-            async function renderSinglePin(
-                rowData: Record<string, string>,
-                pinIndex: number
-            ): Promise<Buffer> {
-                const t0 = Date.now();
-                const canvas = canvasPool.acquire();
-                const t1 = Date.now();
-                
-                try {
-                    const config = {
-                        width: canvasSize.width,
-                        height: canvasSize.height,
-                        backgroundColor,
-                        interactive: false,
-                    };
-
-                    // Pass image cache to renderTemplate
-                    await renderTemplate(canvas, preparedElements, config, rowData, fieldMapping);
-                    const t2 = Date.now();
-
-                    // Export to JPEG - this is synchronous and CPU-intensive
-                    const dataUrl = canvas.toDataURL({
-                        format: 'jpeg',
-                        quality: 0.85,  // Reduced from 0.9 for faster encoding
-                        multiplier: 1,
-                    });
-                    const t3 = Date.now();
-
-                    const base64Data = dataUrl.replace(/^data:image\/\w+;base64,/, '');
-                    const buffer = Buffer.from(base64Data, 'base64');
-                    
-                    // Log first 3 pins of batch for timing breakdown
-                    if (pinIndex - startIndex < 3) {
-                        console.log(`[Timing Detail] Pin ${pinIndex}: acquire=${t1-t0}ms, renderTemplate=${t2-t1}ms, toDataURL=${t3-t2}ms`);
-                    }
-                    
-                    return buffer;
-                } finally {
-                    canvasPool.release(canvas);
-                }
-            }
-
-            // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-            // 🚀 OPTIMIZATION: Process ALL pins in parallel (up to PARALLEL_LIMIT)
-            // Render + Upload happen concurrently for maximum throughput
-            // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-            for (let i = 0; i < csvRows.length; i += PARALLEL_LIMIT) {
-                const chunk = csvRows.slice(i, i + PARALLEL_LIMIT);
-                const chunkStart = Date.now();
-                
-                const chunkPromises = chunk.map(async (rowData, chunkIndex) => {
-                    const pinIndex = startIndex + i + chunkIndex;
-                    
-                    try {
-                        // ⏱️ TIMING: Measure each step
-                        const t0 = Date.now();
-                        const buffer = await renderSinglePin(rowData, pinIndex);
-                        const t1 = Date.now();
-                        const url = await uploadToS3(s3Client, buffer, campaignId, pinIndex);
-                        const t2 = Date.now();
-                        
-                        // Log first pin of each chunk for timing analysis
-                        if (chunkIndex === 0) {
-                            console.log(`[Timing] Pin ${pinIndex}: render=${t1-t0}ms, upload=${t2-t1}ms`);
-                        }
-                        
-                        return {
-                            index: pinIndex,
-                            success: true,
-                            url,
-                            fileName: `pin-${pinIndex}.jpg`,
-                        };
-                    } catch (error) {
-                        console.error(`[Server Render] Pin ${pinIndex} failed:`, error);
-                        return {
-                            index: pinIndex,
-                            success: false,
-                            error: error instanceof Error ? error.message : 'Unknown error',
-                        };
-                    }
-                });
-
-                const chunkResults = await Promise.all(chunkPromises);
-                console.log(`[Timing] Chunk ${Math.floor(i/PARALLEL_LIMIT)}: ${chunk.length} pins in ${Date.now() - chunkStart}ms`);
-                results.push(...chunkResults);
-            }
-
-            const successCount = results.filter((r) => r.success).length;
-            const duration = Date.now() - startTime;
-            const pinsPerSecond = (successCount / (duration / 1000)).toFixed(2);
-
-            console.log(
-                `[Server Render] Completed: ${successCount}/${csvRows.length} pins in ${duration}ms (${pinsPerSecond} pins/sec)`
+        if (updateError) {
+            console.error('[API] Failed to update campaign status:', updateError);
+            return NextResponse.json(
+                { success: false, error: 'Failed to update campaign status' },
+                { status: 500 }
             );
-
-            return NextResponse.json({
-                success: true,
-                results,
-                stats: {
-                    total: csvRows.length,
-                    success: successCount,
-                    failed: csvRows.length - successCount,
-                    durationMs: duration,
-                    pinsPerSecond: parseFloat(pinsPerSecond),
-                },
-            });
-
-        } finally {
-            // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-            // 🚨 CRITICAL: Cleanup pool and cache even if batch fails
-            // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-            canvasPool.cleanup();
-            clearServerImageCache();
         }
 
+        // 2. Send Event to Inngest
+        await inngest.send({
+            name: "campaign/render.requested",
+            data: {
+                campaignId,
+                elements,
+                canvasSize,
+                backgroundColor,
+                fieldMapping,
+                csvRows,
+                startIndex
+            },
+        });
+
+        // 3. Return Immediate Success
+        return NextResponse.json({
+            success: true,
+            message: "Batch rendering started in background",
+            count: csvRows.length
+        });
+
     } catch (error: unknown) {
-        console.error('[Server Render] Batch error:', error);
+        console.error('[API] Error starting batch render:', error);
         const errorMessage = error instanceof Error ? error.message : 'Unknown error';
         return NextResponse.json({ success: false, error: errorMessage }, { status: 500 });
     }

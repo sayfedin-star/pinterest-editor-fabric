@@ -498,7 +498,7 @@ export function syncElementToFabric(
                             top: -padding
                         });
                         // Mark group as dirty
-                        fabricObject.addWithUpdate();
+                        fabricObject.set('dirty', true);
                     }
                 }
                 // Ensure textbox itself doesn't have a background if using Group
@@ -557,7 +557,7 @@ export function syncElementToFabric(
                     left: -padding,
                     top: -padding
                 });
-                fabricObject.addWithUpdate();
+                fabricObject.set('dirty', true);
             }
         }
     }

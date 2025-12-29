@@ -1,1 +1,3 @@
-﻿# Project Tracks`n`nThis file tracks all major tracks for the project. Each track has its own detailed plan in its respective folder.`n`n---`n`n## [~] Track: Audit and verify cross-platform rendering parity for advanced text effects`n*Link: [./conductor/tracks/text_rendering_parity_20251229/](./conductor/tracks/text_rendering_parity_20251229/)*
+# Project Tracks
+
+This file tracks all major tracks for the project. Each track has its own detailed plan in its respective folder.
