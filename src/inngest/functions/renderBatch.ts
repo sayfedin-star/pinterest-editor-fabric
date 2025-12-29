@@ -15,6 +15,7 @@ interface RenderBatchEventData {
     fieldMapping?: Record<string, string>;
     csvRows?: Record<string, string>[];
     startIndex?: number;
+    batchSize?: number;
 }
 
 // Initialize S3 Client for Tebi
@@ -81,6 +82,7 @@ export const renderBatchFunction = inngest.createFunction(
             fieldMapping,
             csvRows,
             startIndex = 0,
+            batchSize,
         } = event.data as RenderBatchEventData;
 
         // Validation
@@ -135,6 +137,17 @@ export const renderBatchFunction = inngest.createFunction(
                 } catch (e) {
                     console.error('[Inngest Render] Error fetching/parsing CSV:', e);
                 }
+            }
+
+            // Apply batch slicing if batchSize is set
+            // When fetching from DB/Storage, csvRows is the full dataset.
+            // We only process the segment [startIndex, startIndex + batchSize].
+            if (batchSize && csvRows && csvRows.length > 0) {
+                const safeStartIndex = Math.max(0, Math.min(startIndex, csvRows.length));
+                const endIndex = Math.min(safeStartIndex + batchSize, csvRows.length);
+                
+                console.log(`[Inngest Render] Batching: Slicing rows ${safeStartIndex} to ${endIndex} (Total: ${csvRows.length})`);
+                csvRows = csvRows.slice(safeStartIndex, endIndex);
             }
 
             if (!fieldMapping) fieldMapping = campaign.field_mapping as Record<string, string>;
@@ -375,24 +388,36 @@ export const renderBatchFunction = inngest.createFunction(
                 if (error) throw error;
             }
 
-            // Update campaign stats
-            const currentGeneratedCount = successResults.length;
-            
-            // Fetch current count to increment correctly (atomic increment would be better but this is fine for now)
-            // Or better: Supabase doesn't have direct increment in JS client without rpc.
-            // We can just update with the count we have if we assume we are the only one processing.
-            // But since we might be re-running, let's be careful.
-            // Actually, for this "batch", we generated X pins.
-            // We should update the campaign status to completed if this was the whole batch.
-            // Assuming this function handles the WHOLE CSV as passed in event.
-            
-            await supabase.from('campaigns')
-                .update({
-                    status: 'completed',
-                    generated_pins: csvRows.length, // Or cumulative if we split. For now assuming full batch.
-                    completed_at: new Date().toISOString()
-                })
-                .eq('id', campaignId);
+            // Update campaign stats safely (handling concurrency)
+            if (successResults.length > 0) {
+                // Fetch latest state to ensure we don't overwrite progress from other batches
+                const { data: campaignState } = await supabase
+                    .from('campaigns')
+                    .select('generated_pins, total_pins')
+                    .eq('id', campaignId)
+                    .single();
+                
+                if (campaignState) {
+                    const newTotal = (campaignState.generated_pins || 0) + successResults.length;
+                    // Check completion against total_pins
+                    const isComplete = newTotal >= campaignState.total_pins;
+                    
+                    const updateData: Record<string, unknown> = {
+                        generated_pins: newTotal,
+                        updated_at: new Date().toISOString()
+                    };
+                    
+                    if (isComplete) {
+                        updateData.status = 'completed';
+                        updateData.completed_at = new Date().toISOString();
+                    }
+                    
+                    await supabase
+                        .from('campaigns')
+                        .update(updateData)
+                        .eq('id', campaignId);
+                }
+            }
         });
 
         return { success: true, count: results.length };

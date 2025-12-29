@@ -72,24 +72,31 @@ export async function POST(req: NextRequest) {
             );
         }
 
-        // 2. Send Event to Inngest
-        console.log('[API] Sending event to Inngest...');
-        try {
-            // Explicitly construct payload to ensure it is lightweight
-            // We strictly send only campaignId and startIndex.
-            // The Inngest function will fetch the heavy data (elements, csvRows) from Supabase.
+        // 2. Send Events to Inngest (Batched)
+        console.log('[API] Sending batched events to Inngest...');
+        const BATCH_SIZE = 100;
+        const events = [];
+        const totalRows = csvRows.length;
+
+        for (let i = 0; i < totalRows; i += BATCH_SIZE) {
+            // Explicitly construct payload for each batch
             const eventPayload = {
-                campaignId,
-                startIndex
+                campaignId: typeof campaignId === 'string' ? campaignId : String(campaignId),
+                startIndex: startIndex + i,
+                batchSize: BATCH_SIZE
             };
-
-            const payloadSize = JSON.stringify(eventPayload).length;
-            console.log(`[API] Inngest Payload Size: ${payloadSize} bytes`);
-
-            await inngest.send({
+            
+            events.push({
                 name: "campaign/render.requested",
                 data: eventPayload,
             });
+        }
+
+        console.log(`[API] Created ${events.length} batches for ${totalRows} rows`);
+
+        try {
+            // Send all batch events at once
+            await inngest.send(events);
         } catch (inngestError: unknown) {
             console.error('[API] Inngest send failed:', inngestError);
              const errorMessage = inngestError instanceof Error ? inngestError.message : 'Unknown Inngest error';
