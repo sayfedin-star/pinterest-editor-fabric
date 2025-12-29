@@ -8,11 +8,11 @@ import { createServiceRoleClient } from "@/lib/supabaseServer";
 // Define types locally since we are extracting logic
 interface RenderBatchEventData {
     campaignId: string;
-    elements: Element[];
-    canvasSize: { width: number; height: number };
-    backgroundColor: string;
+    elements?: Element[];
+    canvasSize?: { width: number; height: number };
+    backgroundColor?: string;
     fieldMapping?: Record<string, string>;
-    csvRows: Record<string, string>[];
+    csvRows?: Record<string, string>[];
     startIndex?: number;
 }
 
@@ -72,35 +72,107 @@ export const renderBatchFunction = inngest.createFunction(
     },
     { event: "campaign/render.requested" },
     async ({ event, step }) => {
-        const {
+        let {
             campaignId,
             elements,
             canvasSize,
             backgroundColor,
-            fieldMapping = {},
+            fieldMapping,
             csvRows,
             startIndex = 0,
         } = event.data as RenderBatchEventData;
 
         // Validation
-        if (!campaignId || !elements || !canvasSize || !csvRows || csvRows.length === 0) {
-            throw new Error("Missing required fields");
+        if (!campaignId) {
+            throw new Error("Missing required field: campaignId");
         }
 
         const supabase = createServiceRoleClient();
+        
+        // 1. Fetch Campaign and Template Data if missing
+        if (!elements || !canvasSize || !csvRows || !fieldMapping) {
+             const { data: campaign, error: campaignError } = await supabase
+                .from('campaigns')
+                .select(`
+                    user_id,
+                    template_id,
+                    csv_data,
+                    field_mapping,
+                    templates (
+                        elements,
+                        canvas_size,
+                        background_color
+                    )
+                `)
+                .eq('id', campaignId)
+                .single();
 
-        // 1. Fetch Campaign to get user_id
-        const { data: campaign, error: campaignError } = await supabase
-            .from('campaigns')
-            .select('user_id')
-            .eq('id', campaignId)
-            .single();
+            if (campaignError || !campaign) {
+                throw new Error(`Campaign not found: ${campaignError?.message}`);
+            }
 
-        if (campaignError || !campaign) {
-            throw new Error(`Campaign not found: ${campaignError?.message}`);
+            // Fill in missing data from DB
+            if (!csvRows) csvRows = campaign.csv_data as Record<string, string>[];
+            if (!fieldMapping) fieldMapping = campaign.field_mapping as Record<string, string>;
+            
+            // Handle join structure
+            const template = campaign.templates as unknown as { elements: Element[], canvas_size: { width: number, height: number }, background_color: string };
+            
+            if (template) {
+                if (!elements) elements = template.elements;
+                if (!canvasSize) canvasSize = template.canvas_size;
+                if (!backgroundColor) backgroundColor = template.background_color;
+            } else {
+                 throw new Error("Template linked to campaign not found");
+            }
+
+             // We need userId for saving results later
+             // But wait, userId is local to this scope if we declare it here?
+             // No, let's just use the campaign.user_id we fetched.
         }
 
-        const userId = campaign.user_id;
+        // Re-validate after fetching
+        if (!elements || !canvasSize || !csvRows || csvRows.length === 0) {
+            throw new Error("Missing required fields (even after DB fetch)");
+        }
+        
+        // Ensure defaults
+        if (!fieldMapping) fieldMapping = {};
+        if (!backgroundColor) backgroundColor = '#ffffff';
+        
+        // We need userId for saving results, fetch it if we didn't fetch campaign above
+        let userId = '';
+        if (!userId) {
+             const { data: campaignUser, error: userError } = await supabase
+                .from('campaigns')
+                .select('user_id')
+                .eq('id', campaignId)
+                .single();
+             
+             if (userError || !campaignUser) {
+                  // If we fetched campaign above, we have user_id. 
+                  // But TS doesn't know that if we didn't assign it to a variable visible here.
+                  // Let's refactor slightly to ensure userId is available.
+                  // Wait, I can't easily access the 'campaign' variable from the if block above.
+                  // I will re-fetch simply or structure the code to ensure userId is fetched.
+                  
+                  // Actually, let's just fetch it if it's not set.
+                  // If we entered the if block, we have it.
+                  // If we didn't enter the if block, we still need it.
+                  // The previous code always fetched it.
+                  
+                  const { data: simpleCampaign, error: simpleError } = await supabase
+                    .from('campaigns')
+                    .select('user_id')
+                    .eq('id', campaignId)
+                    .single();
+                    
+                  if (simpleError || !simpleCampaign) throw new Error("User ID not found");
+                  userId = simpleCampaign.user_id;
+             } else {
+                 userId = campaignUser.user_id;
+             }
+        }
 
         // 2. Perform Rendering (Logic from route.ts)
         const results = await step.run("render-and-upload", async () => {

@@ -38,6 +38,14 @@ export async function POST(req: NextRequest) {
             );
         }
 
+        if (typeof campaignId !== 'string') {
+             console.error(`[API] Invalid campaignId type: ${typeof campaignId}`);
+             return NextResponse.json(
+                { success: false, error: 'Invalid campaignId: must be a string' },
+                { status: 400 }
+            );
+        }
+
         console.log(`[API] Received batch render request for campaign ${campaignId} (${csvRows.length} rows)`);
 
         // Debug: Check environment variables (do not log keys)
@@ -67,17 +75,20 @@ export async function POST(req: NextRequest) {
         // 2. Send Event to Inngest
         console.log('[API] Sending event to Inngest...');
         try {
+            // Explicitly construct payload to ensure it is lightweight
+            // We strictly send only campaignId and startIndex.
+            // The Inngest function will fetch the heavy data (elements, csvRows) from Supabase.
+            const eventPayload = {
+                campaignId,
+                startIndex
+            };
+
+            const payloadSize = JSON.stringify(eventPayload).length;
+            console.log(`[API] Inngest Payload Size: ${payloadSize} bytes`);
+
             await inngest.send({
                 name: "campaign/render.requested",
-                data: {
-                    campaignId,
-                    elements,
-                    canvasSize,
-                    backgroundColor,
-                    fieldMapping,
-                    csvRows,
-                    startIndex
-                },
+                data: eventPayload,
             });
         } catch (inngestError: unknown) {
             console.error('[API] Inngest send failed:', inngestError);
