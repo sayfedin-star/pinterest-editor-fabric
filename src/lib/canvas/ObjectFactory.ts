@@ -70,7 +70,7 @@ export function createFabricObject(element: Element): fabric.FabricObject | null
                 opacity: element.opacity ?? 1,
             });
 
-            // Apply shadow with opacity
+            // 1. Shadow
             if (textEl.shadowColor) {
                 const shadowColor = new fabric.Color(textEl.shadowColor);
                 if (textEl.shadowOpacity !== undefined) {
@@ -85,17 +85,17 @@ export function createFabricObject(element: Element): fabric.FabricObject | null
                 });
             }
 
-            // Apply stroke
+            // 2. Stroke / Hollow Text
             if (textEl.stroke || textEl.hollowText) {
                 textbox.stroke = textEl.stroke || textEl.fill || '#000000';
                 textbox.strokeWidth = textEl.strokeWidth || (textEl.hollowText ? 2 : 1);
             }
             
-            // Handle background box (Group logic)
+            // 3. Background (Group)
             if (textEl.backgroundEnabled) {
                 const padding = textEl.backgroundPadding || 0;
                 
-                // Position textbox at 0,0 within the group
+                // Position textbox at 0,0 relative to group
                 textbox.set({ left: 0, top: 0 });
                 
                 const bgRect = new fabric.Rect({
@@ -117,7 +117,6 @@ export function createFabricObject(element: Element): fabric.FabricObject | null
                 
                 obj = group;
             } else {
-                // No background - use direct textbox
                 textbox.set({
                     left: element.x,
                     top: element.y,
@@ -417,7 +416,7 @@ export function syncElementToFabric(
             batchedUpdates.linethrough = textUpdates.textDecoration === 'line-through';
         }
         
-        // Shadow effect (special case - needs Shadow object)
+        // Shadow effect
         if (textUpdates.shadowColor !== undefined || 
             textUpdates.shadowBlur !== undefined || 
             textUpdates.shadowOffsetX !== undefined || 
@@ -430,7 +429,7 @@ export function syncElementToFabric(
             const shadowOffsetY = textUpdates.shadowOffsetY ?? storedEl?.shadowOffsetY ?? 2;
             const shadowOpacity = textUpdates.shadowOpacity ?? storedEl?.shadowOpacity;
             
-            if (shadowColorHex && (shadowBlur > 0 || shadowOffsetX !== 0 || shadowOffsetY !== 0)) {
+            if (shadowColorHex) {
                 const shadowColor = new fabric.Color(shadowColorHex);
                 if (shadowOpacity !== undefined) {
                     shadowColor.setAlpha(shadowOpacity);
@@ -498,6 +497,8 @@ export function syncElementToFabric(
                             left: -padding,
                             top: -padding
                         });
+                        // Mark group as dirty
+                        fabricObject.addWithUpdate();
                     }
                 }
                 // Ensure textbox itself doesn't have a background if using Group
@@ -542,7 +543,7 @@ export function syncElementToFabric(
             }
         }
 
-        // Fix: Update Group background size if dimensions changed
+        // Update Group background size if dimensions changed
         if (fabricObject instanceof fabric.Group) {
             const bgRect = fabricObject.getObjects().find(o => o instanceof fabric.Rect) as fabric.Rect | undefined;
             // Re-calculate dimensions (needed after text update)
@@ -556,8 +557,7 @@ export function syncElementToFabric(
                     left: -padding,
                     top: -padding
                 });
-                // Mark group as dirty
-                fabricObject.addWithUpdate(); 
+                fabricObject.addWithUpdate();
             }
         }
     }

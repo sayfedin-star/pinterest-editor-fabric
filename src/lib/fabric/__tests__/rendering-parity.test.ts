@@ -27,6 +27,11 @@ jest.mock('fabric/node', () => {
         ...options,
     }));
 
+    const mockColor = jest.fn().mockImplementation((color) => ({
+        setAlpha: jest.fn().mockReturnThis(),
+        toRgba: jest.fn().mockReturnValue(color.includes('#') ? 'rgba(255, 0, 0, 0.5)' : color), // Simple mock return
+    }));
+
     return {
         StaticCanvas: jest.fn().mockImplementation(() => ({
             setDimensions: jest.fn(),
@@ -42,6 +47,7 @@ jest.mock('fabric/node', () => {
         Shadow: mockShadow,
         Rect: mockRect,
         Group: mockGroup,
+        Color: mockColor,
         FabricImage: { fromURL: jest.fn() },
     };
 });
@@ -107,7 +113,9 @@ describe('Text Rendering Parity Audit', () => {
         
         // Check if shadow object was created and attached
         expect(addedObject.shadow).toBeDefined();
-        expect(addedObject.shadow.color).toBe('#ff0000');
+        // Since Fabric Shadow doesn't have opacity, it should be merged into color
+        // If color was #ff0000 and opacity 0.5, we expect an rgba string or similar
+        expect(addedObject.shadow.color).toContain('rgba(255, 0, 0, 0.5)');
         expect(addedObject.shadow.blur).toBe(10);
         expect(addedObject.shadow.offsetX).toBe(5);
         expect(addedObject.shadow.offsetY).toBe(5);

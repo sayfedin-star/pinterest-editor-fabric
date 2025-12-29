@@ -383,12 +383,29 @@ export class CanvasManager {
         // Add or update elements
         for (const element of elements) {
             const existingObject = this.elementMap.get(element.id);
+            
+            // Check for structural mismatch (e.g. Textbox <-> Group for text background)
+            let structureChanged = false;
+            if (existingObject && element.type === 'text') {
+                 // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                 const textEl = element as any; // Cast to access backgroundEnabled
+                 const isGroup = existingObject.type === 'group';
+                 const shouldBeGroup = !!textEl.backgroundEnabled;
+                 if (isGroup !== shouldBeGroup) {
+                     structureChanged = true;
+                     console.log(`[CanvasManager] Structure changed for ${element.id}: Group=${isGroup} -> ${shouldBeGroup}`);
+                 }
+            }
 
-            if (existingObject) {
+            if (existingObject && !structureChanged) {
                 // Update existing object
                 syncElementToFabric(existingObject, element);
             } else {
-                // Add new object
+                // Replace or Add new object
+                if (existingObject) {
+                     this.canvas.remove(existingObject);
+                     this.elementMap.delete(element.id);
+                }
                 this.addElement(element);
             }
         }

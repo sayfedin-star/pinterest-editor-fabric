@@ -8,7 +8,7 @@
  * Custom fonts are bundled via next.config.ts outputFileTracingIncludes.
  */
 
-import { StaticCanvas, Rect, FabricImage, Textbox, Circle, Path, Shadow, Group } from 'fabric/node';
+import { StaticCanvas, Rect, FabricImage, Textbox, Circle, Path, Shadow, Group, Color } from 'fabric/node';
 import { Element, TextElement, ImageElement, ShapeElement, FrameElement } from '@/types/editor';
 import * as path from 'path';
 import * as fs from 'fs';
@@ -714,31 +714,41 @@ async function renderElement(
         });
         // NOTE: clipPath removed - it caused display issues with Fabric.js 6.x\n        // The calculateFitFontSizeServer function already ensures text fits within container
 
+        // 1. Shadow
         if (textEl.shadowColor) {
+            const shadowColor = new Color(textEl.shadowColor);
+            if (textEl.shadowOpacity !== undefined) {
+                shadowColor.setAlpha(textEl.shadowOpacity);
+            }
+            
             textbox.shadow = new Shadow({
-                color: textEl.shadowColor,
-                blur: textEl.shadowBlur || 0,
-                offsetX: textEl.shadowOffsetX || 0,
-                offsetY: textEl.shadowOffsetY || 0,
+                color: shadowColor.toRgba(),
+                blur: textEl.shadowBlur ?? 5,
+                offsetX: textEl.shadowOffsetX ?? 2,
+                offsetY: textEl.shadowOffsetY ?? 2,
             });
         }
 
+        // 2. Stroke (Outline) / Hollow Text
         if (textEl.stroke || textEl.hollowText) {
             textbox.stroke = textEl.stroke || textEl.fill || '#000000';
             textbox.strokeWidth = textEl.strokeWidth || (textEl.hollowText ? 2 : 1);
         }
 
-        // Handle background
+        // 3. Background (Group: Rect + Textbox)
         if (textEl.backgroundEnabled) {
             const padding = textEl.backgroundPadding || 0;
+            
+            // Textbox must be positioned relative to group center or origin
+            // Simple approach: Rect at (-padding, -padding) relative to text at (0,0)
             textbox.set({ left: 0, top: 0 });
             
             const bgRect = new Rect({
                 width: textEl.width + padding * 2,
-                height: textEl.height + padding * 2,
+                height: (textbox.height || textEl.height) + padding * 2,
                 left: -padding,
                 top: -padding,
-                fill: textEl.backgroundColor,
+                fill: textEl.backgroundColor || '#ffff00',
                 rx: textEl.backgroundCornerRadius || 0,
                 ry: textEl.backgroundCornerRadius || 0,
             });
