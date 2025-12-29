@@ -166,7 +166,8 @@ export default function CampaignDetailPage() {
                         // FIX: Use global index fallback if data_row.rowIndex is missing to prevent duplicate numbers on different pages
                         rowIndex: pin.data_row ? (pin.data_row as any).rowIndex ?? ((currentPage - 1) * pagination.limit + index) : ((currentPage - 1) * pagination.limit + index), 
                         imageUrl: pin.image_url as string,
-                        status: (pin.status as any) || 'completed',
+                        // FIX: Map DB 'generated' status to UI 'completed' status so PinCard shows the image
+                        status: ((pin.status as string) === 'generated' ? 'completed' : (pin.status as any)) || 'completed',
                         errorMessage: pin.error_message as string | undefined,
                         csvData: pin.data_row as Record<string, string>,
                     }));

@@ -10,7 +10,7 @@ export interface PinCardData {
     id: string;
     rowIndex: number;
     imageUrl: string;
-    status: 'completed' | 'failed' | 'pending';
+    status: 'completed' | 'failed' | 'pending' | 'generated';
     errorMessage?: string;
     csvData?: Record<string, string>;
 }
@@ -34,6 +34,9 @@ export const PinCard = memo(function PinCard({
 }: PinCardProps) {
     const [isCopied, setIsCopied] = useState(false);
     const [isDownloading, setIsDownloading] = useState(false);
+
+    // Helper to check if pin is successfully generated
+    const isSuccess = pin.status === 'completed' || pin.status === 'generated';
 
     const handleCopyUrl = async (e: React.MouseEvent) => {
         e.stopPropagation();
@@ -97,10 +100,10 @@ export const PinCard = memo(function PinCard({
                 {/* Download Button */}
                 <button
                     onClick={handleDownload}
-                    disabled={pin.status !== 'completed' || isDownloading}
+                    disabled={!isSuccess || isDownloading}
                     className={cn(
                         "w-10 h-10 flex items-center justify-center rounded-lg border transition-colors",
-                        pin.status === 'completed'
+                        isSuccess
                             ? "border-gray-200 bg-white text-gray-700 hover:bg-gray-100 active:bg-gray-200"
                             : "border-gray-100 bg-gray-50 text-gray-300 cursor-not-allowed"
                     )}
@@ -117,10 +120,10 @@ export const PinCard = memo(function PinCard({
                 {/* Preview Button */}
                 <button
                     onClick={handlePreview}
-                    disabled={pin.status !== 'completed'}
+                    disabled={!isSuccess}
                     className={cn(
                         "w-10 h-10 flex items-center justify-center rounded-lg transition-colors",
-                        pin.status === 'completed'
+                        isSuccess
                             ? "bg-blue-600 text-white hover:bg-blue-700 active:bg-blue-800"
                             : "bg-gray-100 text-gray-300 cursor-not-allowed"
                     )}
@@ -133,7 +136,7 @@ export const PinCard = memo(function PinCard({
 
             {/* Image Section */}
             <div className="relative aspect-[2/3] bg-gray-100">
-                {pin.status === 'completed' && pin.imageUrl ? (
+                {isSuccess && pin.imageUrl ? (
                     <img
                         src={pin.imageUrl}
                         alt={`Pin ${pin.rowIndex + 1}`}
@@ -170,7 +173,7 @@ export const PinCard = memo(function PinCard({
             </div>
 
             {/* URL Preview */}
-            {pin.status === 'completed' && pin.imageUrl && (
+            {isSuccess && pin.imageUrl && (
                 <div className="px-3 py-2 border-t border-gray-100">
                     <p
                         className="text-xs text-gray-400 truncate text-center"
@@ -186,10 +189,10 @@ export const PinCard = memo(function PinCard({
                 {/* Copy URL Button */}
                 <button
                     onClick={handleCopyUrl}
-                    disabled={pin.status !== 'completed'}
+                    disabled={!isSuccess}
                     className={cn(
                         "w-10 h-10 flex items-center justify-center rounded-lg border transition-colors",
-                        pin.status === 'completed'
+                        isSuccess
                             ? isCopied
                                 ? "border-green-300 bg-green-50 text-green-600"
                                 : "border-gray-200 bg-white text-gray-700 hover:bg-gray-100 active:bg-gray-200"
