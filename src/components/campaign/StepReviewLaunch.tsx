@@ -29,6 +29,7 @@ export function StepReviewLaunch() {
                 template_id: selectedTemplate.id,
                 name: campaignName,
                 csv_data: csvData.rows,
+                csv_url: csvData.storageUrl, // Pass storage URL if available
                 field_mapping: fieldMapping,
                 total_pins: csvData.rowCount,
             });

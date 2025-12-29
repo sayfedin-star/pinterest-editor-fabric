@@ -4,7 +4,8 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 
-import { TemplateListItem, getTemplatesWithElements, TemplateWithElements, deleteTemplate, duplicateTemplate, updateTemplateMetadata } from '@/lib/db/templates';
+import { TemplateListItem, TemplateWithElements, deleteTemplate, duplicateTemplate, updateTemplateMetadata } from '@/lib/db/templates';
+import { useTemplatesWithElements } from '@/hooks/useTemplates';
 import { extractDynamicData, DynamicDataSummary, DynamicDataFilter, matchesDynamicDataFilter } from '@/lib/utils/extractDynamicData';
 
 import { TemplateToolbar, ViewMode } from './TemplateToolbar';
@@ -16,11 +17,6 @@ import { DeleteConfirmModal } from './DeleteConfirmModal';
 
 export function TemplatesPageContainer() {
     const router = useRouter();
-    
-    // Data state
-    const [templates, setTemplates] = useState<TemplateWithElements[]>([]);
-    const [dynamicDataMap, setDynamicDataMap] = useState<Map<string, DynamicDataSummary>>(new Map());
-    const [isLoading, setIsLoading] = useState(true);
     
     // Filter state
     const [searchQuery, setSearchQuery] = useState('');
@@ -41,6 +37,30 @@ export function TemplatesPageContainer() {
     const [deleteTemplateId, setDeleteTemplateId] = useState<string | null>(null);
     const [isDeleting, setIsDeleting] = useState(false);
     const [bulkDeleteMode, setBulkDeleteMode] = useState(false);
+
+    // React Query Filters
+    const filters = useMemo(() => ({
+        categoryId: selectedCategoryId || undefined,
+        tagIds: selectedTagIds.length > 0 ? selectedTagIds : undefined,
+        search: searchQuery || undefined,
+        isFeatured: isFeatured || undefined,
+    }), [selectedCategoryId, selectedTagIds, searchQuery, isFeatured]);
+
+    // Data Fetching with Caching
+    const { data: templates = [], isLoading, refetch } = useTemplatesWithElements(filters);
+    
+    // Derived State: Dynamic Data Map
+    const dynamicDataMap = useMemo(() => {
+        const dataMap = new Map<string, DynamicDataSummary>();
+        for (const template of templates) {
+            const summary = extractDynamicData(template.elements || []);
+            dataMap.set(template.id, summary);
+        }
+        return dataMap;
+    }, [templates]);
+
+    // Alias for backward compatibility with existing handlers
+    const fetchTemplates = refetch;
     
     // Load view preference from localStorage
     useEffect(() => {
@@ -49,40 +69,6 @@ export function TemplatesPageContainer() {
             setViewMode(savedViewMode);
         }
     }, []);
-    
-    // Fetch templates - optimized single query
-    const fetchTemplates = useCallback(async () => {
-        setIsLoading(true);
-        try {
-            // Use optimized function that fetches elements in one query
-            const data = await getTemplatesWithElements({
-                categoryId: selectedCategoryId || undefined,
-                tagIds: selectedTagIds.length > 0 ? selectedTagIds : undefined,
-                search: searchQuery || undefined,
-                isFeatured: isFeatured || undefined,
-            });
-            
-            // Extract dynamic data from elements (in-memory, no extra queries)
-            const dataMap = new Map<string, DynamicDataSummary>();
-            for (const template of data) {
-                const summary = extractDynamicData(template.elements || []);
-                dataMap.set(template.id, summary);
-            }
-            
-            setTemplates(data);
-            setDynamicDataMap(dataMap);
-        } catch (error) {
-            console.error('Error fetching templates:', error);
-            toast.error('Failed to load templates');
-        } finally {
-            setIsLoading(false);
-        }
-    }, [selectedCategoryId, selectedTagIds, searchQuery, isFeatured]);
-    
-    // Initial fetch
-    useEffect(() => {
-        fetchTemplates();
-    }, [fetchTemplates]);
     
     // Apply dynamic data filter client-side
     const filteredTemplates = useMemo(() => {

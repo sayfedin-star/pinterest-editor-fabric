@@ -1,4 +1,5 @@
 import { inngest } from "@/inngest/client";
+import Papa from 'papaparse';
 import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
 import { v4 as uuidv4 } from 'uuid';
 import { Element } from '@/types/editor';
@@ -97,6 +98,7 @@ export const renderBatchFunction = inngest.createFunction(
                     user_id,
                     template_id,
                     csv_data,
+                    csv_url,
                     field_mapping,
                     templates (
                         elements,
@@ -113,6 +115,28 @@ export const renderBatchFunction = inngest.createFunction(
 
             // Fill in missing data from DB
             if (!csvRows) csvRows = campaign.csv_data as Record<string, string>[];
+            
+            // Download CSV if URL is present (and rows are empty)
+            if ((!csvRows || csvRows.length === 0) && (campaign as any).csv_url) {
+                try {
+                    const csvUrl = (campaign as any).csv_url;
+                    console.log(`[Inngest Render] Downloading CSV from ${csvUrl}`);
+                    const response = await fetch(csvUrl);
+                    if (response.ok) {
+                        const csvText = await response.text();
+                        const parseResult = Papa.parse(csvText, { header: true, skipEmptyLines: true });
+                        if (parseResult.data && parseResult.data.length > 0) {
+                            csvRows = parseResult.data as Record<string, string>[];
+                            console.log(`[Inngest Render] Downloaded and parsed ${csvRows.length} rows`);
+                        }
+                    } else {
+                         console.error(`[Inngest Render] Failed to download CSV: ${response.status} ${response.statusText}`);
+                    }
+                } catch (e) {
+                    console.error('[Inngest Render] Error fetching/parsing CSV:', e);
+                }
+            }
+
             if (!fieldMapping) fieldMapping = campaign.field_mapping as Record<string, string>;
             
             // Handle join structure
@@ -206,7 +230,7 @@ export const renderBatchFunction = inngest.createFunction(
             // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
             // Using a safe limit for serverless environment
             const PARALLEL_LIMIT = 2; 
-            const canvasPool = new CanvasPool(PARALLEL_LIMIT, canvasSize.width, canvasSize.height);
+            const canvasPool = new CanvasPool(PARALLEL_LIMIT, canvasSize!.width, canvasSize!.height);
 
             try {
                 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -264,8 +288,8 @@ export const renderBatchFunction = inngest.createFunction(
                     const canvas = canvasPool.acquire();
                     try {
                         const config = {
-                            width: canvasSize.width,
-                            height: canvasSize.height,
+                            width: canvasSize!.width,
+                            height: canvasSize!.height,
                             backgroundColor,
                             interactive: false,
                         };

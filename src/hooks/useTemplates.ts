@@ -3,7 +3,9 @@ import {
     getTemplates,
     getTemplate,
     deleteTemplate,
-    duplicateTemplate
+    duplicateTemplate,
+    getTemplatesWithElements,
+    TemplateFilters
 } from '@/lib/db/templates';
 import { isSupabaseConfigured } from '@/lib/supabase';
 import { toast } from 'sonner';
@@ -17,6 +19,7 @@ export const templateKeys = {
     list: (filters: string) => [...templateKeys.lists(), { filters }] as const,
     details: () => [...templateKeys.all, 'detail'] as const,
     detail: (id: string) => [...templateKeys.details(), id] as const,
+    withElements: (filters?: TemplateFilters) => [...templateKeys.lists(), 'with-elements', filters] as const,
 };
 
 /**
@@ -32,6 +35,23 @@ export function useTemplates() {
             return getTemplates();
         },
         enabled: isSupabaseConfigured(),
+    });
+}
+
+/**
+ * Fetch templates with elements (heavy query)
+ * Optimized with React Query caching
+ */
+export function useTemplatesWithElements(filters?: TemplateFilters) {
+    return useQuery({
+        queryKey: templateKeys.withElements(filters),
+        queryFn: async () => {
+            if (!isSupabaseConfigured()) return [];
+            return getTemplatesWithElements(filters);
+        },
+        enabled: isSupabaseConfigured(),
+        staleTime: 1000 * 60 * 5, // Cache for 5 minutes (heavy data)
+        gcTime: 1000 * 60 * 30,   // Keep in memory for 30 minutes
     });
 }
 

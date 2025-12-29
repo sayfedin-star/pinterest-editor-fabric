@@ -40,7 +40,7 @@ export function useCampaigns() {
 
             const { data, error } = await supabase
                 .from('campaigns')
-                .select('*')
+                .select('id, name, template_id, status, total_pins, generated_pins, created_at, updated_at')
                 .order('created_at', { ascending: false });
 
             if (error) throw error;

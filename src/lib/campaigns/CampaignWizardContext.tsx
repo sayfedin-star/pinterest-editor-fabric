@@ -15,6 +15,7 @@ export interface CSVData {
     fileName: string;
     rowCount: number;
     sourceUrl?: string;  // URL for CSV imported from URL
+    storageUrl?: string; // URL for CSV uploaded to Supabase Storage
 }
 
 export interface FieldMapping {

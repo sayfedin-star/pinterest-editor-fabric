@@ -19,6 +19,7 @@ export interface CreateCampaignData {
     template_snapshot?: TemplateSnapshot[]; // NEW
     name: string;
     csv_data: Record<string, unknown>[];
+    csv_url?: string; // NEW: URL to CSV in storage
     field_mapping: FieldMapping;
     total_pins: number;
     pinterest_board_id?: string;
@@ -78,7 +79,8 @@ export async function createCampaign(data: CreateCampaignData): Promise<DbCampai
             distribution_mode: data.distribution_mode || 'sequential',
             template_snapshot: data.template_snapshot || null,
             name: data.name,
-            csv_data: data.csv_data,
+            csv_data: data.csv_url ? [] : data.csv_data, // Don't store data if we have URL
+            csv_url: data.csv_url || null,
             field_mapping: data.field_mapping,
             total_pins: data.total_pins,
             pinterest_board_id: data.pinterest_board_id || null,
@@ -133,37 +135,7 @@ export async function getCampaigns(): Promise<CampaignListItem[]> {
             return [];
         }
 
-        if (!campaigns || campaigns.length === 0) {
-            return [];
-        }
-
-        // Get actual pin counts from generated_pins table for each campaign
-        const campaignIds = campaigns.map(c => c.id);
-        const { data: pinCounts, error: countError } = await supabase
-            .from('generated_pins')
-            .select('campaign_id')
-            .in('campaign_id', campaignIds);
-
-        if (countError) {
-            console.error('Error fetching pin counts:', countError);
-            // Fall back to cached generated_pins
-            return campaigns;
-        }
-
-        // Count pins per campaign
-        const actualCounts: Record<string, number> = {};
-        campaignIds.forEach(id => actualCounts[id] = 0);
-        if (pinCounts) {
-            pinCounts.forEach(pin => {
-                actualCounts[pin.campaign_id] = (actualCounts[pin.campaign_id] || 0) + 1;
-            });
-        }
-
-        // Return campaigns with actual pin counts
-        return campaigns.map(campaign => ({
-            ...campaign,
-            generated_pins: actualCounts[campaign.id] ?? campaign.generated_pins
-        }));
+        return campaigns || [];
     } catch (error) {
         console.error('Error fetching campaigns:', error);
         return [];

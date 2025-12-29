@@ -3,6 +3,8 @@
 import React, { useState, useRef, useCallback } from 'react';
 import { Upload, FileSpreadsheet, X, Eye, AlertCircle, Check, Link2, Loader2, HelpCircle, ChevronDown, ChevronUp, FileText, Table } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { supabase } from '@/lib/supabase';
+import Papa from 'papaparse';
 import { useCampaignWizard } from '@/lib/campaigns/CampaignWizardContext';
 import { parseCSVFile, getPreviewRows } from '@/lib/utils/csvParser';
 import { fetchCsvFromUrl, validateCsvUrl } from '@/lib/utils/csvUrlParser';
@@ -67,22 +69,44 @@ export function StepUploadCSV() {
         setError(null);
 
         try {
+            // 1. Parse for validation and preview
             const result = await parseCSVFile(file);
 
             if (result.success) {
+                // 2. Upload to Supabase Storage
+                const { data: { user } } = await supabase.auth.getUser();
+                if (!user) throw new Error('You must be logged in to upload files');
+
+                const timestamp = Date.now();
+                // Sanitize filename
+                const sanitizedName = file.name.replace(/[^a-zA-Z0-9.-]/g, '_');
+                const path = `${user.id}/${timestamp}-${sanitizedName}`;
+
+                const { error: uploadError } = await supabase.storage
+                    .from('campaign-uploads')
+                    .upload(path, file);
+
+                if (uploadError) throw uploadError;
+
+                const { data: { publicUrl } } = supabase.storage
+                    .from('campaign-uploads')
+                    .getPublicUrl(path);
+
                 setCSVData({
                     headers: result.headers,
                     rows: result.data,
                     fileName: file.name,
                     rowCount: result.rowCount,
+                    storageUrl: publicUrl,
                 });
                 setShowPreview(true);
             } else {
                 setError(result.error || 'Failed to parse CSV');
                 setCSVData(null);
             }
-        } catch {
-            setError('Failed to read file');
+        } catch (err) {
+            console.error('Upload error:', err);
+            setError(err instanceof Error ? err.message : 'Failed to upload file');
             setCSVData(null);
         } finally {
             setIsLoading(false);
@@ -100,12 +124,41 @@ export function StepUploadCSV() {
             const result = await fetchCsvFromUrl(urlInput);
 
             if (result.success) {
+                // Upload imported data to storage to save DB space
+                const { data: { user } } = await supabase.auth.getUser();
+                
+                let storageUrl: string | undefined;
+
+                if (user) {
+                    // Convert back to CSV string
+                    const csvString = Papa.unparse(result.data);
+                    const blob = new Blob([csvString], { type: 'text/csv' });
+                    
+                    const timestamp = Date.now();
+                    const path = `${user.id}/${timestamp}-import.csv`;
+
+                    const { error: uploadError } = await supabase.storage
+                        .from('campaign-uploads')
+                        .upload(path, blob);
+
+                    if (!uploadError) {
+                         const { data } = supabase.storage
+                            .from('campaign-uploads')
+                            .getPublicUrl(path);
+                         storageUrl = data.publicUrl;
+                    } else {
+                        console.error('Failed to upload imported CSV:', uploadError);
+                        throw new Error('Failed to save imported CSV to storage');
+                    }
+                }
+
                 setCSVData({
                     headers: result.headers,
                     rows: result.data,
                     fileName: `Imported from URL`,
                     rowCount: result.rowCount,
                     sourceUrl: result.sourceUrl,
+                    storageUrl,
                 });
                 setShowPreview(true);
             } else {
