@@ -541,6 +541,25 @@ export function syncElementToFabric(
                 extFabric._originalText = textUpdates.text;
             }
         }
+
+        // Fix: Update Group background size if dimensions changed
+        if (fabricObject instanceof fabric.Group) {
+            const bgRect = fabricObject.getObjects().find(o => o instanceof fabric.Rect) as fabric.Rect | undefined;
+            // Re-calculate dimensions (needed after text update)
+            targetTextbox.initDimensions();
+            
+            if (bgRect) {
+                const padding = textUpdates.backgroundPadding ?? storedEl?.backgroundPadding ?? 0;
+                bgRect.set({
+                    width: (targetTextbox.width || 0) + padding * 2,
+                    height: (targetTextbox.height || 0) + padding * 2,
+                    left: -padding,
+                    top: -padding
+                });
+                // Mark group as dirty
+                fabricObject.addWithUpdate(); 
+            }
+        }
     }
 
 

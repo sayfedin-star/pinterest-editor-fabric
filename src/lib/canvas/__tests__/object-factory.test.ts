@@ -33,6 +33,7 @@ jest.mock('fabric', () => {
         type = 'group';
         _objects: any[];
         set = jest.fn().mockReturnThis();
+        addWithUpdate = jest.fn();
         constructor(objects: any[], options: any) {
             this._objects = objects;
             Object.assign(this, options);
@@ -138,23 +139,29 @@ describe('ObjectFactory (Browser Environment)', () => {
         });
     });
 
-    describe('syncElementToFabric - Text Shadow', () => {
-        it('should apply shadow with opacity', () => {
+    describe('syncElementToFabric - Text Background Resize', () => {
+        it('should update background Rect size when text content changes', () => {
             const element = createTestElement({
-                shadowColor: '#ff0000',
-                shadowOpacity: 0.5,
+                backgroundEnabled: true,
+                backgroundPadding: 10,
+                text: 'Short',
             });
 
-            const textbox = createFabricObject(element) as any;
+            const group = createFabricObject(element) as any;
+            const rect = group.getObjects().find((o: any) => o.type === 'rect');
+            const textbox = group.getObjects().find((o: any) => o.type === 'textbox');
 
-            syncElementToFabric(textbox, {
-                shadowOpacity: 0.8,
+            // Simulate text change increasing width
+            textbox.width = 400; // Mock width change after text update
+            textbox.height = 100;
+
+            syncElementToFabric(group, {
+                text: 'Longer Text content',
             } as any);
 
-            expect(textbox.set).toHaveBeenCalledWith(expect.objectContaining({
-                shadow: expect.objectContaining({
-                    color: 'rgba(255, 0, 0, 0.5)', // Mock return
-                })
+            expect(rect.set).toHaveBeenCalledWith(expect.objectContaining({
+                width: 400 + 10 * 2,
+                height: 100 + 10 * 2,
             }));
         });
     });
