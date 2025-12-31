@@ -156,6 +156,13 @@ export class CanvasPool {
     }
 
     /**
+     * Alias for drain() to maintain compatibility with server-side usage
+     */
+    cleanup(): void {
+        this.drain();
+    }
+
+    /**
      * Get pool statistics
      */
     getStats() {

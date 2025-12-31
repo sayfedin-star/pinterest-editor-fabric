@@ -15,6 +15,14 @@ import {
 } from '@/types/editor';
 import { generateId } from '@/lib/utils';
 import { generateUniqueName } from '@/lib/utils/nameValidation';
+import {
+    duplicateElementLogic,
+    reorderElementsLogic,
+    moveElementForwardLogic,
+    moveElementBackwardLogic,
+    moveElementToFrontLogic,
+    moveElementToBackLogic
+} from '@/lib/utils/elementOperations';
 
 
 interface EditorState {
@@ -217,35 +225,7 @@ export const useEditorStore = create(
                 const element = state.elements.find((el) => el.id === id);
                 if (!element) return;
 
-                const newElement = {
-                    ...cloneDeep(element),
-                    id: generateId(),
-                    x: element.x + 20,
-                    y: element.y + 20,
-                    zIndex: state.elements.length
-                };
-
-                // For image elements, assign a new unique name and dynamicSource
-                if (newElement.type === 'image') {
-                    const unique = generateUniqueName(state.elements, 'image');
-                    newElement.name = unique.name;
-                    if ((newElement as ImageElement).isDynamic) {
-                        (newElement as ImageElement).dynamicSource = unique.fieldName;
-                    }
-                }
-                // For text elements, assign a new unique name and dynamicField
-                else if (newElement.type === 'text') {
-                    const unique = generateUniqueName(state.elements, 'text');
-                    newElement.name = unique.name;
-                    if ((newElement as TextElement).isDynamic) {
-                        (newElement as TextElement).dynamicField = unique.fieldName;
-                        (newElement as TextElement).text = `{{${unique.fieldName}}}`;
-                    }
-                }
-                // For other types (shapes), append Copy
-                else {
-                    newElement.name = `${element.name} Copy`;
-                }
+                const newElement = duplicateElementLogic(element, state.elements);
 
                 state.addElement(newElement);
                 state.pushHistory();
@@ -342,82 +322,33 @@ export const useEditorStore = create(
 
             // Reorder operations
             reorderElements: (fromIndex, toIndex) => {
-                set((state) => {
-                    const sortedElements = [...state.elements].sort((a, b) => b.zIndex - a.zIndex);
-                    const [removed] = sortedElements.splice(fromIndex, 1);
-                    sortedElements.splice(toIndex, 0, removed);
-
-                    // Update zIndex for all elements
-                    const updatedElements = sortedElements.map((el, idx) => ({
-                        ...el,
-                        zIndex: sortedElements.length - 1 - idx
-                    }));
-
-                    return { elements: updatedElements };
-                });
+                set((state) => ({
+                    elements: reorderElementsLogic(state.elements, fromIndex, toIndex)
+                }));
             },
 
             moveElementForward: (id) => {
-                const elements = get().elements;
-                const element = elements.find((el) => el.id === id);
-                if (!element) return;
-
-                const maxZ = Math.max(...elements.map((el) => el.zIndex));
-                if (element.zIndex >= maxZ) return;
-
-                const targetZ = element.zIndex + 1;
-                const updatedElements = elements.map((el) => {
-                    if (el.id === id) return { ...el, zIndex: targetZ };
-                    if (el.zIndex === targetZ) return { ...el, zIndex: el.zIndex - 1 };
-                    return el;
-                }) as Element[];
-
-                set({ elements: updatedElements });
+                set((state) => ({
+                    elements: moveElementForwardLogic(state.elements, id)
+                }));
             },
 
             moveElementBackward: (id) => {
-                const elements = get().elements;
-                const element = elements.find((el) => el.id === id);
-                if (!element || element.zIndex <= 0) return;
-
-                const targetZ = element.zIndex - 1;
-                const updatedElements = elements.map((el) => {
-                    if (el.id === id) return { ...el, zIndex: targetZ };
-                    if (el.zIndex === targetZ) return { ...el, zIndex: el.zIndex + 1 };
-                    return el;
-                }) as Element[];
-
-                set({ elements: updatedElements });
+                set((state) => ({
+                    elements: moveElementBackwardLogic(state.elements, id)
+                }));
             },
 
             moveElementToFront: (id) => {
-                const elements = get().elements;
-                const element = elements.find((el) => el.id === id);
-                if (!element) return;
-
-                const maxZ = Math.max(...elements.map((el) => el.zIndex));
-                const updatedElements = elements.map((el) =>
-                    el.id === id ? { ...el, zIndex: maxZ + 1 } : el
-                ) as Element[];
-
-                set({ elements: updatedElements });
+                set((state) => ({
+                    elements: moveElementToFrontLogic(state.elements, id)
+                }));
             },
 
             moveElementToBack: (id) => {
-                const currentElements = get().elements;
-                const movedElements = currentElements.map((el) => ({
-                    ...el,
-                    zIndex: el.id === id ? -1 : el.zIndex + 1
+                set((state) => ({
+                    elements: moveElementToBackLogic(state.elements, id)
                 }));
-
-                // Normalize zIndex to start from 0
-                const minZ = Math.min(...movedElements.map((el) => el.zIndex));
-                const normalizedElements = movedElements.map((el) => ({
-                    ...el,
-                    zIndex: el.zIndex - minZ
-                })) as Element[];
-
-                set({ elements: normalizedElements });
             },
 
             alignElement: (id, alignment) => {

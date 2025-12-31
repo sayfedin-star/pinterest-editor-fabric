@@ -223,7 +223,7 @@ export const renderBatchFunction = inngest.createFunction(
             // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
             const { renderTemplate, setServerImageCache, clearServerImageCache, getDynamicImageUrl } = await import('@/lib/fabric/engine');
             const { prepareElementsForServerRendering } = await import('@/lib/fabric/serverEngine');
-            const { CanvasPool } = await import('@/lib/fabric/CanvasPool');
+            const { CanvasPool } = await import('@/lib/canvas/CanvasPool');
 
              // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
             // FONT FIX
@@ -243,7 +243,11 @@ export const renderBatchFunction = inngest.createFunction(
             // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
             // Match Inngest plan concurrency limit
             const PARALLEL_LIMIT = 5; 
-            const canvasPool = new CanvasPool(PARALLEL_LIMIT, canvasSize!.width, canvasSize!.height);
+            const canvasPool = new CanvasPool({
+                maxSize: PARALLEL_LIMIT,
+                defaultWidth: canvasSize!.width,
+                defaultHeight: canvasSize!.height
+            });
 
             try {
                 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━

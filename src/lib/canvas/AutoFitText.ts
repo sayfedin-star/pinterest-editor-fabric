@@ -63,7 +63,6 @@ export function calculateBestFitFontSize(
     // On server: use provided 'config.fabricContext'
     const fabricImpl = config.fabricContext || fabric;
     const TextboxClass = fabricImpl.Textbox;
-    const ShadowClass = fabricImpl.Shadow;
 
     // SSR Check: If no custom context provided, and no DOM, abort
     if (!config.fabricContext && typeof document === 'undefined') {

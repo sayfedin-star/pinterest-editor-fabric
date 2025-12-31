@@ -71,12 +71,6 @@ export function createFabricObject(element: Element): fabric.FabricObject | null
                 opacity: element.opacity ?? 1,
             });
 
-            textbox.set({
-                left: element.x,
-                top: element.y,
-                angle: element.rotation || 0,
-                opacity: element.opacity ?? 1,
-            });
             obj = textbox;
             
             // Auto-Fit (Phase 2): Apply on creation if enabled
@@ -313,21 +307,8 @@ export function syncElementToFabric(
     }
 
     // Text-specific property handling
-    // Handle both direct Textbox and Group (when backgroundEnabled creates a group)
-    let targetTextbox: fabric.Textbox | null = null;
-    
     if (fabricObject instanceof fabric.Textbox) {
-        targetTextbox = fabricObject;
-    } else if (fabricObject instanceof fabric.Group) {
-        // Text with background is a Group containing [bgRect, textbox]
-        const objects = fabricObject.getObjects();
-        const textboxInGroup = objects.find(o => o instanceof fabric.Textbox) as fabric.Textbox | undefined;
-        if (textboxInGroup) {
-            targetTextbox = textboxInGroup;
-        }
-    }
-    
-    if (targetTextbox) {
+        const targetTextbox = fabricObject;
         const textUpdates = updates as Partial<TextElement>;
         const storedEl = extFabric._elementData as TextElement | undefined;
 
@@ -461,25 +442,12 @@ export function syncElementToFabric(
                             });
                         }
                     });
-                }
-            }
-            
-            // If Textbox is in a group (background enabled), we need to update the group
-            if (fabricObject instanceof fabric.Group) {
-                // Mark group as dirty so it re-renders
-                fabricObject.set('dirty', true);
-                
-                // Update group coordinates
-                fabricObject.setCoords();
-                
-                // Request render for the group
-                fabricObject.canvas?.requestRenderAll();
             }
         }
-        
+    }
+            
         // Text transform - requires re-applying to display text
         if (textUpdates.textTransform !== undefined || textUpdates.text !== undefined || textUpdates.previewText !== undefined || textUpdates.isDynamic !== undefined) {
-            const storedEl = extFabric._elementData as TextElement | undefined;
             const isDynamic = textUpdates.isDynamic ?? storedEl?.isDynamic ?? false;
             const previewText = textUpdates.previewText ?? storedEl?.previewText;
             

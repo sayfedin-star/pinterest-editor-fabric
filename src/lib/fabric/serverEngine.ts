@@ -9,7 +9,7 @@
  */
 
 import * as fabricNode from 'fabric/node';
-import { StaticCanvas, Rect, FabricImage, Textbox, Circle, Path, Shadow, Group, Color } from 'fabric/node';
+import { StaticCanvas, Rect, FabricImage, Textbox, Circle, Path, Color } from 'fabric/node';
 import { Element, TextElement, ImageElement, ShapeElement, FrameElement } from '@/types/editor';
 import * as path from 'path';
 import * as fs from 'fs';
