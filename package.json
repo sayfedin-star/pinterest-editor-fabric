@@ -69,5 +69,10 @@
     "tailwindcss": "^4",
     "ts-jest": "^29.4.6",
     "typescript": "^5"
+  },
+  "overrides": {
+    "jest-environment-jsdom": {
+      "canvas": "^2.11.2"
+    }
   }
 }
