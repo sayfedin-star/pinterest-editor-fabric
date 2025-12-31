@@ -69,7 +69,7 @@ export const renderBatchFunction = inngest.createFunction(
     { 
         id: "render-batch-campaign",
         concurrency: {
-            limit: 2, // Limit concurrent campaigns processing to avoid memory exhaustion
+            limit: 5, // Match Inngest Hobby plan: 5 concurrent steps
         }
     },
     { event: "campaign/render.requested" },
@@ -241,8 +241,8 @@ export const renderBatchFunction = inngest.createFunction(
             // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
             // PHASE 1: Create canvas pool
             // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-            // Using a safe limit for serverless environment
-            const PARALLEL_LIMIT = 2; 
+            // Match Inngest plan concurrency limit
+            const PARALLEL_LIMIT = 5; 
             const canvasPool = new CanvasPool(PARALLEL_LIMIT, canvasSize!.width, canvasSize!.height);
 
             try {
