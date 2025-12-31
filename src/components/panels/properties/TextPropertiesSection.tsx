@@ -6,6 +6,7 @@ import { useEditorStore } from '@/stores/editorStore';
 import { TextElement } from '@/types/editor';
 import { cn } from '@/lib/utils';
 import { SectionHeader } from './shared';
+import { applyAutoFitDirect } from '@/lib/canvas/CanvasManager';
 
 interface TextPropertiesSectionProps {
     element: TextElement;
@@ -243,7 +244,101 @@ export const TextPropertiesSection = memo(function TextPropertiesSection({ eleme
                     />
                 </div>
 
-                {/* Manual Font Size - ALWAYS visible now */}
+                {/* Auto Fit Text */}
+                <div className="space-y-2 pt-2 border-t border-gray-100">
+                    <div className="flex items-center justify-between">
+                        <label className="flex items-center gap-1.5 text-sm font-medium text-gray-700">
+                            <Zap className={cn("w-3.5 h-3.5", liveElement.autoFit ? "text-amber-500 fill-amber-500" : "text-gray-400")} />
+                            Auto Fit Text
+                        </label>
+                        <button
+                            onClick={() => handleChange({ 
+                                autoFit: !liveElement.autoFit,
+                                // Set defaults if enabling
+                                minFontSize: liveElement.minFontSize || 10,
+                                maxFontSize: liveElement.maxFontSize || 100
+                            })}
+                            className={cn(
+                                "relative w-9 h-5 rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-amber-200",
+                                liveElement.autoFit ? "bg-amber-500" : "bg-gray-300"
+                            )}
+                        >
+                            <span className={cn(
+                                "absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow-sm transition-transform",
+                                liveElement.autoFit ? "translate-x-4" : "translate-x-0"
+                            )} />
+                        </button>
+                    </div>
+
+                    {liveElement.autoFit && (
+                        <div className="grid grid-cols-2 gap-3 p-2 bg-amber-50/50 rounded-lg border border-amber-100 animate-in fade-in slide-in-from-top-1">
+                            <div className="space-y-1">
+                                <label className="text-[10px] text-gray-500 uppercase font-semibold">Min Size</label>
+                                <div className="relative">
+                                    <input
+                                        type="number"
+                                        min={1}
+                                        max={liveElement.maxFontSize || 500}
+                                        value={liveElement.minFontSize || 10}
+                                        onChange={(e) => handleChange({ minFontSize: parseInt(e.target.value) || 10 })}
+                                        className="w-full px-2 py-1.5 text-sm border border-amber-200 rounded bg-white focus:border-amber-400 focus:ring-2 focus:ring-amber-200 outline-none"
+                                    />
+                                    <span className="absolute right-2 top-1.5 text-xs text-gray-400">px</span>
+                                </div>
+                            </div>
+                            <div className="space-y-1">
+                                <label className="text-[10px] text-gray-500 uppercase font-semibold">Max Size</label>
+                                <div className="relative">
+                                    <input
+                                        type="number"
+                                        min={liveElement.minFontSize || 1}
+                                        max={500}
+                                        value={liveElement.maxFontSize || 100}
+                                        onChange={(e) => handleChange({ maxFontSize: parseInt(e.target.value) || 100 })}
+                                        className="w-full px-2 py-1.5 text-sm border border-amber-200 rounded bg-white focus:border-amber-400 focus:ring-2 focus:ring-amber-200 outline-none"
+                                    />
+                                    <span className="absolute right-2 top-1.5 text-xs text-gray-400">px</span>
+                                </div>
+                            </div>
+                            
+                            {/* Max Lines Input */}
+                            <div className="col-span-2 space-y-1">
+                                <label className="text-[10px] text-gray-500 uppercase font-semibold">Max Lines (Optional)</label>
+                                <div className="relative">
+                                    <input
+                                        type="number"
+                                        min={1}
+                                        value={liveElement.maxLines || ''}
+                                        placeholder="Any"
+                                        onChange={(e) => {
+                                            const val = parseInt(e.target.value);
+                                            handleChange({ maxLines: isNaN(val) ? undefined : val });
+                                        }}
+                                        className="w-full px-2 py-1.5 text-sm border border-amber-200 rounded bg-white focus:border-amber-400 focus:ring-2 focus:ring-amber-200 outline-none"
+                                    />
+                                </div>
+                            </div>
+
+                            {/* Apply Button */}
+                             <div className="col-span-2 pt-1">
+                                <button
+                                    onClick={() => {
+                                        // DIRECT approach: call canvas manager directly
+                                        console.log('[Apply Auto Fit] Clicked, calling applyAutoFitDirect for:', element.id);
+                                        const newFontSize = applyAutoFitDirect(element.id);
+                                        console.log('[Apply Auto Fit] Result:', newFontSize);
+                                    }}
+                                    className="w-full py-1.5 text-xs font-medium text-amber-700 bg-amber-100 hover:bg-amber-200 rounded transition-colors flex items-center justify-center gap-1"
+                                >
+                                    <Zap className="w-3 h-3" />
+                                    Apply Auto Fit
+                                </button>
+                            </div>
+                        </div>
+                    )}
+                </div>
+
+                {/* Manual Font Size - ALWAYS visible now (disabled if auto-fit) */}
                 <div className="flex items-center justify-between">
                     <label className="text-sm text-gray-600">Font Size</label>
                     <div className="flex items-center gap-2">
@@ -253,7 +348,11 @@ export const TextPropertiesSection = memo(function TextPropertiesSection({ eleme
                             max={500}
                             value={liveElement.fontSize || 16}
                             onChange={(e) => handleChange({ fontSize: parseInt(e.target.value) || 16 })}
-                            className="w-20 px-3 py-1.5 text-sm border border-gray-200 rounded-lg bg-white focus:border-blue-400 focus:ring-2 focus:ring-blue-100 outline-none text-center"
+                            disabled={liveElement.autoFit}
+                            className={cn(
+                                "w-20 px-3 py-1.5 text-sm border border-gray-200 rounded-lg outline-none text-center",
+                                liveElement.autoFit ? "bg-gray-100 text-gray-400 cursor-not-allowed" : "bg-white focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+                            )}
                         />
                         <span className="text-xs text-gray-400">px</span>
                     </div>

@@ -1,0 +1,181 @@
+
+> pinterest-editor@0.1.0 test
+> jest src/lib/canvas/__tests__/AutoFitText.test.ts --runInBand --no-cache --colors=false
+
+  console.log
+    [AutoFit Debug] Size: 55, Height: 62.14999999999999, Constraint: 100
+
+      at fits (src/lib/canvas/AutoFitText.ts:77:17)
+
+  console.log
+    [AutoFit Debug] Size: 78, Height: 88.13999999999999, Constraint: 100
+
+      at fits (src/lib/canvas/AutoFitText.ts:77:17)
+
+  console.log
+    [AutoFit Debug] Size: 89, Height: 100.57, Constraint: 100
+
+      at fits (src/lib/canvas/AutoFitText.ts:77:17)
+
+  console.log
+    [AutoFit Debug] Size: 95, Height: 107.35, Constraint: 100
+
+      at fits (src/lib/canvas/AutoFitText.ts:77:17)
+
+  console.log
+    [AutoFit Debug] Size: 92, Height: 103.96, Constraint: 100
+
+      at fits (src/lib/canvas/AutoFitText.ts:77:17)
+
+  console.log
+    [AutoFit Debug] Size: 90, Height: 101.69999999999999, Constraint: 100
+
+      at fits (src/lib/canvas/AutoFitText.ts:77:17)
+
+  console.log
+    [AutoFit Debug] Size: 55, Height: 807.9499999999997, Constraint: 100
+
+      at fits (src/lib/canvas/AutoFitText.ts:77:17)
+
+  console.log
+    [AutoFit Debug] Size: 32, Height: 253.11999999999998, Constraint: 100
+
+      at fits (src/lib/canvas/AutoFitText.ts:77:17)
+
+  console.log
+    [AutoFit Debug] Size: 20, Height: 103.95999999999998, Constraint: 100
+
+      at fits (src/lib/canvas/AutoFitText.ts:77:17)
+
+  console.log
+    [AutoFit Debug] Size: 14, Height: 53.788, Constraint: 100
+
+      at fits (src/lib/canvas/AutoFitText.ts:77:17)
+
+  console.log
+    [AutoFit Debug] Size: 17, Height: 65.314, Constraint: 100
+
+      at fits (src/lib/canvas/AutoFitText.ts:77:17)
+
+  console.log
+    [AutoFit Debug] Size: 18, Height: 93.564, Constraint: 100
+
+      at fits (src/lib/canvas/AutoFitText.ts:77:17)
+
+  console.log
+    [AutoFit Debug] Size: 19, Height: 98.762, Constraint: 100
+
+      at fits (src/lib/canvas/AutoFitText.ts:77:17)
+
+  console.log
+    [AutoFit Debug] Size: 55, Height: 62.14999999999999, Constraint: 50
+
+      at fits (src/lib/canvas/AutoFitText.ts:77:17)
+
+  console.log
+    [AutoFit Debug] Size: 32, Height: 36.16, Constraint: 50
+
+      at fits (src/lib/canvas/AutoFitText.ts:77:17)
+
+  console.log
+    [AutoFit Debug] Size: 43, Height: 48.589999999999996, Constraint: 50
+
+      at fits (src/lib/canvas/AutoFitText.ts:77:17)
+
+  console.log
+    [AutoFit Debug] Size: 49, Height: 55.37, Constraint: 50
+
+      at fits (src/lib/canvas/AutoFitText.ts:77:17)
+
+  console.log
+    [AutoFit Debug] Size: 46, Height: 51.98, Constraint: 50
+
+      at fits (src/lib/canvas/AutoFitText.ts:77:17)
+
+  console.log
+    [AutoFit Debug] Size: 44, Height: 49.72, Constraint: 50
+
+      at fits (src/lib/canvas/AutoFitText.ts:77:17)
+
+  console.log
+    [AutoFit Debug] Size: 45, Height: 50.849999999999994, Constraint: 50
+
+      at fits (src/lib/canvas/AutoFitText.ts:77:17)
+
+  console.log
+    [AutoFit Debug] Size: 55, Height: 62.14999999999999, Constraint: 10
+
+      at fits (src/lib/canvas/AutoFitText.ts:77:17)
+
+  console.log
+    [AutoFit Debug] Size: 32, Height: 36.16, Constraint: 10
+
+      at fits (src/lib/canvas/AutoFitText.ts:77:17)
+
+  console.log
+    [AutoFit Debug] Size: 20, Height: 22.599999999999998, Constraint: 10
+
+      at fits (src/lib/canvas/AutoFitText.ts:77:17)
+
+  console.log
+    [AutoFit Debug] Size: 14, Height: 15.819999999999999, Constraint: 10
+
+      at fits (src/lib/canvas/AutoFitText.ts:77:17)
+
+  console.log
+    [AutoFit Debug] Size: 11, Height: 12.43, Constraint: 10
+
+      at fits (src/lib/canvas/AutoFitText.ts:77:17)
+
+  console.log
+    [AutoFit Debug] Size: 10, Height: 11.299999999999999, Constraint: 10
+
+      at fits (src/lib/canvas/AutoFitText.ts:77:17)
+
+FAIL src/lib/canvas/__tests__/AutoFitText.test.ts
+  AutoFitText
+    calculateBestFitFontSize
+      × should return maxFontSize for short text that fits easily (1422 ms)
+      √ should reduce font size for long text (105 ms)
+      × should respect minFontSize even if text overflows (330 ms)
+      √ should handle small containers gracefully (12 ms)
+
+  ● AutoFitText › calculateBestFitFontSize › should return maxFontSize for short text that fits easily
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: 100
+    Received: 89
+
+    [0m [90m 21 |[39m             [36mconst[39m size [33m=[39m calculateBestFitFontSize([32m'Hello'[39m[33m,[39m [35m200[39m[33m,[39m [35m100[39m[33m,[39m baseConfig)[33m;[39m
+     [90m 22 |[39m             [90m// It should maximize the size up to maxFontSize[39m
+    [31m[1m>[22m[39m[90m 23 |[39m             expect(size)[33m.[39mtoBe([35m100[39m)[33m;[39m
+     [90m    |[39m                          [31m[1m^[22m[39m
+     [90m 24 |[39m         })[33m;[39m
+     [90m 25 |[39m
+     [90m 26 |[39m         it([32m'should reduce font size for long text'[39m[33m,[39m () [33m=>[39m {[0m
+
+      at Object.<anonymous> (src/lib/canvas/__tests__/AutoFitText.test.ts:23:26)
+
+  ● AutoFitText › calculateBestFitFontSize › should respect minFontSize even if text overflows
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: 10
+    Received: 45
+
+    [0m [90m 34 |[39m             [36mconst[39m hugeText [33m=[39m [32m'A'[39m[33m.[39mrepeat([35m1000[39m)[33m;[39m
+     [90m 35 |[39m             [36mconst[39m size [33m=[39m calculateBestFitFontSize(hugeText[33m,[39m [35m50[39m[33m,[39m [35m50[39m[33m,[39m baseConfig)[33m;[39m
+    [31m[1m>[22m[39m[90m 36 |[39m             expect(size)[33m.[39mtoBe([35m10[39m)[33m;[39m [90m// Should be floor at min[39m
+     [90m    |[39m                          [31m[1m^[22m[39m
+     [90m 37 |[39m         })[33m;[39m
+     [90m 38 |[39m
+     [90m 39 |[39m         it([32m'should handle small containers gracefully'[39m[33m,[39m () [33m=>[39m {[0m
+
+      at Object.<anonymous> (src/lib/canvas/__tests__/AutoFitText.test.ts:36:26)
+
+Test Suites: 1 failed, 1 total
+Tests:       2 failed, 2 passed, 4 total
+Snapshots:   0 total
+Time:        3.98 s
+Ran all test suites matching src/lib/canvas/__tests__/AutoFitText.test.ts.

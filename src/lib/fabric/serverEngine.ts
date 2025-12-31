@@ -8,6 +8,7 @@
  * Custom fonts are bundled via next.config.ts outputFileTracingIncludes.
  */
 
+import * as fabricNode from 'fabric/node';
 import { StaticCanvas, Rect, FabricImage, Textbox, Circle, Path, Shadow, Group, Color } from 'fabric/node';
 import { Element, TextElement, ImageElement, ShapeElement, FrameElement } from '@/types/editor';
 import * as path from 'path';
@@ -69,6 +70,9 @@ export interface RenderConfig {
 export interface FieldMapping {
     [templateField: string]: string;
 }
+
+// Import Auto-Fit calculation (shared with client)
+import { calculateBestFitFontSize } from '../canvas/AutoFitText';
 
 // Debug flag - set to false in production for performance
 const DEBUG = false;
@@ -691,8 +695,45 @@ async function renderElement(
         
         const safeFontFamily = await getServerSafeFont(textEl.fontFamily || 'Arial', String(fontWeight), fontStyle);
         
-        // Calculate font size
-        const fontSize = textEl.fontSize || 16;
+        // Calculate font size - use auto-fit if enabled
+        let fontSize = textEl.fontSize || 16;
+        
+        // AUTO-FIT: Calculate optimal font size if enabled
+        if (textEl.autoFit && textEl.width && textEl.height) {
+            const autoFitFontSize = calculateBestFitFontSize(text, textEl.width, textEl.height, {
+                fontFamily: safeFontFamily,
+                fontWeight: String(fontWeight),
+                fontStyle: fontStyle,
+                lineHeight: textEl.lineHeight || 1.2,
+                textAlign: textEl.align || 'left',
+                charSpacing: (textEl.letterSpacing || 0) * 10,
+                minFontSize: textEl.minFontSize || 10,
+                maxFontSize: textEl.maxFontSize || 500,
+                maxLines: textEl.maxLines,
+                
+                // Style properties for accurate measurement
+                stroke: textEl.stroke,
+                strokeWidth: textEl.strokeWidth || 0,
+                paintFirst: 'fill', // Default
+                shadow: textEl.shadowColor ? new Shadow({
+                    color: new Color(textEl.shadowColor).setAlpha(textEl.shadowOpacity ?? 1).toRgba(),
+                    blur: textEl.shadowBlur ?? 5,
+                    offsetX: textEl.shadowOffsetX ?? 2,
+                    offsetY: textEl.shadowOffsetY ?? 2
+                }) : null,
+                underline: textEl.textDecoration === 'underline',
+                linethrough: textEl.textDecoration === 'line-through',
+                textBackgroundColor: textEl.backgroundColor,
+                
+                // Context for server-side execution
+                fabricContext: fabricNode,
+            });
+            
+            if (DEBUG) {
+                console.log(`[ServerEngine] AUTO-FIT: "${text.substring(0, 30)}..." fontSize ${fontSize} -> ${autoFitFontSize}`);
+            }
+            fontSize = autoFitFontSize;
+        }
         
         const textbox = new Textbox(text, {
             ...commonOptions,

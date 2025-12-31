@@ -4,7 +4,7 @@ import React, { useRef, useEffect, useState, useCallback } from 'react';
 import { useEditorStore } from '@/stores/editorStore';
 import { useSnappingSettingsStore } from '@/stores/snappingSettingsStore';
 import { Element, TextElement } from '@/types/editor';
-import { CanvasManager, CanvasConfig } from '@/lib/canvas/CanvasManager';
+import { CanvasManager, CanvasConfig, setGlobalCanvasManager } from '@/lib/canvas/CanvasManager';
 import { useSynchronizationBridge } from '@/hooks/useSynchronizationBridge';
 import { detectElementChange } from '@/lib/canvas/elementChangeDetection';
 import { DimensionBadge } from './DimensionBadge';
@@ -170,6 +170,7 @@ export function EditorCanvasV2({ containerWidth, containerHeight }: EditorCanvas
         manager.initialize(canvasElRef.current, config);
 
         canvasManagerRef.current = manager;
+        setGlobalCanvasManager(manager); // <-- NEW: Set global reference for direct access
         setCanvasManagerInstance(manager); // Trigger re-render so useSynchronizationBridge can subscribe
         setIsCanvasReady(true);
 
@@ -183,6 +184,7 @@ export function EditorCanvasV2({ containerWidth, containerHeight }: EditorCanvas
 
         return () => {
             console.log('[EditorCanvas.v2] Cleaning up CanvasManager');
+            setGlobalCanvasManager(null); // <-- NEW: Clear global reference
             manager.destroy();
             canvasManagerRef.current = null;
             // Clear canvas ref on cleanup

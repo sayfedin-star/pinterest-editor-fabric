@@ -17,6 +17,7 @@ import {
 import { createFabricObject, syncElementToFabric, syncFabricToElement, loadFabricImage } from './ObjectFactory';
 import { PerformanceMonitor } from './PerformanceMonitor';
 import { ViewportManager } from './ViewportManager';
+import { applyAutoFit } from './AutoFitText';
 
 // Re-export types for backward compatibility
 export type { CanvasConfig, ElementChangeCallback, SelectionChangeCallback };
@@ -687,4 +688,137 @@ export class CanvasManager {
     getPerformanceMetrics(): PerformanceMetrics {
         return this.performanceMonitor.getMetrics();
     }
+
+    /**
+     * Apply auto-fit to a specific element by ID.
+     * This is the DIRECT approach - no store sync loop involved.
+     * 
+     * @param elementId The element ID to apply auto-fit to
+     * @returns The calculated font size, or null if failed
+     */
+    applyAutoFitToElement(elementId: string): number | null {
+        if (!this.canvas) {
+            console.error('[CanvasManager] Cannot apply auto-fit: canvas not initialized');
+            return null;
+        }
+
+        const fabricObject = this.elementMap.get(elementId);
+        if (!fabricObject) {
+            console.error('[CanvasManager] Element not found:', elementId);
+            return null;
+        }
+
+
+        // applyAutoFit is imported at top of file
+        
+        // Get the textbox (either direct or from group)
+        let targetTextbox: fabric.Textbox | null = null;
+        if (fabricObject instanceof fabric.Textbox) {
+            targetTextbox = fabricObject;
+        } else if (fabricObject instanceof fabric.Group) {
+            const objects = fabricObject.getObjects();
+            targetTextbox = objects.find(o => o instanceof fabric.Textbox) as fabric.Textbox | null;
+        }
+
+        if (!targetTextbox) {
+            console.error('[CanvasManager] No Textbox found for element:', elementId);
+            return null;
+        }
+
+        // Get element data from store
+        const element = useEditorStore.getState().elements.find(el => el.id === elementId);
+        if (!element || element.type !== 'text') {
+            console.error('[CanvasManager] Element not found in store or not text:', elementId);
+            return null;
+        }
+
+        const textEl = element as import('@/types/editor').TextElement;
+        
+        console.log('[CanvasManager.applyAutoFitToElement] Starting...', {
+            elementId,
+            width: textEl.width,
+            height: textEl.height,
+            minFontSize: textEl.minFontSize,
+            maxFontSize: textEl.maxFontSize,
+            maxLines: textEl.maxLines,
+        });
+
+        // Apply auto-fit directly
+        const newFontSize = applyAutoFit(
+            targetTextbox,
+            textEl.width,
+            textEl.height,
+            textEl.minFontSize || 10,
+            textEl.maxFontSize || 500,
+            textEl.maxLines
+        );
+
+        console.log('[CanvasManager.applyAutoFitToElement] Result:', { newFontSize });
+
+        // If in a group, update the group
+        if (fabricObject instanceof fabric.Group) {
+            fabricObject.set('dirty', true);
+            fabricObject.setCoords();
+            
+            const bgRect = fabricObject.getObjects().find(o => o instanceof fabric.Rect) as fabric.Rect | undefined;
+            if (bgRect && targetTextbox) {
+                const padding = textEl.backgroundPadding ?? 0;
+                bgRect.set({
+                    width: (targetTextbox.width || 0) + padding * 2,
+                    height: (targetTextbox.height || 0) + padding * 2,
+                });
+            }
+        }
+
+        // Force render
+        this.canvas.requestRenderAll();
+
+        // Update store with new font size
+        if (newFontSize !== null) {
+            useEditorStore.getState().updateElement(elementId, { fontSize: newFontSize });
+        }
+
+        return newFontSize ?? targetTextbox.fontSize ?? null;
+    }
+}
+
+// =============================================================================
+// GLOBAL SINGLETON
+// =============================================================================
+
+/**
+ * Global reference to the active CanvasManager instance.
+ * This allows direct access from anywhere in the app (e.g., the Apply Auto Fit button).
+ */
+let _globalCanvasManager: CanvasManager | null = null;
+
+/**
+ * Set the global canvas manager instance.
+ * Called by EditorCanvas when the manager is created.
+ */
+export function setGlobalCanvasManager(manager: CanvasManager | null): void {
+    _globalCanvasManager = manager;
+}
+
+/**
+ * Get the global canvas manager instance.
+ * Returns null if not initialized.
+ */
+export function getGlobalCanvasManager(): CanvasManager | null {
+    return _globalCanvasManager;
+}
+
+/**
+ * Direct function to apply auto-fit to an element.
+ * This is the simplest API for the Apply Auto Fit button.
+ * 
+ * @param elementId The element ID to apply auto-fit to
+ * @returns The calculated font size, or null if failed
+ */
+export function applyAutoFitDirect(elementId: string): number | null {
+    if (!_globalCanvasManager) {
+        console.error('[applyAutoFitDirect] No global canvas manager available');
+        return null;
+    }
+    return _globalCanvasManager.applyAutoFitToElement(elementId);
 }
