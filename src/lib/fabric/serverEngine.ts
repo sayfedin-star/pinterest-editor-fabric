@@ -707,7 +707,9 @@ async function renderElement(
                 lineHeight: textEl.lineHeight || 1.2,
                 textAlign: textEl.align || 'left',
                 charSpacing: (textEl.letterSpacing || 0) * 10,
-                minFontSize: textEl.minFontSize || 10,
+                // SWITCHBOARD BEHAVIOR: Use element.fontSize as minimum bound
+                // This is the user's base font size - auto-fit will calculate between [fontSize, maxFontSize]
+                minFontSize: textEl.fontSize || 16,
                 maxFontSize: textEl.maxFontSize || 500,
                 maxLines: textEl.maxLines,
                 

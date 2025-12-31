@@ -8,22 +8,22 @@ import { cn } from '@/lib/utils';
 
 export function SnappingToolbarButton() {
     const [isOpen, setIsOpen] = useState(false);
-    const magneticSnapping = useSnappingSettingsStore((s) => s.magneticSnapping);
-    const setMagneticSnapping = useSnappingSettingsStore((s) => s.setMagneticSnapping);
+    const enabled = useSnappingSettingsStore((s) => s.enabled);
+    const setEnabled = useSnappingSettingsStore((s) => s.setEnabled);
 
     return (
         <div className="relative">
             {/* Main Button */}
             <div className="flex items-center gap-0.5">
                 <button
-                    onClick={() => setMagneticSnapping(!magneticSnapping)}
+                    onClick={() => setEnabled(!enabled)}
                     className={cn(
                         "flex items-center justify-center w-7 h-7 rounded-md transition-all duration-150",
-                        magneticSnapping
+                        enabled
                             ? "bg-pink-100 text-pink-600 hover:bg-pink-200"
                             : "text-gray-400 hover:bg-gray-100 hover:text-gray-600"
                     )}
-                    title={magneticSnapping ? 'Snapping On' : 'Snapping Off'}
+                    title={enabled ? 'Snapping On' : 'Snapping Off'}
                 >
                     <Magnet className="w-4 h-4" />
                 </button>

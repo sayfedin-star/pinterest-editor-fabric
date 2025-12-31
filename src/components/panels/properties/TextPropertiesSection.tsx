@@ -338,9 +338,11 @@ export const TextPropertiesSection = memo(function TextPropertiesSection({ eleme
                     )}
                 </div>
 
-                {/* Manual Font Size - ALWAYS visible now (disabled if auto-fit) */}
+                {/* Font Size - ALWAYS editable (sets base/minimum for auto-fit) */}
                 <div className="flex items-center justify-between">
-                    <label className="text-sm text-gray-600">Font Size</label>
+                    <label className="text-sm text-gray-600">
+                        {liveElement.autoFit ? 'Min Font Size' : 'Font Size'}
+                    </label>
                     <div className="flex items-center gap-2">
                         <input
                             type="number"
@@ -348,11 +350,7 @@ export const TextPropertiesSection = memo(function TextPropertiesSection({ eleme
                             max={500}
                             value={liveElement.fontSize || 16}
                             onChange={(e) => handleChange({ fontSize: parseInt(e.target.value) || 16 })}
-                            disabled={liveElement.autoFit}
-                            className={cn(
-                                "w-20 px-3 py-1.5 text-sm border border-gray-200 rounded-lg outline-none text-center",
-                                liveElement.autoFit ? "bg-gray-100 text-gray-400 cursor-not-allowed" : "bg-white focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
-                            )}
+                            className="w-20 px-3 py-1.5 text-sm border border-gray-200 rounded-lg outline-none text-center bg-white focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
                         />
                         <span className="text-xs text-gray-400">px</span>
                     </div>

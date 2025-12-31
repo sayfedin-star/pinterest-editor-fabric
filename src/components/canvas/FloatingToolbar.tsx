@@ -30,8 +30,8 @@ export function FloatingToolbar() {
     const canvasSize = useEditorStore((s) => s.canvasSize);
 
     // Snapping
-    const magneticSnapping = useSnappingSettingsStore((s) => s.magneticSnapping);
-    const setMagneticSnapping = useSnappingSettingsStore((s) => s.setMagneticSnapping);
+    const snappingEnabled = useSnappingSettingsStore((s) => s.enabled);
+    const setSnappingEnabled = useSnappingSettingsStore((s) => s.setEnabled);
 
     const handleZoomIn = () => setZoom(Math.min(zoom + 0.1, 3));
     const handleZoomOut = () => setZoom(Math.max(zoom - 0.1, 0.1));
@@ -68,16 +68,16 @@ export function FloatingToolbar() {
             {/* Snapping */}
             <div className="flex items-center px-1.5 border-r border-gray-200/60 h-6 gap-1">
                  <button
-                    onClick={() => setMagneticSnapping(!magneticSnapping)}
+                    onClick={() => setSnappingEnabled(!snappingEnabled)}
                     className={cn(
                         "w-8 h-8 flex items-center justify-center rounded-full transition-all duration-200",
-                         magneticSnapping 
+                         snappingEnabled 
                             ? "bg-linear-to-br from-pink-50 to-pink-100 text-pink-600 shadow-sm ring-1 ring-pink-200" 
                             : "text-gray-500 hover:bg-gray-100/80 hover:text-gray-700"
                     )}
                     title="Magnetic Snapping"
                  >
-                    <Magnet className={cn("w-4 h-4 transition-transform", magneticSnapping ? "scale-110" : "")} />
+                    <Magnet className={cn("w-4 h-4 transition-transform", snappingEnabled ? "scale-110" : "")} />
                 </button>
             </div>
 

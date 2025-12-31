@@ -81,9 +81,7 @@ export function useSynchronizationBridge(canvasManager: CanvasManager | null) {
                 previousSnappingEnabled = state.snappingEnabled;
 
                 canvasManager.updateSnappingSettings({
-                    magneticSnapping: state.snappingEnabled,
-                    showGuideLines: state.snappingEnabled,
-                    magneticSnapThreshold: 5,
+                    enabled: state.snappingEnabled,
                 // eslint-disable-next-line @typescript-eslint/no-explicit-any
                 } as any);
             }
@@ -129,6 +127,54 @@ export function useSynchronizationBridge(canvasManager: CanvasManager | null) {
         // Initialize previous zIndex map
         const initialElements = useEditorStore.getState().elements;
         prevZIndexesRef.current = new Map(initialElements.map(el => [el.id, el.zIndex]));
+
+        return () => unsubscribe();
+    }, [canvasManager]);
+
+    // Direction 5: Selection Sync (Store → Canvas)
+    // FIX: When clicking a layer in the panel, select it on canvas too
+    useEffect(() => {
+        if (!canvasManager) return;
+
+        // Track previous selection to avoid loops
+        let previousSelectedIds: string[] = [];
+        let isUpdatingFromCanvas = false;
+
+        // Subscribe to store selection changes
+        const unsubscribe = useEditorStore.subscribe((state) => {
+            // Skip if this update came from canvas (avoid loop)
+            if (isUpdatingFromCanvas) return;
+
+            const currentIds = state.selectedIds;
+            
+            // Check if selection actually changed
+            const changed = 
+                currentIds.length !== previousSelectedIds.length ||
+                currentIds.some((id, i) => id !== previousSelectedIds[i]);
+
+            if (changed) {
+                if (DEBUG_SYNC) console.log('[SynchronizationBridge] Store → Canvas selection:', currentIds);
+                
+                // Get current canvas selection
+                const canvasSelection = canvasManager.getSelection();
+                
+                // Only update canvas if it doesn't match store
+                const canvasMatches = 
+                    canvasSelection.length === currentIds.length &&
+                    canvasSelection.every((id, i) => id === currentIds[i]);
+
+                if (!canvasMatches) {
+                    isUpdatingFromCanvas = true;
+                    canvasManager.setSelection(currentIds);
+                    isUpdatingFromCanvas = false;
+                }
+                
+                previousSelectedIds = [...currentIds];
+            }
+        });
+
+        // Initialize with current selection
+        previousSelectedIds = [...useEditorStore.getState().selectedIds];
 
         return () => unsubscribe();
     }, [canvasManager]);

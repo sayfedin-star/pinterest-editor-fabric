@@ -3,56 +3,44 @@ import { useSnappingSettingsStore, SnappingSettings } from '@/stores/snappingSet
 
 // --- Types ---
 
-type MagneticZone = 'far' | 'near' | 'lock' | 'none';
-
-interface GuideLine {
-    x?: number;
-    y?: number;
-    x1?: number;
-    x2?: number;
-    y1?: number;
-    y2?: number;
-    zone: MagneticZone;
-    isBoundary?: boolean;
-}
-
-// Optimized Cache Stucture
 interface SnapCandidate {
     value: number;
     type: 'edge' | 'center';
-    priority: number; // 3=Center, 2=Edge, 1=Grid/Other
-    isBoundary: boolean;
-    sourceObject?: fabric.FabricObject; // To avoid self-snapping
+    priority: number; // 3=Center, 2=Edge
 }
 
 interface SnapResult {
     diff: number;
     target: number;
-    zone: MagneticZone;
     candidate: SnapCandidate;
+}
+
+interface GuideLine {
+    x?: number;
+    y?: number;
 }
 
 export class AlignmentGuides {
     private canvas: fabric.Canvas;
     private ctx: CanvasRenderingContext2D;
     private enabled: boolean = true;
-    
+
     // State
     private isDragging: boolean = false;
     private activeObject: fabric.FabricObject | null = null;
-    
+
     // Cache
     private verticalCache: SnapCandidate[] = [];
     private horizontalCache: SnapCandidate[] = [];
 
-    // Physics state
-    private lastMouseX: number = 0;
-    private lastMouseY: number = 0;
+    // Snap lock state (prevents jittery snapping)
     private isSnappedX: boolean = false;
     private isSnappedY: boolean = false;
-    private escapeVelocityThreshold: number = 20; // High threshold for "sticky" stable feel
+    private lastMouseX: number = 0;
+    private lastMouseY: number = 0;
+    private escapeVelocity: number = 15;
 
-    // Visuals (Single Frame Only)
+    // Visual guides for current frame
     private verticalLines: GuideLine[] = [];
     private horizontalLines: GuideLine[] = [];
 
@@ -96,18 +84,17 @@ export class AlignmentGuides {
         if (!enabled) this.clear();
     }
 
-    // --- Caching Phase ---
+    // --- Cache Building (once per drag start) ---
 
     private onMouseDown(e: fabric.TPointerEventInfo) {
         if (!this.enabled || !e.target) return;
-        if (!this.settings.magneticSnapping && !this.settings.showGuideLines) return;
+        if (!this.settings.enabled) return;
 
         this.activeObject = e.target;
         this.isDragging = true;
         this.isSnappedX = false;
         this.isSnappedY = false;
-        
-        // Pure calculation, no rendering
+
         this.buildSnapCache(e.target);
     }
 
@@ -119,45 +106,41 @@ export class AlignmentGuides {
         const canvasWidth = this.canvas.width / zoom;
         const canvasHeight = this.canvas.height / zoom;
 
-        // 1. Center Lines (Best for alignment)
-        if (this.settings.canvasCenterLines) {
-            this.verticalCache.push({ value: canvasWidth / 2, type: 'center', priority: 3, isBoundary: false });
-            this.horizontalCache.push({ value: canvasHeight / 2, type: 'center', priority: 3, isBoundary: false });
+        // Canvas center lines
+        if (this.settings.snapToCanvasCenter) {
+            this.verticalCache.push({ value: canvasWidth / 2, type: 'center', priority: 3 });
+            this.horizontalCache.push({ value: canvasHeight / 2, type: 'center', priority: 3 });
         }
 
-        // 2. Boundaries
+        // Canvas boundaries
         if (this.settings.snapToBoundaries) {
-            this.verticalCache.push({ value: 0, type: 'edge', priority: 2, isBoundary: true });
-            this.verticalCache.push({ value: canvasWidth, type: 'edge', priority: 2, isBoundary: true });
-            this.horizontalCache.push({ value: 0, type: 'edge', priority: 2, isBoundary: true });
-            this.horizontalCache.push({ value: canvasHeight, type: 'edge', priority: 2, isBoundary: true });
+            this.verticalCache.push({ value: 0, type: 'edge', priority: 2 });
+            this.verticalCache.push({ value: canvasWidth, type: 'edge', priority: 2 });
+            this.horizontalCache.push({ value: 0, type: 'edge', priority: 2 });
+            this.horizontalCache.push({ value: canvasHeight, type: 'edge', priority: 2 });
         }
 
-        // 3. Objects
-        // Only checking visible objects, no advanced culling needed for typical usage (<100 objs)
-        // Caching here is O(N) once per drag, which is negligible.
-        const objects = this.canvas.getObjects().filter(obj => 
-            obj !== activeObj && 
-            obj.visible && 
+        // Other objects
+        const objects = this.canvas.getObjects().filter(obj =>
+            obj !== activeObj &&
+            obj.visible &&
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             !(obj as any).name?.includes('guide')
         );
 
-        if (this.settings.snapToObjects) {
-            for (const obj of objects) {
-                const rect = obj.getBoundingRect();
+        for (const obj of objects) {
+            const rect = obj.getBoundingRect();
 
-                if (this.settings.objectCenters) {
-                    this.verticalCache.push({ value: rect.left + rect.width / 2, type: 'center', priority: 3, isBoundary: false, sourceObject: obj });
-                    this.horizontalCache.push({ value: rect.top + rect.height / 2, type: 'center', priority: 3, isBoundary: false, sourceObject: obj });
-                }
+            if (this.settings.snapToObjectCenters) {
+                this.verticalCache.push({ value: rect.left + rect.width / 2, type: 'center', priority: 3 });
+                this.horizontalCache.push({ value: rect.top + rect.height / 2, type: 'center', priority: 3 });
+            }
 
-                if (this.settings.objectEdges) {
-                    this.verticalCache.push({ value: rect.left, type: 'edge', priority: 2, isBoundary: false, sourceObject: obj });
-                    this.verticalCache.push({ value: rect.left + rect.width, type: 'edge', priority: 2, isBoundary: false, sourceObject: obj });
-                    this.horizontalCache.push({ value: rect.top, type: 'edge', priority: 2, isBoundary: false, sourceObject: obj });
-                    this.horizontalCache.push({ value: rect.top + rect.height, type: 'edge', priority: 2, isBoundary: false, sourceObject: obj });
-                }
+            if (this.settings.snapToObjectEdges) {
+                this.verticalCache.push({ value: rect.left, type: 'edge', priority: 2 });
+                this.verticalCache.push({ value: rect.left + rect.width, type: 'edge', priority: 2 });
+                this.horizontalCache.push({ value: rect.top, type: 'edge', priority: 2 });
+                this.horizontalCache.push({ value: rect.top + rect.height, type: 'edge', priority: 2 });
             }
         }
     }
@@ -168,28 +151,29 @@ export class AlignmentGuides {
         this.clear();
     }
 
-    // --- Main Loop (Optimized) ---
+    // --- Main Snap Logic ---
 
     private onObjectMoving(e: fabric.BasicTransformEvent<fabric.TPointerEvent> & { target: fabric.FabricObject }) {
         if (!this.enabled || !this.isDragging || !this.activeObject) return;
+        if (!this.settings.enabled) return;
 
         const activeObj = e.target;
         const rect = activeObj.getBoundingRect();
-        
-        // Physics: Velocity
+
+        // Track mouse velocity for escape detection
         const pointer = e.e instanceof MouseEvent ? { x: e.e.clientX, y: e.e.clientY } : { x: 0, y: 0 };
         const velX = Math.abs(pointer.x - this.lastMouseX);
         const velY = Math.abs(pointer.y - this.lastMouseY);
         this.lastMouseX = pointer.x;
         this.lastMouseY = pointer.y;
 
-        // Physics: Break free
-        if (this.isSnappedX && velX > this.escapeVelocityThreshold) this.isSnappedX = false;
-        if (this.isSnappedY && velY > this.escapeVelocityThreshold) this.isSnappedY = false;
+        // Break free from snap if moving fast
+        if (this.isSnappedX && velX > this.escapeVelocity) this.isSnappedX = false;
+        if (this.isSnappedY && velY > this.escapeVelocity) this.isSnappedY = false;
 
         this.clear();
 
-        // Snap Calculation
+        // Points to check for snapping
         const activeXPoints = [
             { value: rect.left, type: 'edge' as const },
             { value: rect.left + rect.width / 2, type: 'center' as const },
@@ -202,64 +186,40 @@ export class AlignmentGuides {
             { value: rect.top + rect.height, type: 'edge' as const }
         ];
 
+        // Find best snap
         let bestSnapX: SnapResult | null = null;
+        let bestSnapY: SnapResult | null = null;
+
         if (!this.isSnappedX || velX <= 2) {
-             bestSnapX = this.findBestSnap(activeXPoints, this.verticalCache);
-             if (!bestSnapX && this.settings.gridSnapping) {
-                 bestSnapX = this.findGridSnap(rect.left, this.settings.gridSize);
-             }
+            bestSnapX = this.findBestSnap(activeXPoints, this.verticalCache);
         }
 
-        let bestSnapY: SnapResult | null = null;
         if (!this.isSnappedY || velY <= 2) {
             bestSnapY = this.findBestSnap(activeYPoints, this.horizontalCache);
-            if (!bestSnapY && this.settings.gridSnapping) {
-                bestSnapY = this.findGridSnap(rect.top, this.settings.gridSize);
-            }
         }
 
-        // Apply
-        let snappedX = false;
-        let snappedY = false;
-
-        if (bestSnapX && bestSnapX.zone === 'lock') {
+        // Apply snap
+        if (bestSnapX) {
             activeObj.set({ left: activeObj.left! + bestSnapX.diff });
             this.isSnappedX = true;
-            snappedX = true;
-            
-            this.verticalLines.push({
-                x: bestSnapX.target,
-                y1: -5000,
-                y2: 5000,
-                zone: 'lock',
-                isBoundary: bestSnapX.candidate.isBoundary
-            });
+            this.verticalLines.push({ x: bestSnapX.target });
         }
 
-        if (bestSnapY && bestSnapY.zone === 'lock') {
+        if (bestSnapY) {
             activeObj.set({ top: activeObj.top! + bestSnapY.diff });
             this.isSnappedY = true;
-            snappedY = true;
-
-            this.horizontalLines.push({
-                y: bestSnapY.target,
-                x1: -5000,
-                x2: 5000,
-                zone: 'lock',
-                isBoundary: bestSnapY.candidate.isBoundary
-            });
+            this.horizontalLines.push({ y: bestSnapY.target });
         }
 
-        if (snappedX || snappedY) {
+        if (bestSnapX || bestSnapY) {
             activeObj.setCoords();
-            // NO Celebration trigger
         }
 
         this.canvas.requestRenderAll();
     }
 
-    private findBestSnap(sourcePoints: { value: number, type: 'edge'|'center' }[], candidates: SnapCandidate[]): SnapResult | null {
-        const threshold = this.settings.magneticSnapThreshold || 10;
+    private findBestSnap(sourcePoints: { value: number, type: 'edge' | 'center' }[], candidates: SnapCandidate[]): SnapResult | null {
+        const threshold = this.settings.snapThreshold;
         let best: SnapResult | null = null;
         let maxScore = -1;
 
@@ -269,36 +229,19 @@ export class AlignmentGuides {
                 const dist = Math.abs(diff);
 
                 if (dist < threshold) {
-                    const score = (candidate.priority * 100) - dist;
+                    // Prefer center-to-center snaps, then closest distance
+                    const typeBonus = (candidate.type === 'center' && source.type === 'center') ? 50 : 0;
+                    const score = (candidate.priority * 100) + typeBonus - dist;
+
                     if (score > maxScore) {
                         maxScore = score;
-                        best = {
-                            diff,
-                            target: candidate.value,
-                            zone: 'lock',
-                            candidate
-                        };
+                        best = { diff, target: candidate.value, candidate };
                     }
                 }
             }
         }
-        return best;
-    }
 
-    private findGridSnap(currentVal: number, gridSize: number): SnapResult | null {
-        const threshold = this.settings.magneticSnapThreshold || 10;
-        const snappedVal = Math.round(currentVal / gridSize) * gridSize;
-        const diff = snappedVal - currentVal;
-        
-        if (Math.abs(diff) < threshold) {
-            return {
-                diff,
-                target: snappedVal,
-                zone: 'lock',
-                candidate: { value: snappedVal, type: 'edge', priority: 1, isBoundary: false }
-            };
-        }
-        return null;
+        return best;
     }
 
     private clear() {
@@ -309,12 +252,13 @@ export class AlignmentGuides {
         }
     }
 
-    // --- Rendering (Minimal) ---
+    // --- Rendering ---
 
     private draw() {
         if (this.verticalLines.length === 0 && this.horizontalLines.length === 0) return;
 
         this.ctx.save();
+
         const zoom = this.canvas.getZoom();
         const vpt = this.canvas.viewportTransform;
         if (vpt) {
@@ -322,20 +266,20 @@ export class AlignmentGuides {
         }
 
         const lineWidth = 1 / zoom;
-        const color = this.settings.guideColor || '#F63E97';
-        
+        const color = this.settings.guideColor;
+
         this.ctx.lineWidth = lineWidth;
         this.ctx.strokeStyle = color;
+        this.ctx.setLineDash([4 / zoom, 4 / zoom]);
 
-        // Simple Lines, No Dashes, No Glows, Just Draw
         this.ctx.beginPath();
         for (const v of this.verticalLines) {
             this.ctx.moveTo(v.x!, -5000);
             this.ctx.lineTo(v.x!, 5000);
         }
         for (const h of this.horizontalLines) {
-             this.ctx.moveTo(-5000, h.y!);
-             this.ctx.lineTo(5000, h.y!);
+            this.ctx.moveTo(-5000, h.y!);
+            this.ctx.lineTo(5000, h.y!);
         }
         this.ctx.stroke();
 

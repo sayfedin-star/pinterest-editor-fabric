@@ -366,6 +366,10 @@ export class CanvasManager {
 
         console.log('[CanvasManager] Replacing all elements:', elements.length);
 
+        // CRITICAL FIX: Preserve current selection to restore after replacement
+        // This prevents losing focus when editing properties like Preview Text
+        const currentSelectionIds = this.getSelection();
+
         // Get current element IDs
         const currentIds = new Set(this.elementMap.keys());
         const newIds = new Set(elements.map(el => el.id));
@@ -417,6 +421,17 @@ export class CanvasManager {
 
         // Re-apply Canva-style controls to all objects after replacement
         applyCanvaStyleControls(this.canvas);
+
+        // CRITICAL FIX: Restore selection after all elements have been replaced
+        // This prevents losing focus when editing properties like Preview Text
+        if (currentSelectionIds.length > 0) {
+            // Use requestAnimationFrame to ensure DOM is updated before restoring selection
+            requestAnimationFrame(() => {
+                if (this.canvas) {
+                    this.setSelection(currentSelectionIds);
+                }
+            });
+        }
 
         this.debouncedRender();
         console.log('[CanvasManager] Element replacement complete');
@@ -520,6 +535,53 @@ export class CanvasManager {
     }
 
     /**
+     * Set selection programmatically (used for Layer panel → Canvas sync)
+     * FIX: Enables selecting elements by clicking on layer items
+     */
+    setSelection(ids: string[]): void {
+        if (!this.canvas) {
+            console.warn('[CanvasManager] Cannot set selection: canvas not initialized');
+            return;
+        }
+
+        // Clear current selection first
+        this.canvas.discardActiveObject();
+
+        if (ids.length === 0) {
+            this.canvas.requestRenderAll();
+            return;
+        }
+
+        // Get fabric objects for the given IDs
+        const objectsToSelect: fabric.FabricObject[] = [];
+        for (const id of ids) {
+            const fabricObject = this.elementMap.get(id);
+            if (fabricObject) {
+                objectsToSelect.push(fabricObject);
+            }
+        }
+
+        if (objectsToSelect.length === 0) {
+            this.canvas.requestRenderAll();
+            return;
+        }
+
+        if (objectsToSelect.length === 1) {
+            // Single selection
+            this.canvas.setActiveObject(objectsToSelect[0]);
+        } else {
+            // Multi-selection
+            const selection = new fabric.ActiveSelection(objectsToSelect, {
+                canvas: this.canvas,
+            });
+            this.canvas.setActiveObject(selection);
+        }
+
+        this.canvas.requestRenderAll();
+        console.log('[CanvasManager] Selection set programmatically:', ids);
+    }
+
+    /**
      * Set zoom level (delegates to ViewportManager)
      */
     setZoom(zoom: number): void {
@@ -539,7 +601,7 @@ export class CanvasManager {
 
         // AlignmentGuides will be modified to support updateSettings()
         // For now, toggle enabled state
-        this.guides.setEnabled(settings.magneticSnapping);
+        this.guides.setEnabled(settings.enabled);
     }
 
     /**

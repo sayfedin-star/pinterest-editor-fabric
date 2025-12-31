@@ -224,12 +224,12 @@ export function EditorCanvasV2({ containerWidth, containerHeight }: EditorCanvas
                 
                 // Text changes that require full sync (structure changes)
                 if (prevEl?.type === 'text' && currEl?.type === 'text') {
-                    // previewText, isDynamic, and backgroundEnabled changes require full replacement
-                    // because they change the object structure (Group vs Textbox)
-                    if (prevEl.previewText !== currEl.previewText || 
-                        prevEl.isDynamic !== currEl.isDynamic) {
+                    // Only isDynamic changes require full replacement because they change
+                    // the object structure. previewText changes can be handled incrementally
+                    // via syncElementToFabric which updates the displayed text.
+                    if (prevEl.isDynamic !== currEl.isDynamic) {
                         needsFullSync = true;
-                        console.log('[EditorCanvas.v2] text structure changed, needs full sync');
+                        console.log('[EditorCanvas.v2] isDynamic changed, needs full sync');
                         break;
                     }
                 }

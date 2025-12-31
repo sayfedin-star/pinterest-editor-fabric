@@ -5,6 +5,7 @@ import dynamic from 'next/dynamic';
 import { useEditorStore } from '@/stores/editorStore';
 import { Hand } from 'lucide-react';
 import { EmptyCanvasState } from '@/components/canvas/EmptyCanvasState';
+import { ZoomControls } from '@/components/canvas/ZoomControls';
 
 // EditorCanvas is now the v2 architecture (renamed from EditorCanvas.v2)
 const EditorCanvas = dynamic(
@@ -193,9 +194,12 @@ export function CanvasArea() {
                 </div>
             </div>
             
+            {/* Zoom and Undo/Redo Controls (Bottom Right) */}
+            <ZoomControls />
+            
             {/* Pan Mode Indicator (Bottom Right) */}
             {isPanMode && (
-                 <div className="absolute bottom-4 right-4 z-50 bg-blue-600 text-white px-3 py-1.5 rounded-full shadow-lg text-xs font-medium flex items-center gap-2 animate-in fade-in slide-in-from-bottom-2">
+                 <div className="absolute bottom-16 right-4 z-50 bg-blue-600 text-white px-3 py-1.5 rounded-full shadow-lg text-xs font-medium flex items-center gap-2 animate-in fade-in slide-in-from-bottom-2">
                     <Hand className="w-3 h-3" />
                     Pan Mode Active
                 </div>

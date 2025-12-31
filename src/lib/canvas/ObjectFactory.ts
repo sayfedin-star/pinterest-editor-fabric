@@ -201,6 +201,7 @@ export function createFabricObject(element: Element): fabric.FabricObject | null
         obj.set({
             angle: element.rotation || 0,
             opacity: element.opacity ?? 1,
+            visible: element.visible !== false, // FIX: Apply visibility to Fabric object
             selectable: !element.locked,
             evented: !element.locked,
             // P2-1 FIX: Enable object caching for better render performance
@@ -304,6 +305,11 @@ export function syncElementToFabric(
             fabricObject.set('selectable', !updates.locked);
             fabricObject.set('evented', !updates.locked);
         }
+    }
+
+    // Visibility state - FIX: Sync visibility to Fabric object
+    if (updates.visible !== undefined) {
+        fabricObject.set('visible', updates.visible);
     }
 
     // Text-specific property handling
@@ -410,7 +416,8 @@ export function syncElementToFabric(
             // Get FIXED target dimensions from element data (not auto-calculated)
             const targetWidth = textUpdates.width ?? storedEl?.width ?? fabricObject.width ?? 200;
             const targetHeight = textUpdates.height ?? storedEl?.height ?? fabricObject.height ?? 100;
-            const minSize = textUpdates.minFontSize ?? storedEl?.minFontSize ?? 10;
+            // SWITCHBOARD BEHAVIOR: Use fontSize as minimum bound (the user's base value)
+            const minSize = textUpdates.fontSize ?? storedEl?.fontSize ?? 16;
             const maxSize = textUpdates.maxFontSize ?? storedEl?.maxFontSize ?? 500;
             const maxLines = textUpdates.maxLines ?? storedEl?.maxLines;
             
@@ -421,30 +428,12 @@ export function syncElementToFabric(
             
             console.log('[AutoFit] Result:', { newFontSize, previousFontSize: targetTextbox.fontSize });
             
-            // If font size changed, update the stored element data AND sync to store
-            if (newFontSize !== null) {
-                // Update local cache
-                if (extFabric._elementData) {
-                    (extFabric._elementData as TextElement).fontSize = newFontSize;
-                }
-                
-                // CRITICAL: Directly sync back to Zustand store to update UI
-                // Import dynamically to avoid circular dependency issues
-                const elementId = extFabric.id;
-                if (elementId) {
-                    // Use dynamic import to get store (avoids circular deps)
-                    import('@/stores/editorStore').then(({ useEditorStore }) => {
-                        const currentElement = useEditorStore.getState().elements.find(el => el.id === elementId);
-                        if (currentElement && currentElement.type === 'text') {
-                            console.log('[AutoFit] Syncing fontSize to store:', newFontSize);
-                            useEditorStore.getState().updateElement(elementId, { 
-                                fontSize: newFontSize 
-                            });
-                        }
-                    });
-            }
+            // SWITCHBOARD BEHAVIOR: Calculated font lives ONLY on Fabric object
+            // element.fontSize stays as the user's base value (minimum bound)
+            // No sync back to store - the Font Size UI shows base, not calculated
+            console.log('[AutoFit] Calculated font applied to Fabric only (no store sync):', newFontSize);
         }
-    }
+            
             
         // Text transform - requires re-applying to display text
         if (textUpdates.textTransform !== undefined || textUpdates.text !== undefined || textUpdates.previewText !== undefined || textUpdates.isDynamic !== undefined) {
@@ -560,20 +549,21 @@ export function syncFabricToElement(fabricObject: fabric.FabricObject): Element 
         if (storedElement && storedElement.type === 'text') {
             const storedText = storedElement as TextElement;
             
-            // CRITICAL FIX for Auto-Fit:
-            // When autoFit is enabled, preserve the user's INTENDED height, not Fabric's auto-shrunk height.
-            // But USE Fabric's calculated fontSize (which was updated by applyAutoFit).
-            const preserveHeight = storedText.autoFit && storedText.height > 0;
+            // SWITCHBOARD BEHAVIOR:
+            // - Height: ALWAYS use Fabric's height (captures resize operations)
+            // - FontSize: ALWAYS preserve stored value (base/minimum, never auto-modified)
+            // The calculated font lives only on Fabric object, never in the store
             
             return {
                 ...textElement,
                 // CRITICAL FIX: Preserve original text (including {{field}} placeholders)
-                // Without this, dragging/resizing would overwrite original text with display text
                 text: storedText.text,
-                // For auto-fit: preserve user's intended height, use Fabric's calculated fontSize
-                height: preserveHeight ? storedText.height : textElement.height,
-                // fontSize comes from textElement (extracted from Fabric), NOT storedText
-                // This ensures auto-fit's calculated value is synced to the store
+                // ALWAYS use Fabric's height - this captures resize operations correctly
+                // Whether autoFit is ON or OFF, resize should update the height
+                height: textElement.height,
+                // ALWAYS preserve stored fontSize - this is the base/minimum value
+                // Never sync Fabric's calculated fontSize back to store
+                fontSize: storedText.fontSize,
                 isDynamic: storedText.isDynamic,
                 dynamicField: storedText.dynamicField,
                 textTransform: storedText.textTransform,
