@@ -119,20 +119,7 @@ function hasPropertiesChanged(prev: Element, curr: Element): boolean {
             prev.textTransform !== curr.textTransform ||
             // Dynamic/preview
             prev.previewText !== curr.previewText ||
-            prev.isDynamic !== curr.isDynamic ||
-            // Background
-            prev.backgroundEnabled !== curr.backgroundEnabled ||
-            prev.backgroundColor !== curr.backgroundColor ||
-            prev.backgroundCornerRadius !== curr.backgroundCornerRadius ||
-            prev.backgroundPadding !== curr.backgroundPadding ||
-            // Effects
-            prev.shadowColor !== curr.shadowColor ||
-            prev.shadowBlur !== curr.shadowBlur ||
-            prev.shadowOffsetX !== curr.shadowOffsetX ||
-            prev.shadowOffsetY !== curr.shadowOffsetY ||
-            prev.stroke !== curr.stroke ||
-            prev.strokeWidth !== curr.strokeWidth ||
-            prev.hollowText !== curr.hollowText) {
+            prev.isDynamic !== curr.isDynamic) {
             return true;
         }
     }

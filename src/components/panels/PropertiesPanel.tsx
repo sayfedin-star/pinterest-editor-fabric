@@ -8,7 +8,6 @@ import {
     AppearanceSection,
     TextPropertiesSection,
     ImagePropertiesSection,
-    EffectsSection,
     TypographySection,
 } from './properties';
 
@@ -20,7 +19,6 @@ import {
  * - Appearance (opacity)
  * - Text properties (font, size, color, etc.)
  * - Image properties
- * - Effects (shadow, stroke, etc.)
  * 
  * NOTE: Layer order, alignment, and position controls are in the Arrange tab
  */
@@ -72,11 +70,6 @@ export function PropertiesPanel() {
             {/* Image Properties */}
             {isImage && (
                 <ImagePropertiesSection element={selectedElement as ImageElement} />
-            )}
-
-            {/* Effects (text only) */}
-            {isText && (
-                <EffectsSection element={selectedElement as TextElement} />
             )}
 
             {/* Hint to use Arrange tab */}

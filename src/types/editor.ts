@@ -30,21 +30,7 @@ export interface TextElement extends BaseElement {
   lineHeight: number;
   letterSpacing: number;
   textDecoration: "" | "underline" | "line-through";
-  // Effects
-  shadowColor?: string;
-  shadowBlur?: number;
-  shadowOffsetX?: number;
-  shadowOffsetY?: number;
-  shadowOpacity?: number;
-  stroke?: string;
-  strokeWidth?: number;
-  /** Hollow text - transparent fill with stroke outline */
-  hollowText?: boolean;
-  // Background box
-  backgroundEnabled?: boolean;
-  backgroundColor?: string;
-  backgroundCornerRadius?: number;
-  backgroundPadding?: number;
+  
   // Dynamic field - now supports any field name (text1, text2, etc.)
   isDynamic: boolean;
   dynamicField?: string;

@@ -712,18 +712,9 @@ async function renderElement(
                 maxLines: textEl.maxLines,
                 
                 // Style properties for accurate measurement
-                stroke: textEl.stroke,
-                strokeWidth: textEl.strokeWidth || 0,
                 paintFirst: 'fill', // Default
-                shadow: textEl.shadowColor ? new Shadow({
-                    color: new Color(textEl.shadowColor).setAlpha(textEl.shadowOpacity ?? 1).toRgba(),
-                    blur: textEl.shadowBlur ?? 5,
-                    offsetX: textEl.shadowOffsetX ?? 2,
-                    offsetY: textEl.shadowOffsetY ?? 2
-                }) : null,
                 underline: textEl.textDecoration === 'underline',
                 linethrough: textEl.textDecoration === 'line-through',
-                textBackgroundColor: textEl.backgroundColor,
                 
                 // Context for server-side execution
                 fabricContext: fabricNode,
@@ -740,7 +731,7 @@ async function renderElement(
             width: textEl.width,
             fontSize: fontSize,
             fontFamily: safeFontFamily,  // Use SAME font as measurement
-            fill: textEl.hollowText ? 'transparent' : (textEl.fill || '#000000'),
+            fill: textEl.fill || '#000000',
             textAlign: textEl.align || 'left',
             lineHeight: textEl.lineHeight || 1.2,
             charSpacing: (textEl.letterSpacing || 0) * 10,
@@ -755,52 +746,8 @@ async function renderElement(
         });
         // NOTE: clipPath removed - it caused display issues with Fabric.js 6.x\n        // The calculateFitFontSizeServer function already ensures text fits within container
 
-        // 1. Shadow
-        if (textEl.shadowColor) {
-            const shadowColor = new Color(textEl.shadowColor);
-            if (textEl.shadowOpacity !== undefined) {
-                shadowColor.setAlpha(textEl.shadowOpacity);
-            }
-            
-            textbox.shadow = new Shadow({
-                color: shadowColor.toRgba(),
-                blur: textEl.shadowBlur ?? 5,
-                offsetX: textEl.shadowOffsetX ?? 2,
-                offsetY: textEl.shadowOffsetY ?? 2,
-            });
-        }
-
-        // 2. Stroke (Outline) / Hollow Text
-        if (textEl.stroke || textEl.hollowText) {
-            textbox.stroke = textEl.stroke || textEl.fill || '#000000';
-            textbox.strokeWidth = textEl.strokeWidth || (textEl.hollowText ? 2 : 1);
-        }
-
-        // 3. Background (Group: Rect + Textbox)
-        if (textEl.backgroundEnabled) {
-            const padding = textEl.backgroundPadding || 0;
-            
-            // Textbox must be positioned relative to group center or origin
-            // Simple approach: Rect at (-padding, -padding) relative to text at (0,0)
-            textbox.set({ left: 0, top: 0 });
-            
-            const bgRect = new Rect({
-                width: textEl.width + padding * 2,
-                height: (textbox.height || textEl.height) + padding * 2,
-                left: -padding,
-                top: -padding,
-                fill: textEl.backgroundColor || '#ffff00',
-                rx: textEl.backgroundCornerRadius || 0,
-                ry: textEl.backgroundCornerRadius || 0,
-            });
-            
-            const group = new Group([bgRect, textbox], commonOptions);
-            canvas.add(group);
-            console.log(`[ServerEngine] TEXT: Added text group with background`);
-        } else {
-            canvas.add(textbox);
-            console.log(`[ServerEngine] TEXT: Added textbox to canvas`);
-        }
+        canvas.add(textbox);
+        console.log(`[ServerEngine] TEXT: Added textbox to canvas`);
     }
     else if (el.type === 'image') {
         const imageEl = el as ImageElement;

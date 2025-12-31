@@ -83,86 +83,22 @@ describe('ObjectFactory (Browser Environment)', () => {
         ...overrides,
     });
 
-    describe('createFabricObject - Text Background', () => {
-        it('should create a Group when background is enabled', () => {
-            const element = createTestElement({
-                backgroundEnabled: true,
-                backgroundColor: '#ffff00',
-                backgroundPadding: 10,
-                backgroundCornerRadius: 5,
-            });
-
+    describe('createFabricObject', () => {
+        it('should create a Textbox', () => {
+            const element = createTestElement();
             const obj = createFabricObject(element) as any;
-
-            expect(obj.type).toBe('group');
-            const objects = obj.getObjects();
-            const rect = objects.find((o: any) => o.type === 'rect');
-            const textbox = objects.find((o: any) => o.type === 'textbox');
-
-            expect(rect).toBeDefined();
-            expect(textbox).toBeDefined();
-            expect(rect.fill).toBe('#ffff00');
-            expect(rect.rx).toBe(5);
-            expect(rect.width).toBe(200 + 10 * 2);
-        });
-
-        it('should create a Textbox when background is disabled', () => {
-            const element = createTestElement({
-                backgroundEnabled: false,
-            });
-
-            const obj = createFabricObject(element) as any;
-
             expect(obj.type).toBe('textbox');
+            expect(obj.text).toBe('Test');
         });
     });
 
-    describe('syncElementToFabric - Text Background', () => {
-        it('should update background Rect in Group', () => {
-            const element = createTestElement({
-                backgroundEnabled: true,
-                backgroundColor: '#ffff00',
-            });
-
-            const group = createFabricObject(element) as any;
-            const rect = group.getObjects().find((o: any) => o.type === 'rect');
-
-            syncElementToFabric(group, {
-                backgroundColor: '#00ff00',
-                backgroundCornerRadius: 15,
-            } as any);
-
-            expect(rect.set).toHaveBeenCalledWith(expect.objectContaining({
-                fill: '#00ff00',
-                rx: 15,
-            }));
-        });
-    });
-
-    describe('syncElementToFabric - Text Background Resize', () => {
-        it('should update background Rect size when text content changes', () => {
-            const element = createTestElement({
-                backgroundEnabled: true,
-                backgroundPadding: 10,
-                text: 'Short',
-            });
-
-            const group = createFabricObject(element) as any;
-            const rect = group.getObjects().find((o: any) => o.type === 'rect');
-            const textbox = group.getObjects().find((o: any) => o.type === 'textbox');
-
-            // Simulate text change increasing width
-            textbox.width = 400; // Mock width change after text update
-            textbox.height = 100;
-
-            syncElementToFabric(group, {
-                text: 'Longer Text content',
-            } as any);
-
-            expect(rect.set).toHaveBeenCalledWith(expect.objectContaining({
-                width: 400 + 10 * 2,
-                height: 100 + 10 * 2,
-            }));
+    describe('syncElementToFabric', () => {
+        it('should update Textbox text', () => {
+            const element = createTestElement();
+            const textbox = createFabricObject(element) as any;
+            
+            syncElementToFabric(textbox, { text: 'Updated' });
+            expect(textbox.set).toHaveBeenCalledWith('text', 'Updated');
         });
     });
 });

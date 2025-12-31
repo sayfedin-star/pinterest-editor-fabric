@@ -17,14 +17,10 @@ interface AutoFitConfig {
     maxLines?: number;
     
     // Style properties for accurate measurement
-    stroke?: string;
-    strokeWidth?: number;
     paintFirst?: string;
-    shadow?: fabric.Shadow | string | null;
     underline?: boolean;
     linethrough?: boolean;
     overline?: boolean;
-    textBackgroundColor?: string;
     objectCaching?: boolean;
     
     // Context for server-side rendering (avoids DOM dependency)
@@ -86,14 +82,10 @@ export function calculateBestFitFontSize(
         splitByGrapheme: false, // Word wrapping enabled
         
         // Style properties
-        stroke: config.stroke,
-        strokeWidth: config.strokeWidth || 0,
         paintFirst: (config.paintFirst as 'fill' | 'stroke') || 'fill',
-        shadow: config.shadow ? new ShadowClass(config.shadow) : null,
         underline: config.underline,
         linethrough: config.linethrough,
         overline: config.overline,
-        textBackgroundColor: config.textBackgroundColor,
         objectCaching: config.objectCaching,
     });
 
@@ -215,14 +207,10 @@ export function applyAutoFit(
             maxLines: maxLines,
             
             // Pass style properties
-            stroke: fabricObj.stroke ? (fabricObj.stroke as string) : undefined,
-            strokeWidth: fabricObj.strokeWidth || 0,
             paintFirst: fabricObj.paintFirst || 'fill',
-            shadow: fabricObj.shadow,
             underline: fabricObj.underline,
             linethrough: fabricObj.linethrough,
             overline: fabricObj.overline,
-            textBackgroundColor: fabricObj.textBackgroundColor,
             objectCaching: fabricObj.objectCaching,
         });
 

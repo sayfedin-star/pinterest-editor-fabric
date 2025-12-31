@@ -71,61 +71,13 @@ export function createFabricObject(element: Element): fabric.FabricObject | null
                 opacity: element.opacity ?? 1,
             });
 
-            // 1. Shadow
-            if (textEl.shadowColor) {
-                const shadowColor = new fabric.Color(textEl.shadowColor);
-                if (textEl.shadowOpacity !== undefined) {
-                    shadowColor.setAlpha(textEl.shadowOpacity);
-                }
-                
-                textbox.shadow = new fabric.Shadow({
-                    color: shadowColor.toRgba(),
-                    blur: textEl.shadowBlur ?? 5,
-                    offsetX: textEl.shadowOffsetX ?? 2,
-                    offsetY: textEl.shadowOffsetY ?? 2,
-                });
-            }
-
-            // 2. Stroke / Hollow Text
-            if (textEl.stroke || textEl.hollowText) {
-                textbox.stroke = textEl.stroke || textEl.fill || '#000000';
-                textbox.strokeWidth = textEl.strokeWidth || (textEl.hollowText ? 2 : 1);
-            }
-            
-            // 3. Background (Group)
-            if (textEl.backgroundEnabled) {
-                const padding = textEl.backgroundPadding || 0;
-                
-                // Position textbox at 0,0 relative to group
-                textbox.set({ left: 0, top: 0 });
-                
-                const bgRect = new fabric.Rect({
-                    width: element.width + padding * 2,
-                    height: (textbox.height || element.height) + padding * 2,
-                    left: -padding,
-                    top: -padding,
-                    fill: textEl.backgroundColor || '#ffff00',
-                    rx: textEl.backgroundCornerRadius || 0,
-                    ry: textEl.backgroundCornerRadius || 0,
-                });
-                
-                const group = new fabric.Group([bgRect, textbox], {
-                    left: element.x,
-                    top: element.y,
-                    angle: element.rotation || 0,
-                    opacity: element.opacity ?? 1,
-                });
-                
-                obj = group;
-            } else {
-                textbox.set({
-                    left: element.x,
-                    top: element.y,
-                    angle: element.rotation || 0,
-                    opacity: element.opacity ?? 1,
-                });
-                obj = textbox;
-            }
+            textbox.set({
+                left: element.x,
+                top: element.y,
+                angle: element.rotation || 0,
+                opacity: element.opacity ?? 1,
+            });
+            obj = textbox;
             
             // Auto-Fit (Phase 2): Apply on creation if enabled
             if (textEl.autoFit) {
@@ -429,98 +381,6 @@ export function syncElementToFabric(
             batchedUpdates.linethrough = textUpdates.textDecoration === 'line-through';
         }
         
-        // Shadow effect
-        if (textUpdates.shadowColor !== undefined || 
-            textUpdates.shadowBlur !== undefined || 
-            textUpdates.shadowOffsetX !== undefined || 
-            textUpdates.shadowOffsetY !== undefined ||
-            textUpdates.shadowOpacity !== undefined) {
-            
-            const shadowColorHex = textUpdates.shadowColor ?? storedEl?.shadowColor;
-            const shadowBlur = textUpdates.shadowBlur ?? storedEl?.shadowBlur ?? 5;
-            const shadowOffsetX = textUpdates.shadowOffsetX ?? storedEl?.shadowOffsetX ?? 2;
-            const shadowOffsetY = textUpdates.shadowOffsetY ?? storedEl?.shadowOffsetY ?? 2;
-            const shadowOpacity = textUpdates.shadowOpacity ?? storedEl?.shadowOpacity;
-            
-            if (shadowColorHex) {
-                const shadowColor = new fabric.Color(shadowColorHex);
-                if (shadowOpacity !== undefined) {
-                    shadowColor.setAlpha(shadowOpacity);
-                }
-
-                batchedUpdates.shadow = new fabric.Shadow({
-                    color: shadowColor.toRgba(),
-                    blur: shadowBlur,
-                    offsetX: shadowOffsetX,
-                    offsetY: shadowOffsetY,
-                });
-            } else {
-                batchedUpdates.shadow = null;
-            }
-        }
-        
-        // Stroke/outline effect
-        if (textUpdates.stroke !== undefined) {
-            batchedUpdates.stroke = textUpdates.stroke;
-        }
-        if (textUpdates.strokeWidth !== undefined) {
-            batchedUpdates.strokeWidth = textUpdates.strokeWidth;
-        }
-        
-        // Hollow text effect - transparent fill with stroke
-        if (textUpdates.hollowText !== undefined) {
-            const isHollow = textUpdates.hollowText ?? storedEl?.hollowText ?? false;
-            const fillColor = textUpdates.fill ?? storedEl?.fill ?? '#000000';
-            
-            if (isHollow) {
-                batchedUpdates.fill = 'transparent';
-                const strokeColor = storedEl?.stroke || fillColor;
-                batchedUpdates.stroke = strokeColor;
-                batchedUpdates.strokeWidth = storedEl?.strokeWidth || 2;
-            } else {
-                batchedUpdates.fill = fillColor;
-                if (!storedEl?.stroke) {
-                    batchedUpdates.stroke = undefined;
-                    batchedUpdates.strokeWidth = 0;
-                }
-            }
-        }
-        
-        // Background box
-        if (textUpdates.backgroundEnabled !== undefined || 
-            textUpdates.backgroundColor !== undefined || 
-            textUpdates.backgroundPadding !== undefined || 
-            textUpdates.backgroundCornerRadius !== undefined) {
-            
-            const bgEnabled = textUpdates.backgroundEnabled ?? storedEl?.backgroundEnabled ?? false;
-            const bgColor = textUpdates.backgroundColor ?? storedEl?.backgroundColor ?? '#ffff00';
-            const padding = textUpdates.backgroundPadding ?? storedEl?.backgroundPadding ?? 0;
-            const radius = textUpdates.backgroundCornerRadius ?? storedEl?.backgroundCornerRadius ?? 0;
-            
-            if (bgEnabled) {
-                if (fabricObject instanceof fabric.Group) {
-                    const bgRect = fabricObject.getObjects().find(o => o instanceof fabric.Rect) as fabric.Rect | undefined;
-                    if (bgRect) {
-                        bgRect.set({
-                            fill: bgColor,
-                            rx: radius,
-                            ry: radius,
-                            width: (targetTextbox.width || 0) + padding * 2,
-                            height: (targetTextbox.height || 0) + padding * 2,
-                            left: -padding,
-                            top: -padding
-                        });
-                        // Mark group as dirty
-                        fabricObject.set('dirty', true);
-                    }
-                }
-                // Ensure textbox itself doesn't have a background if using Group
-                batchedUpdates.textBackgroundColor = '';
-            } else {
-                batchedUpdates.textBackgroundColor = '';
-            }
-        }
-        
         // Auto-Fit Handling
         const shouldAutoFit = textUpdates.autoFit ?? storedEl?.autoFit ?? false;
         
@@ -612,17 +472,6 @@ export function syncElementToFabric(
                 // Update group coordinates
                 fabricObject.setCoords();
                 
-                // Force the group to recalculate its bounds
-                // This is needed because the textbox inside changed size
-                const bgRect = fabricObject.getObjects().find(o => o instanceof fabric.Rect) as fabric.Rect | undefined;
-                if (bgRect && targetTextbox) {
-                    const padding = (storedEl?.backgroundPadding ?? 0);
-                    bgRect.set({
-                        width: (targetTextbox.width || 0) + padding * 2,
-                        height: (targetTextbox.height || 0) + padding * 2,
-                    });
-                }
-                
                 // Request render for the group
                 fabricObject.canvas?.requestRenderAll();
             }
@@ -654,23 +503,6 @@ export function syncElementToFabric(
             }
         }
 
-        // Update Group background size if dimensions changed
-        if (fabricObject instanceof fabric.Group) {
-            const bgRect = fabricObject.getObjects().find(o => o instanceof fabric.Rect) as fabric.Rect | undefined;
-            // Re-calculate dimensions (needed after text update)
-            targetTextbox.initDimensions();
-            
-            if (bgRect) {
-                const padding = textUpdates.backgroundPadding ?? storedEl?.backgroundPadding ?? 0;
-                bgRect.set({
-                    width: (targetTextbox.width || 0) + padding * 2,
-                    height: (targetTextbox.height || 0) + padding * 2,
-                    left: -padding,
-                    top: -padding
-                });
-                fabricObject.set('dirty', true);
-            }
-        }
     }
 
 
@@ -777,18 +609,7 @@ export function syncFabricToElement(fabricObject: fabric.FabricObject): Element 
                 isDynamic: storedText.isDynamic,
                 dynamicField: storedText.dynamicField,
                 textTransform: storedText.textTransform,
-                backgroundEnabled: storedText.backgroundEnabled,
-                backgroundColor: storedText.backgroundColor,
-                backgroundCornerRadius: storedText.backgroundCornerRadius,
-                backgroundPadding: storedText.backgroundPadding,
                 fontProvider: storedText.fontProvider,
-                shadowColor: storedText.shadowColor,
-                shadowBlur: storedText.shadowBlur,
-                shadowOffsetX: storedText.shadowOffsetX,
-                shadowOffsetY: storedText.shadowOffsetY,
-                shadowOpacity: storedText.shadowOpacity,
-                stroke: storedText.stroke,
-                strokeWidth: storedText.strokeWidth,
                 maxLines: storedText.maxLines,
                 autoFit: storedText.autoFit,
                 minFontSize: storedText.minFontSize,

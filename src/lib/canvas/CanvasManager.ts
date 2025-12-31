@@ -759,15 +759,6 @@ export class CanvasManager {
         if (fabricObject instanceof fabric.Group) {
             fabricObject.set('dirty', true);
             fabricObject.setCoords();
-            
-            const bgRect = fabricObject.getObjects().find(o => o instanceof fabric.Rect) as fabric.Rect | undefined;
-            if (bgRect && targetTextbox) {
-                const padding = textEl.backgroundPadding ?? 0;
-                bgRect.set({
-                    width: (targetTextbox.width || 0) + padding * 2,
-                    height: (targetTextbox.height || 0) + padding * 2,
-                });
-            }
         }
 
         // Force render

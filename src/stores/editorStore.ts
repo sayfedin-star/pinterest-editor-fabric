@@ -324,17 +324,6 @@ export const useEditorStore = create(
                         lineHeight: textEl.lineHeight,
                         letterSpacing: textEl.letterSpacing,
                         textDecoration: textEl.textDecoration,
-                        shadowColor: textEl.shadowColor,
-                        shadowBlur: textEl.shadowBlur,
-                        shadowOffsetX: textEl.shadowOffsetX,
-                        shadowOffsetY: textEl.shadowOffsetY,
-                        shadowOpacity: textEl.shadowOpacity,
-                        stroke: textEl.stroke,
-                        strokeWidth: textEl.strokeWidth,
-                        backgroundEnabled: textEl.backgroundEnabled,
-                        backgroundColor: textEl.backgroundColor,
-                        backgroundCornerRadius: textEl.backgroundCornerRadius,
-                        backgroundPadding: textEl.backgroundPadding,
                     };
                     set({ styleClipboard: style });
                 }

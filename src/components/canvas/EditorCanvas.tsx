@@ -227,8 +227,7 @@ export function EditorCanvasV2({ containerWidth, containerHeight }: EditorCanvas
                     // previewText, isDynamic, and backgroundEnabled changes require full replacement
                     // because they change the object structure (Group vs Textbox)
                     if (prevEl.previewText !== currEl.previewText || 
-                        prevEl.isDynamic !== currEl.isDynamic ||
-                        prevEl.backgroundEnabled !== currEl.backgroundEnabled) {
+                        prevEl.isDynamic !== currEl.isDynamic) {
                         needsFullSync = true;
                         console.log('[EditorCanvas.v2] text structure changed, needs full sync');
                         break;

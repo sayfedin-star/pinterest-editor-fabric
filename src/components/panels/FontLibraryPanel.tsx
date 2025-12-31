@@ -65,8 +65,6 @@ const TEXT_TEMPLATES = [
             fontFamily: 'Bebas Neue',
             fontSize: 64,
             fill: '#3B82F6',
-            stroke: '#1D4ED8',
-            strokeWidth: 2,
         }
     },
     {
@@ -78,8 +76,6 @@ const TEXT_TEMPLATES = [
             fontFamily: 'Playfair Display',
             fontSize: 56,
             fill: '#1F2937',
-            stroke: '#9CA3AF',
-            strokeWidth: 1,
         }
     },
     {
@@ -113,10 +109,6 @@ const TEXT_TEMPLATES = [
             fontFamily: 'Anton',
             fontSize: 52,
             fill: '#DC2626',
-            backgroundEnabled: true,
-            backgroundColor: '#FEF2F2',
-            backgroundPadding: 16,
-            backgroundCornerRadius: 8,
         }
     },
     {
@@ -139,24 +131,6 @@ const TEXT_TEMPLATES = [
             fontFamily: 'Dancing Script',
             fontSize: 56,
             fill: '#059669',
-        }
-    },
-    {
-        id: 'shadow-text',
-        name: 'Shadow',
-        preview: 'SHADOW',
-        style: {
-            text: 'SHADOW',
-            fontFamily: 'Oswald',
-            fontSize: 60,
-            fill: '#FFFFFF',
-            stroke: '#000000',
-            strokeWidth: 2,
-            shadowColor: '#000000',
-            shadowBlur: 10,
-            shadowOffsetX: 4,
-            shadowOffsetY: 4,
-            shadowOpacity: 0.5,
         }
     }
 ];
