@@ -1,12 +1,13 @@
 'use client';
 
-import React, { memo, useCallback, useState } from 'react';
+import React, { memo, useCallback, useState, useEffect, useMemo } from 'react';
 import { AlignLeft, AlignCenter, AlignRight, Zap, Eye, EyeOff } from 'lucide-react';
 import { useEditorStore } from '@/stores/editorStore';
 import { TextElement } from '@/types/editor';
 import { cn } from '@/lib/utils';
 import { SectionHeader } from './shared';
-import { applyAutoFitDirect } from '@/lib/canvas/CanvasManager';
+import { applyAutoFitDirect, getGlobalCanvasManager } from '@/lib/canvas/CanvasManager';
+import { calculateBestFitFontSize } from '@/lib/canvas/AutoFitText';
 
 interface TextPropertiesSectionProps {
     element: TextElement;
@@ -22,6 +23,76 @@ export const TextPropertiesSection = memo(function TextPropertiesSection({ eleme
 
     // Local state for preview mode toggle
     const [showPreview, setShowPreview] = useState(!!liveElement.previewText);
+    
+    // Track calculated font size from Fabric object (for badge display)
+    const [calculatedFontSize, setCalculatedFontSize] = useState<number | null>(null);
+    
+    // Fetch calculated font from Fabric object when autoFit is enabled
+    useEffect(() => {
+        if (!liveElement.autoFit) {
+            setCalculatedFontSize(null);
+            return;
+        }
+        
+        const updateCalculatedFont = () => {
+            const manager = getGlobalCanvasManager();
+            if (!manager) return;
+            
+            // Access elementMap to get actual fabric font size
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const fabricObj = (manager as any).elementMap?.get(element.id);
+            if (fabricObj && fabricObj.type === 'textbox') {
+                const fontSize = Math.round(fabricObj.fontSize || 0);
+                if (fontSize && fontSize !== liveElement.fontSize) {
+                    setCalculatedFontSize(fontSize);
+                } else {
+                    setCalculatedFontSize(null);
+                }
+            }
+        };
+        
+        // Initial fetch
+        updateCalculatedFont();
+        
+        // Poll for updates (font changes during resize)
+        const interval = setInterval(updateCalculatedFont, 200);
+        return () => clearInterval(interval);
+    }, [element.id, liveElement.autoFit, liveElement.fontSize]);
+    
+    // Calculate estimated font sizes for different text lengths (for dynamic fields)
+    const lengthPreviews = useMemo(() => {
+        if (!liveElement.autoFit || !liveElement.isDynamic) return null;
+        
+        const samples = {
+            short: 'Short',        // ~5 chars
+            medium: 'Medium length text', // ~18 chars
+            long: 'This is a much longer text that might need smaller font', // ~55 chars
+        };
+        
+        const config = {
+            fontFamily: liveElement.fontFamily || 'Arial',
+            fontWeight: liveElement.fontWeight || 'normal',
+            fontStyle: liveElement.fontStyle || 'normal',
+            lineHeight: liveElement.lineHeight || 1.2,
+            textAlign: liveElement.align || 'left',
+            minFontSize: liveElement.minFontSize || 10,
+            maxFontSize: liveElement.maxFontSize || 500,
+            maxLines: liveElement.maxLines,
+        };
+        
+        try {
+            return {
+                short: calculateBestFitFontSize(samples.short, liveElement.width, liveElement.height, config),
+                medium: calculateBestFitFontSize(samples.medium, liveElement.width, liveElement.height, config),
+                long: calculateBestFitFontSize(samples.long, liveElement.width, liveElement.height, config),
+            };
+        } catch {
+            return null;
+        }
+    }, [liveElement.autoFit, liveElement.isDynamic, liveElement.width, liveElement.height, 
+        liveElement.fontFamily, liveElement.fontWeight, liveElement.fontStyle, liveElement.lineHeight,
+        liveElement.align, liveElement.minFontSize, liveElement.maxFontSize, liveElement.maxLines]);
+    
     
     const handleChange = useCallback((updates: Partial<TextElement>) => {
         updateElement(element.id, updates);
@@ -270,6 +341,15 @@ export const TextPropertiesSection = memo(function TextPropertiesSection({ eleme
                         </button>
                     </div>
 
+                    {/* Calculated Font Badge - shows when autoFit is active and font differs */}
+                    {liveElement.autoFit && calculatedFontSize && (
+                        <div className="flex items-center gap-2 p-2 bg-green-50 rounded-lg border border-green-200">
+                            <span className="text-xs text-gray-600">Rendered at:</span>
+                            <span className="text-sm font-semibold text-green-700">{calculatedFontSize}px</span>
+                            <span className="text-xs text-gray-400">(base: {liveElement.fontSize}px)</span>
+                        </div>
+                    )}
+
                     {liveElement.autoFit && (
                         <div className="grid grid-cols-2 gap-3 p-2 bg-amber-50/50 rounded-lg border border-amber-100 animate-in fade-in slide-in-from-top-1">
                             <div className="space-y-1">
@@ -334,6 +414,34 @@ export const TextPropertiesSection = memo(function TextPropertiesSection({ eleme
                                     Apply Auto Fit
                                 </button>
                             </div>
+
+                            {/* Dynamic Length Indicator - shows font range for different text lengths */}
+                            {lengthPreviews && (
+                                <div className="col-span-2 p-2 bg-purple-50 rounded-lg border border-purple-200 space-y-1.5">
+                                    <span className="text-[10px] text-purple-600 uppercase font-semibold">Text Length Preview</span>
+                                    <div className="flex items-center justify-between text-xs">
+                                        <div className="flex items-center gap-1">
+                                            <span className="w-2 h-2 rounded-full bg-green-400"></span>
+                                            <span className="text-gray-600">Short:</span>
+                                        </div>
+                                        <span className="font-medium text-green-700">{lengthPreviews.short}px</span>
+                                    </div>
+                                    <div className="flex items-center justify-between text-xs">
+                                        <div className="flex items-center gap-1">
+                                            <span className="w-2 h-2 rounded-full bg-yellow-400"></span>
+                                            <span className="text-gray-600">Medium:</span>
+                                        </div>
+                                        <span className="font-medium text-yellow-700">{lengthPreviews.medium}px</span>
+                                    </div>
+                                    <div className="flex items-center justify-between text-xs">
+                                        <div className="flex items-center gap-1">
+                                            <span className="w-2 h-2 rounded-full bg-red-400"></span>
+                                            <span className="text-gray-600">Long:</span>
+                                        </div>
+                                        <span className="font-medium text-red-700">{lengthPreviews.long}px</span>
+                                    </div>
+                                </div>
+                            )}
                         </div>
                     )}
                 </div>

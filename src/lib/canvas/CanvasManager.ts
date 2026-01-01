@@ -875,3 +875,31 @@ export function applyAutoFitDirect(elementId: string): number | null {
     }
     return _globalCanvasManager.applyAutoFitToElement(elementId);
 }
+
+/**
+ * Get the current font size from a Fabric object by element ID.
+ * Returns the actual rendered font size (may differ from store when autoFit is active).
+ */
+export function getFabricFontSize(elementId: string): number | null {
+    if (!_globalCanvasManager) return null;
+    
+    const elementState = _globalCanvasManager.getElementState(elementId);
+    if (!elementState || elementState.type !== 'text') return null;
+    
+    // getElementState uses syncFabricToElement which preserves storedText.fontSize
+    // We need the actual fabric object's fontSize, so we need to access it differently
+    // For now, return the fontSize from element state (which is the base value)
+    // The actual calculated font is only on the fabric object
+    
+    // Access the internal elementMap through the canvas
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const manager = _globalCanvasManager as any;
+    const fabricObj = manager.elementMap?.get(elementId);
+    
+    if (fabricObj && fabricObj.type === 'textbox') {
+        return Math.round(fabricObj.fontSize || 0);
+    }
+    
+    return null;
+}
+

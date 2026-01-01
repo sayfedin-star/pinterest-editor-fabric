@@ -21,6 +21,12 @@ const nextConfig: NextConfig = {
         hostname: '*.tebi.io',
         pathname: '/**',
       },
+      {
+        // Vercel Blob for fonts
+        protocol: 'https',
+        hostname: '*.public.blob.vercel-storage.com',
+        pathname: '/**',
+      },
     ],
   },
   // Bundle fonts for serverless functions (needed for canvas text rendering)

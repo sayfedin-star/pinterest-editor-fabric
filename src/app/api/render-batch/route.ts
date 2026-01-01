@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { inngest } from "@/inngest/client";
 import { createServiceRoleClient } from "@/lib/supabaseServer";
 import { Element } from '@/types/editor';
+import { checkRateLimit, setProgress, isCampaignRendering } from '@/lib/redis';
 
 // Vercel Serverless Config
 export const maxDuration = 10; // Fast response
@@ -43,6 +44,26 @@ export async function POST(req: NextRequest) {
              return NextResponse.json(
                 { success: false, error: 'Invalid campaignId: must be a string' },
                 { status: 400 }
+            );
+        }
+
+        // Rate limiting: 100 batch requests per hour per campaign
+        const allowed = await checkRateLimit(`render:${campaignId}`, 100, 3600);
+        if (!allowed) {
+            console.warn(`[API] Rate limit exceeded for campaign ${campaignId}`);
+            return NextResponse.json(
+                { success: false, error: 'Rate limit exceeded. Please wait before generating more pins.' },
+                { status: 429 }
+            );
+        }
+
+        // Check if campaign is already being rendered (prevent duplicates)
+        const isRendering = await isCampaignRendering(campaignId);
+        if (isRendering) {
+            console.warn(`[API] Campaign ${campaignId} is already being rendered`);
+            return NextResponse.json(
+                { success: false, error: 'This campaign is already being rendered. Please wait for it to complete.' },
+                { status: 409 } // Conflict
             );
         }
 
@@ -95,6 +116,14 @@ export async function POST(req: NextRequest) {
         console.log(`[API] Created ${events.length} batches for ${totalRows} rows`);
 
         try {
+            // Initialize progress tracking in Redis
+            await setProgress(campaignId, {
+                total: totalRows,
+                completed: 0,
+                failed: 0,
+                status: 'processing',
+            });
+            
             // Send all batch events at once
             await inngest.send(events);
         } catch (inngestError: unknown) {

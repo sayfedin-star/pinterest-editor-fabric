@@ -245,61 +245,57 @@ export function FontLibraryPanel({ isOpen, onClose }: FontLibraryPanelProps) {
         }
 
         const file = e.target.files[0];
-        const cleanName = file.name.replace(/\.[^/.]+$/, "").replace(/[^a-zA-Z0-9]/g, "");
-        const fileExtension = file.name.split('.').pop();
-        const fileName = `${currentUser.id}/${Date.now()}-${cleanName}.${fileExtension}`;
+        const cleanName = file.name.replace(/\.[^/.]+$/, "").replace(/[^a-zA-Z0-9 ]/g, "");
+
+        // Determine category based on font extension (default to sans-serif)
+        const category = 'sans-serif';
 
         setIsUploading(true);
         const loadingToast = toast.loading('Uploading font...');
 
         try {
-            // 1. Upload to Supabase Storage
-            const { error: uploadError } = await supabase.storage
-                .from('fonts')
-                .upload(fileName, file);
+            // Use new API endpoint with Vercel Blob support
+            const formData = new FormData();
+            formData.append('file', file);
+            formData.append('family', cleanName);
+            formData.append('category', category);
 
-            if (uploadError) throw uploadError;
+            const response = await fetch('/api/fonts/upload', {
+                method: 'POST',
+                body: formData,
+            });
 
-            // 2. Get Public URL
-            const { data: { publicUrl } } = supabase.storage
-                .from('fonts')
-                .getPublicUrl(fileName);
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.error || 'Upload failed');
+            }
 
-            // 3. Save to Database
-            const { error: dbError } = await supabase
-                .from('custom_fonts')
-                .insert({
-                    user_id: currentUser.id,
-                    name: cleanName,
-                    url: publicUrl
-                });
+            const { font, storage } = await response.json();
 
-            if (dbError) throw dbError;
-
-            // 4. Register globally with FontFace API
-            const fontFace = new FontFace(cleanName, `url(${publicUrl})`);
+            // Register globally with FontFace API
+            const fontFace = new FontFace(font.family, `url(${font.file_url})`);
             await fontFace.load();
             document.fonts.add(fontFace);
 
-            // 5. Update Local State with the new font object
-            setCustomFonts(prev => [{ id: Date.now().toString(), name: cleanName, url: publicUrl }, ...prev]);
+            // Update Local State with the new font object
+            setCustomFonts(prev => [{ id: font.id, name: font.family, url: font.file_url }, ...prev]);
 
-            // 6. Force canvas to redraw with the new font
+            // Force canvas to redraw with the new font
             stage?.renderAll();
 
-            // 7. Auto-apply to selected text if applicable
+            // Auto-apply to selected text if applicable
             if (isTextSelected && selectedId) {
-                updateElement(selectedId, { fontFamily: cleanName });
+                updateElement(selectedId, { fontFamily: font.family });
                 pushHistory();
             }
 
             toast.dismiss(loadingToast);
-            toast.success('Font uploaded and saved!');
+            toast.success(`Font uploaded! (${storage === 'vercel-blob' ? '⚡ Edge CDN' : 'Storage'})`);
 
         } catch (error) {
             console.error('Font upload failed:', error);
             toast.dismiss(loadingToast);
-            toast.error('Failed to upload font');
+            toast.error(error instanceof Error ? error.message : 'Failed to upload font');
         } finally {
             setIsUploading(false);
             e.target.value = '';
@@ -489,14 +485,18 @@ export function FontLibraryPanel({ isOpen, onClose }: FontLibraryPanelProps) {
                                                             e.stopPropagation();
                                                             if (!confirm('Delete this font?')) return;
                                                             try {
-                                                                // Delete from DB
-                                                                await supabase.from('custom_fonts').delete().eq('id', font.id);
-                                                                // Delete from Storage
-                                                                const path = font.url.split('/fonts/')[1];
-                                                                if (path) await supabase.storage.from('fonts').remove([path]);
+                                                                // Use new API endpoint for deletion
+                                                                const response = await fetch(`/api/fonts/${font.id}`, {
+                                                                    method: 'DELETE',
+                                                                });
+                                                                
+                                                                if (!response.ok) {
+                                                                    throw new Error('Delete failed');
+                                                                }
+                                                                
                                                                 setCustomFonts(prev => prev.filter(f => f.id !== font.id));
                                                                 toast.success('Font deleted');
-                                                            } catch (_err) {
+                                                            } catch {
                                                                 toast.error('Failed to delete font');
                                                             }
                                                         }}

@@ -5,6 +5,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { Element, ImageElement } from '@/types/editor';
 import { setupFabricServerPolyfills } from '@/lib/fabric/server-polyfill';
 import { createServiceRoleClient } from "@/lib/supabaseServer";
+import { incrementProgress, acquireLock, releaseLock } from "@/lib/redis";
 
 // Define types locally since we are extracting logic
 interface RenderBatchEventData {
@@ -88,6 +89,13 @@ export const renderBatchFunction = inngest.createFunction(
         // Validation
         if (!campaignId) {
             throw new Error("Missing required field: campaignId");
+        }
+
+        // Acquire lock to prevent duplicate processing (5 min TTL)
+        const lockAcquired = await acquireLock(`render:${campaignId}`, 300);
+        if (!lockAcquired) {
+            console.log(`[Inngest] Lock not acquired for campaign ${campaignId} - already rendering`);
+            return { success: false, reason: 'already_rendering' };
         }
 
         const supabase = createServiceRoleClient();
@@ -363,6 +371,12 @@ export const renderBatchFunction = inngest.createFunction(
 
                     const chunkResults = await Promise.all(chunkPromises);
                     batchResults.push(...chunkResults);
+                    
+                    // Update real-time progress in Redis
+                    const successCount = chunkResults.filter(r => r.success).length;
+                    const failCount = chunkResults.filter(r => !r.success).length;
+                    if (successCount > 0) await incrementProgress(campaignId, 'completed', successCount);
+                    if (failCount > 0) await incrementProgress(campaignId, 'failed', failCount);
                 }
 
                 return batchResults;
@@ -423,6 +437,9 @@ export const renderBatchFunction = inngest.createFunction(
                 }
             }
         });
+
+        // Release lock after completion
+        await releaseLock(`render:${campaignId}`);
 
         return { success: true, count: results.length };
     }

@@ -3,6 +3,7 @@
 
 import { supabase, isSupabaseConfigured, getCurrentUserId } from '../supabase';
 import { DbCategory } from '@/types/database.types';
+import { cacheGet, cacheInvalidate } from '../redis';
 
 // ============================================
 // Types for category operations
@@ -39,7 +40,7 @@ function generateSlug(name: string): string {
 // ============================================
 
 /**
- * Get all categories for the current user
+ * Get all categories for the current user (CACHED)
  * @returns Array of categories ordered by name
  */
 export async function getCategories(): Promise<DbCategory[]> {
@@ -54,23 +55,26 @@ export async function getCategories(): Promise<DbCategory[]> {
         return [];
     }
 
-    try {
-        const { data, error } = await supabase
-            .from('categories')
-            .select('*')
-            .eq('user_id', userId)
-            .order('name', { ascending: true });
+    // Cache categories for 6 hours per user
+    return cacheGet(`categories:${userId}`, async () => {
+        try {
+            const { data, error } = await supabase
+                .from('categories')
+                .select('*')
+                .eq('user_id', userId)
+                .order('name', { ascending: true });
 
-        if (error) {
+            if (error) {
+                console.error('Error fetching categories:', error);
+                return [];
+            }
+
+            return data || [];
+        } catch (error) {
             console.error('Error fetching categories:', error);
             return [];
         }
-
-        return data || [];
-    } catch (error) {
-        console.error('Error fetching categories:', error);
-        return [];
-    }
+    }, 21600); // 6 hours
 }
 
 /**
@@ -150,6 +154,9 @@ export async function createCategory(data: CreateCategoryData): Promise<DbCatego
             return null;
         }
 
+        // Invalidate cache
+        await cacheInvalidate(`categories:${userId}`);
+
         return category;
     } catch (error) {
         console.error('Error creating category:', error);
@@ -211,6 +218,9 @@ export async function updateCategory(
             return null;
         }
 
+        // Invalidate cache
+        await cacheInvalidate(`categories:${userId}`);
+
         return data;
     } catch (error) {
         console.error('Error updating category:', error);
@@ -246,6 +256,9 @@ export async function deleteCategory(id: string): Promise<boolean> {
             console.error('Error deleting category:', error);
             return false;
         }
+
+        // Invalidate cache
+        await cacheInvalidate(`categories:${userId}`);
 
         return true;
     } catch (error) {

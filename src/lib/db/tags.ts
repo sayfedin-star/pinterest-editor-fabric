@@ -3,6 +3,7 @@
 
 import { supabase, isSupabaseConfigured, getCurrentUserId } from '../supabase';
 import { DbTag } from '@/types/database.types';
+import { cacheGet, cacheInvalidate } from '../redis';
 
 // ============================================
 // Types for tag operations
@@ -37,7 +38,7 @@ function generateSlug(name: string): string {
 // ============================================
 
 /**
- * Get all tags for the current user
+ * Get all tags for the current user (CACHED)
  * @returns Array of tags ordered by name
  */
 export async function getTags(): Promise<DbTag[]> {
@@ -52,23 +53,26 @@ export async function getTags(): Promise<DbTag[]> {
         return [];
     }
 
-    try {
-        const { data, error } = await supabase
-            .from('tags')
-            .select('*')
-            .eq('user_id', userId)
-            .order('name', { ascending: true });
+    // Cache tags for 6 hours per user
+    return cacheGet(`tags:${userId}`, async () => {
+        try {
+            const { data, error } = await supabase
+                .from('tags')
+                .select('*')
+                .eq('user_id', userId)
+                .order('name', { ascending: true });
 
-        if (error) {
+            if (error) {
+                console.error('Error fetching tags:', error);
+                return [];
+            }
+
+            return data || [];
+        } catch (error) {
             console.error('Error fetching tags:', error);
             return [];
         }
-
-        return data || [];
-    } catch (error) {
-        console.error('Error fetching tags:', error);
-        return [];
-    }
+    }, 21600); // 6 hours
 }
 
 /**
@@ -146,6 +150,9 @@ export async function createTag(data: CreateTagData): Promise<DbTag | null> {
             return null;
         }
 
+        // Invalidate cache
+        await cacheInvalidate(`tags:${userId}`);
+
         return tag;
     } catch (error) {
         console.error('Error creating tag:', error);
@@ -201,6 +208,9 @@ export async function updateTag(
             return null;
         }
 
+        // Invalidate cache
+        await cacheInvalidate(`tags:${userId}`);
+
         return data;
     } catch (error) {
         console.error('Error updating tag:', error);
@@ -237,6 +247,9 @@ export async function deleteTag(id: string): Promise<boolean> {
             console.error('Error deleting tag:', error);
             return false;
         }
+
+        // Invalidate cache
+        await cacheInvalidate(`tags:${userId}`);
 
         return true;
     } catch (error) {

@@ -9,6 +9,7 @@ import { useSynchronizationBridge } from '@/hooks/useSynchronizationBridge';
 import { detectElementChange } from '@/lib/canvas/elementChangeDetection';
 import { DimensionBadge } from './DimensionBadge';
 import { ContextMenu } from './ContextMenu';
+import { applyAutoFit } from '@/lib/canvas/AutoFitText';
 
 interface EditorCanvasProps {
     containerWidth: number;
@@ -62,15 +63,33 @@ export function EditorCanvasV2({ containerWidth, containerHeight }: EditorCanvas
         const manager = canvasManagerRef.current;
         if (!manager || !isCanvasReady) return;
 
-        // MINIMAL: Just apply ghost effect during scaling - no special text handling
+        // Apply ghost effect during scaling + LIVE PREVIEW for text auto-fit
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const handleScaling = (e: any) => {
             setIsResizing(true);
             const target = e.target || e.transform?.target;
             if (!target) return;
             activeObjectRef.current = target;
+            
             // Ghost effect during scaling
             target.set({ opacity: 0.5 });
+            
+            // LIVE PREVIEW: Recalculate font size during resize for text elements with autoFit
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const elementData = (target as any)._elementData as TextElement | undefined;
+            if (target.type === 'textbox' && elementData?.autoFit) {
+                // Calculate current scaled dimensions
+                const newWidth = (target.width || 200) * (target.scaleX || 1);
+                const newHeight = (target.height || 100) * (target.scaleY || 1);
+                
+                // Apply auto-fit with current dimensions (no store sync - just visual)
+                const minSize = elementData.fontSize || 16; // Use base font as minimum
+                const maxSize = elementData.maxFontSize || 500;
+                const maxLines = elementData.maxLines;
+                
+                applyAutoFit(target, newWidth, newHeight, minSize, maxSize, maxLines);
+            }
+            
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             (manager as any).canvas?.requestRenderAll();
         };
