@@ -94,8 +94,12 @@ export async function cacheInvalidate(key: string): Promise<void> {
     const redis = getRedis();
     if (!redis) return;
     
-    await redis.del(key);
-    console.log(`[Cache] Invalidated: ${key}`);
+    try {
+        await redis.del(key);
+        console.log(`[Cache] Invalidated: ${key}`);
+    } catch (error) {
+        console.error(`[Cache] Failed to invalidate ${key}:`, error);
+    }
 }
 
 /**
@@ -108,11 +112,15 @@ export async function cacheInvalidatePattern(pattern: string): Promise<void> {
     const redis = getRedis();
     if (!redis) return;
     
-    const keys = await redis.keys(pattern);
-    
-    if (keys.length > 0) {
-        await redis.del(...keys);
-        console.log(`[Cache] Invalidated ${keys.length} keys matching: ${pattern}`);
+    try {
+        const keys = await redis.keys(pattern);
+        
+        if (keys.length > 0) {
+            await redis.del(...keys);
+            console.log(`[Cache] Invalidated ${keys.length} keys matching: ${pattern}`);
+        }
+    } catch (error) {
+        console.error(`[Cache] Failed to invalidate pattern ${pattern}:`, error);
     }
 }
 
@@ -312,7 +320,11 @@ export async function clearProgress(campaignId: string): Promise<void> {
     const redis = getRedis();
     if (!redis) return;
     
-    await redis.del(`progress:${campaignId}`);
+    try {
+        await redis.del(`progress:${campaignId}`);
+    } catch (error) {
+        console.error(`[Progress] Failed to clear progress for ${campaignId}:`, error);
+    }
 }
 
 // =============================================================================
@@ -377,8 +389,13 @@ export async function isLocked(lockKey: string): Promise<boolean> {
     const redis = getRedis();
     if (!redis) return false;
     
-    const exists = await redis.exists(`lock:${lockKey}`);
-    return exists === 1;
+    try {
+        const exists = await redis.exists(`lock:${lockKey}`);
+        return exists === 1;
+    } catch (error) {
+        console.error(`[Lock] Failed to check lock ${lockKey}:`, error);
+        return false; // Assume not locked on error
+    }
 }
 
 /**
