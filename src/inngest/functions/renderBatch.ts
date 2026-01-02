@@ -244,7 +244,7 @@ export const renderBatchFunction = inngest.createFunction(
             // PHASE 1: Create canvas pool
             // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
             // Match Inngest plan concurrency limit
-            const PARALLEL_LIMIT = 8; // Increased from 5 - memory only using 16% 
+            const PARALLEL_LIMIT = 5; // Match Inngest Hobby plan (5 concurrent steps) 
             const canvasPool = new CanvasPool({
                 maxSize: PARALLEL_LIMIT,
                 defaultWidth: canvasSize!.width,
