@@ -85,7 +85,7 @@ export async function POST(req: NextRequest) {
 
         // 2. Send Events to Inngest (Batched)
         console.log('[API] Sending batched events to Inngest...');
-        const BATCH_SIZE = 100;
+        const BATCH_SIZE = 50; // Reduced from 100 to prevent 60s timeout
         const events = [];
         const totalRows = csvRows.length;
 

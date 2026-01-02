@@ -244,7 +244,7 @@ export const renderBatchFunction = inngest.createFunction(
             // PHASE 1: Create canvas pool
             // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
             // Match Inngest plan concurrency limit
-            const PARALLEL_LIMIT = 5; 
+            const PARALLEL_LIMIT = 8; // Increased from 5 - memory only using 16% 
             const canvasPool = new CanvasPool({
                 maxSize: PARALLEL_LIMIT,
                 defaultWidth: canvasSize!.width,
@@ -335,7 +335,7 @@ export const renderBatchFunction = inngest.createFunction(
                         
                         const dataUrl = canvas.toDataURL({
                             format: 'jpeg',
-                            quality: 0.85,
+                            quality: 0.80,  // Reduced from 0.85 for faster encoding
                             multiplier: 1,
                         });
 
