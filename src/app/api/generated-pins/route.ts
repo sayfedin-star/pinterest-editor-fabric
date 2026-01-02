@@ -166,13 +166,14 @@ export async function POST(request: NextRequest) {
 
         // 5. Update Campaign Progress (atomic increment)
         try {
-            const { error: rpcError } = await supabase.rpc('increment_generated_pins', {
-                campaign_id_input: campaign_id
+            const { error: rpcError } = await supabase.rpc('increment_campaign_pins', {
+                campaign_uuid: campaign_id,
+                increment_by: 1
             });
 
             if (rpcError) {
                 // Fallback to manual update if RPC doesn't exist
-                log('[generated-pins] RPC not available, using fallback');
+                log('[generated-pins] RPC not available, using fallback:', rpcError.message);
                 const { data: campaignData } = await supabase
                     .from('campaigns')
                     .select('generated_pins, current_index')
@@ -269,24 +270,34 @@ export async function PATCH(request: NextRequest) {
         const campaignId = pinsToInsert[0]?.campaign_id;
         if (campaignId) {
             try {
-                // Get current count and add batch size
-                const { data: campaignData } = await supabase
-                    .from('campaigns')
-                    .select('generated_pins')
-                    .eq('id', campaignId)
-                    .single();
-
-                const currentCount = (campaignData?.generated_pins as number) || 0;
                 const successCount = data?.length || 0;
                 
-                await supabase
-                    .from('campaigns')
-                    .update({
-                        generated_pins: currentCount + successCount,
-                        current_index: currentCount + successCount,
-                        updated_at: new Date().toISOString()
-                    })
-                    .eq('id', campaignId);
+                // Use atomic RPC
+                const { error: rpcError } = await supabase.rpc('increment_campaign_pins', {
+                    campaign_uuid: campaignId,
+                    increment_by: successCount
+                });
+
+                if (rpcError) {
+                    log('[generated-pins] RPC failed, falling back to manual update:', rpcError.message);
+                    // Get current count and add batch size
+                    const { data: campaignData } = await supabase
+                        .from('campaigns')
+                        .select('generated_pins')
+                        .eq('id', campaignId)
+                        .single();
+
+                    const currentCount = (campaignData?.generated_pins as number) || 0;
+                    
+                    await supabase
+                        .from('campaigns')
+                        .update({
+                            generated_pins: currentCount + successCount,
+                            current_index: currentCount + successCount,
+                            updated_at: new Date().toISOString()
+                        })
+                        .eq('id', campaignId);
+                }
             } catch (updateErr) {
                 console.warn('[generated-pins] Campaign batch update warning:', updateErr);
             }

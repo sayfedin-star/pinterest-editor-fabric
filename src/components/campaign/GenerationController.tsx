@@ -940,7 +940,7 @@ export function GenerationController({
                 isEtaReliable={(generatedCount || progress.current) >= 5}
                 currentPinTitle={progress.currentPinTitle}
                 currentPinIndex={progress.currentPinIndex}
-                pauseEnabled={settings.pauseEnabled}
+                pauseEnabled={settings.pauseEnabled && renderMode !== 'server'}
                 isPausing={isPausing}
                 onPause={pauseGeneration}
                 onResume={resumeGeneration}
