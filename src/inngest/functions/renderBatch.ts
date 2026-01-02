@@ -300,12 +300,17 @@ export const renderBatchFunction = inngest.createFunction(
                                 const base64 = Buffer.from(arrayBuffer).toString('base64');
                                 const contentType = response.headers.get('content-type') || 'image/png';
                                 imageCache.set(url, `data:${contentType};base64,${base64}`);
+                            } else {
+                                console.warn(`[Inngest Render] Image prefetch HTTP ${response.status}: ${fetchUrl.substring(0, 100)}`);
                             }
                         } catch (e) {
                             console.warn(`[Inngest Render] Image prefetch failed: ${url}`, e);
                         }
                     }));
                 }
+                
+                // Log prefetch summary
+                console.log(`[Inngest Render] Image prefetch complete: ${imageCache.size}/${uniqueUrlArray.length} images cached`);
                 
                 setServerImageCache(imageCache);
 
