@@ -105,35 +105,24 @@ async function loadImageToCanvas(url: string, options: Partial<fabric.ImageProps
     }
 
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-    // 🚀 LEVEL 2 CACHE: FabricImage object cache (fastest - just clone)
-    // This reuses already-created FabricImage objects
+    // 🚀 LEVEL 2 CACHE: FabricImage object cache - DISABLED
+    // Cloning FabricImages during parallel batch rendering causes race 
+    // conditions ("Image given has not completed loading" errors).
+    // Each pin now creates fresh FabricImages from cached data URLs.
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-    if (!isBrowser && fabricImageCache) {
-        const cachedFabricImage = fabricImageCache.get(url);
-        if (cachedFabricImage) {
-            // Clone the cached FabricImage (fast!) instead of recreating
-            try {
-                const cloned = await cachedFabricImage.clone();
-                return cloned;
-            } catch {
-                console.warn(`[Engine] FabricImage clone failed for: ${url.substring(0, 60)}`);
-            }
-        }
-    }
+    // DISABLED: fabricImageCache cloning
+    // if (!isBrowser && fabricImageCache) { ... }
 
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-    // 🚀 LEVEL 1 CACHE: Data URL cache (slower - need to create FabricImage)
-    // Used on first access, then stores result in Level 2 cache
+    // 🚀 LEVEL 1 CACHE: Data URL cache - create fresh FabricImage each time
+    // This is slower than cloning but avoids race conditions
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
     if (!isBrowser && serverImageCache) {
         const cachedDataUrl = serverImageCache.get(url);
         if (cachedDataUrl) {
             try {
                 const img = await tryLoad(cachedDataUrl);
-                // Store in Level 2 cache for faster subsequent access
-                if (fabricImageCache && img instanceof fabric.FabricImage) {
-                    fabricImageCache.set(url, img);
-                }
+                // NOTE: Not caching FabricImage to avoid parallel rendering race conditions
                 return img;
             } catch {
                 console.warn(`[Engine] Data URL cache load failed for: ${url.substring(0, 60)}`);
