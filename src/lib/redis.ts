@@ -137,23 +137,28 @@ export async function checkRateLimit(
     const redis = getRedis();
     if (!redis) return true; // No rate limiting if Redis unavailable
     
-    const now = Date.now();
-    const windowKey = `ratelimit:${key}`;
-    
-    // Remove old entries and count current window
-    await redis.zremrangebyscore(windowKey, 0, now - (windowSeconds * 1000));
-    const count = await redis.zcard(windowKey);
-    
-    if (count >= maxRequests) {
-        console.log(`[RateLimit] Exceeded: ${key} (${count}/${maxRequests})`);
-        return false;
+    try {
+        const now = Date.now();
+        const windowKey = `ratelimit:${key}`;
+        
+        // Remove old entries and count current window
+        await redis.zremrangebyscore(windowKey, 0, now - (windowSeconds * 1000));
+        const count = await redis.zcard(windowKey);
+        
+        if (count >= maxRequests) {
+            console.log(`[RateLimit] Exceeded: ${key} (${count}/${maxRequests})`);
+            return false;
+        }
+        
+        // Add current request
+        await redis.zadd(windowKey, { score: now, member: `${now}` });
+        await redis.expire(windowKey, windowSeconds);
+        
+        return true;
+    } catch (error) {
+        console.error(`[RateLimit] Redis error, allowing request:`, error);
+        return true; // Allow request on Redis failure
     }
-    
-    // Add current request
-    await redis.zadd(windowKey, { score: now, member: `${now}` });
-    await redis.expire(windowKey, windowSeconds);
-    
-    return true;
 }
 
 // =============================================================================
