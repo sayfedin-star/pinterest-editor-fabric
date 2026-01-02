@@ -15,10 +15,24 @@ let serverImageCache: Map<string, string> | null = null;
 // Level 2: URL → FabricImage object (populated on first load, cloned for reuse)
 let fabricImageCache: Map<string, fabric.FabricImage> | null = null;
 
+/**
+ * MERGE new images into the server image cache (don't replace!)
+ * This is critical for concurrent batch rendering - each batch adds its images
+ * without overwriting images cached by other concurrent batches.
+ */
 export function setServerImageCache(cache: Map<string, string>): void {
-    serverImageCache = cache;
-    // Initialize fabric image cache when data URL cache is set
-    fabricImageCache = new Map();
+    // Initialize caches if they don't exist
+    if (!serverImageCache) {
+        serverImageCache = new Map();
+    }
+    if (!fabricImageCache) {
+        fabricImageCache = new Map();
+    }
+    
+    // MERGE new entries into existing cache (don't replace!)
+    cache.forEach((value, key) => {
+        serverImageCache!.set(key, value);
+    });
 }
 
 export function clearServerImageCache(): void {
