@@ -366,11 +366,15 @@ export const renderBatchFunction = inngest.createFunction(
                     const chunkResults = await Promise.all(chunkPromises);
                     batchResults.push(...chunkResults);
                     
-                    // Update real-time progress in Redis
-                    const successCount = chunkResults.filter(r => r.success).length;
-                    const failCount = chunkResults.filter(r => !r.success).length;
-                    if (successCount > 0) await incrementProgress(campaignId, 'completed', successCount);
-                    if (failCount > 0) await incrementProgress(campaignId, 'failed', failCount);
+                    // Update real-time progress in Redis (non-blocking, don't fail render on Redis errors)
+                    try {
+                        const successCount = chunkResults.filter(r => r.success).length;
+                        const failCount = chunkResults.filter(r => !r.success).length;
+                        if (successCount > 0) await incrementProgress(campaignId, 'completed', successCount);
+                        if (failCount > 0) await incrementProgress(campaignId, 'failed', failCount);
+                    } catch (redisError) {
+                        console.warn(`[Inngest Render] Redis progress update failed, continuing:`, redisError);
+                    }
                 }
 
                 return batchResults;
@@ -380,6 +384,11 @@ export const renderBatchFunction = inngest.createFunction(
                 clearServerImageCache();
             }
         });
+
+        // Log render results for debugging
+        const successCount = results.filter(r => r.success).length;
+        const failCount = results.filter(r => !r.success).length;
+        console.log(`[Inngest Render] Batch ${startIndex}-${startIndex + (csvRows?.length || 0)}: ${successCount} success, ${failCount} failed, total ${results.length}`);
 
         // 3. Save Results to Supabase
         await step.run("save-results", async () => {
