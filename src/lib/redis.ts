@@ -172,7 +172,7 @@ export interface CampaignProgress {
 }
 
 /**
- * Set campaign generation progress
+ * Set campaign generation progress using Redis Hash
  * 
  * @example
  * await setProgress('campaign-123', { completed: 50, total: 100, status: 'processing' });
@@ -186,37 +186,36 @@ export async function setProgress(
     
     try {
         const key = `progress:${campaignId}`;
-        const current = await redis.get<CampaignProgress>(key) || {
+        
+        // Build the hash fields to set
+        const hashData: Record<string, string | number> = {
             campaignId,
-            total: 0,
-            completed: 0,
-            failed: 0,
-            status: 'pending' as const,
         };
         
-        const updated: CampaignProgress = {
-            ...current,
-            ...progress,
-            campaignId, // Always preserve campaignId
-        };
+        if (progress.total !== undefined) hashData.total = progress.total;
+        if (progress.completed !== undefined) hashData.completed = progress.completed;
+        if (progress.failed !== undefined) hashData.failed = progress.failed;
+        if (progress.status !== undefined) hashData.status = progress.status;
+        if (progress.errors !== undefined) hashData.errors = JSON.stringify(progress.errors);
         
         // Auto-set timestamps
-        if (progress.status === 'processing' && !updated.startedAt) {
-            updated.startedAt = new Date().toISOString();
+        if (progress.status === 'processing') {
+            hashData.startedAt = new Date().toISOString();
         }
         if (progress.status === 'completed' || progress.status === 'failed') {
-            updated.completedAt = new Date().toISOString();
+            hashData.completedAt = new Date().toISOString();
         }
         
-        // Store with 24-hour TTL
-        await redis.setex(key, 86400, updated);
+        // Store as hash with 24-hour TTL
+        await redis.hset(key, hashData);
+        await redis.expire(key, 86400);
     } catch (error) {
         console.error(`[Progress] Failed to set progress for ${campaignId}:`, error);
     }
 }
 
 /**
- * Get campaign generation progress
+ * Get campaign generation progress from Redis Hash
  * 
  * @example
  * const progress = await getProgress('campaign-123');
@@ -226,15 +225,36 @@ export async function getProgress(campaignId: string): Promise<CampaignProgress 
     const redis = getRedis();
     if (!redis) return null;
     
-    return redis.get<CampaignProgress>(`progress:${campaignId}`);
+    try {
+        const key = `progress:${campaignId}`;
+        const data = await redis.hgetall(key);
+        
+        if (!data || Object.keys(data).length === 0) {
+            return null;
+        }
+        
+        return {
+            campaignId: (data.campaignId as string) || campaignId,
+            total: Number(data.total) || 0,
+            completed: Number(data.completed) || 0,
+            failed: Number(data.failed) || 0,
+            status: (data.status as CampaignProgress['status']) || 'pending',
+            startedAt: data.startedAt as string | undefined,
+            completedAt: data.completedAt as string | undefined,
+            errors: data.errors ? JSON.parse(data.errors as string) : undefined,
+        };
+    } catch (error) {
+        console.error(`[Progress] Failed to get progress for ${campaignId}:`, error);
+        return null;
+    }
 }
 
+
 /**
- * Increment completed count
+ * Increment completed count atomically using Redis HINCRBY
  * 
- * NOTE: This uses get-then-set which has a race condition under high concurrency.
- * For most use cases (batch processing with controlled parallelism), this is acceptable.
- * The 5-min lock TTL provides a safety net for stuck jobs.
+ * Uses a hash structure for atomic increments to prevent race conditions
+ * when multiple batches update progress concurrently.
  */
 export async function incrementProgress(
     campaignId: string,
@@ -246,24 +266,39 @@ export async function incrementProgress(
     
     try {
         const key = `progress:${campaignId}`;
-        const current = await redis.get<CampaignProgress>(key);
         
-        if (current) {
-            current[field] = (current[field] || 0) + amount;
-            
-            // Auto-complete if all done
-            if (current.completed + current.failed >= current.total) {
-                current.status = current.failed > 0 ? 'failed' : 'completed';
-                current.completedAt = new Date().toISOString();
-            }
-            
-            await redis.setex(key, 86400, current);
+        // Use HINCRBY for atomic increment on the hash field
+        await redis.hincrby(key, field, amount);
+        
+        // Get the full progress state to check for completion
+        const [total, completed, failed] = await Promise.all([
+            redis.hget<number>(key, 'total'),
+            redis.hget<number>(key, 'completed'),
+            redis.hget<number>(key, 'failed'),
+        ]);
+        
+        const totalNum = total || 0;
+        const completedNum = completed || 0;
+        const failedNum = failed || 0;
+        
+        // Auto-complete if all done
+        if (totalNum > 0 && (completedNum + failedNum >= totalNum)) {
+            const newStatus = failedNum > 0 ? 'failed' : 'completed';
+            await redis.hset(key, { 
+                status: newStatus, 
+                completedAt: new Date().toISOString() 
+            });
         }
+        
+        // Ensure TTL is set (24 hours)
+        await redis.expire(key, 86400);
+        
     } catch (error) {
         // Log but don't throw - progress tracking is non-critical
         console.error(`[Progress] Failed to increment ${field} for ${campaignId}:`, error);
     }
 }
+
 
 /**
  * Clear campaign progress (after completion or cleanup)

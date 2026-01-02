@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { inngest } from "@/inngest/client";
 import { createServiceRoleClient } from "@/lib/supabaseServer";
 import { Element } from '@/types/editor';
-import { checkRateLimit, setProgress, isCampaignRendering } from '@/lib/redis';
+import { checkRateLimit, setProgress } from '@/lib/redis';
 
 // Vercel Serverless Config
 export const maxDuration = 10; // Fast response
@@ -54,16 +54,6 @@ export async function POST(req: NextRequest) {
             return NextResponse.json(
                 { success: false, error: 'Rate limit exceeded. Please wait before generating more pins.' },
                 { status: 429 }
-            );
-        }
-
-        // Check if campaign is already being rendered (prevent duplicates)
-        const isRendering = await isCampaignRendering(campaignId);
-        if (isRendering) {
-            console.warn(`[API] Campaign ${campaignId} is already being rendered`);
-            return NextResponse.json(
-                { success: false, error: 'This campaign is already being rendered. Please wait for it to complete.' },
-                { status: 409 } // Conflict
             );
         }
 

@@ -5,7 +5,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { Element, ImageElement } from '@/types/editor';
 import { setupFabricServerPolyfills } from '@/lib/fabric/server-polyfill';
 import { createServiceRoleClient } from "@/lib/supabaseServer";
-import { incrementProgress, acquireLock, releaseLock } from "@/lib/redis";
+import { incrementProgress } from "@/lib/redis";
 
 // Define types locally since we are extracting logic
 interface RenderBatchEventData {
@@ -70,7 +70,8 @@ export const renderBatchFunction = inngest.createFunction(
     { 
         id: "render-batch-campaign",
         concurrency: {
-            limit: 5, // Match Inngest Hobby plan: 5 concurrent steps
+            limit: 5, // Allow 5 concurrent batches per campaign
+            key: "event.data.campaignId", // Per-campaign concurrency (not global)
         }
     },
     { event: "campaign/render.requested" },
@@ -89,13 +90,6 @@ export const renderBatchFunction = inngest.createFunction(
         // Validation
         if (!campaignId) {
             throw new Error("Missing required field: campaignId");
-        }
-
-        // Acquire lock to prevent duplicate processing (5 min TTL)
-        const lockAcquired = await acquireLock(`render:${campaignId}`, 300);
-        if (!lockAcquired) {
-            console.log(`[Inngest] Lock not acquired for campaign ${campaignId} - already rendering`);
-            return { success: false, reason: 'already_rendering' };
         }
 
         const supabase = createServiceRoleClient();
@@ -406,40 +400,51 @@ export const renderBatchFunction = inngest.createFunction(
                 if (error) throw error;
             }
 
-            // Update campaign stats safely (handling concurrency)
+            // Update campaign stats atomically using SQL increment
+            // This prevents race conditions when multiple batches update concurrently
             if (successResults.length > 0) {
-                // Fetch latest state to ensure we don't overwrite progress from other batches
-                const { data: campaignState } = await supabase
-                    .from('campaigns')
-                    .select('generated_pins, total_pins')
-                    .eq('id', campaignId)
-                    .single();
-                
-                if (campaignState) {
-                    const newTotal = (campaignState.generated_pins || 0) + successResults.length;
-                    // Check completion against total_pins
-                    const isComplete = newTotal >= campaignState.total_pins;
-                    
-                    const updateData: Record<string, unknown> = {
-                        generated_pins: newTotal,
-                        updated_at: new Date().toISOString()
-                    };
-                    
-                    if (isComplete) {
-                        updateData.status = 'completed';
-                        updateData.completed_at = new Date().toISOString();
+                // Use raw SQL for atomic increment
+                const { error: rpcError } = await supabase.rpc(
+                    'increment_campaign_pins',
+                    { 
+                        campaign_uuid: campaignId, 
+                        increment_by: successResults.length 
                     }
+                );
+                
+                if (rpcError) {
+                    // Fallback: If RPC doesn't exist, use regular update
+                    // This may have a race condition but is better than failing
+                    console.warn('[Inngest] RPC not found, using fallback update:', rpcError.message);
                     
-                    await supabase
+                    const { data: campaignState } = await supabase
                         .from('campaigns')
-                        .update(updateData)
-                        .eq('id', campaignId);
+                        .select('generated_pins, total_pins')
+                        .eq('id', campaignId)
+                        .single();
+                    
+                    if (campaignState) {
+                        const newTotal = (campaignState.generated_pins || 0) + successResults.length;
+                        const isComplete = newTotal >= campaignState.total_pins;
+                        
+                        const updateData: Record<string, unknown> = {
+                            generated_pins: newTotal,
+                            updated_at: new Date().toISOString()
+                        };
+                        
+                        if (isComplete) {
+                            updateData.status = 'completed';
+                            updateData.completed_at = new Date().toISOString();
+                        }
+                        
+                        await supabase
+                            .from('campaigns')
+                            .update(updateData)
+                            .eq('id', campaignId);
+                    }
                 }
             }
         });
-
-        // Release lock after completion
-        await releaseLock(`render:${campaignId}`);
 
         return { success: true, count: results.length };
     }
