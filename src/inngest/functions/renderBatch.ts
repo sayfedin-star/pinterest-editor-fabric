@@ -318,6 +318,12 @@ export const renderBatchFunction = inngest.createFunction(
                 async function renderSinglePin(rowData: Record<string, string>, pinIndex: number): Promise<Buffer> {
                     const canvas = canvasPool.acquire();
                     try {
+                        // CRITICAL: Clear canvas before rendering!
+                        // Reused canvases contain old fabric objects from previous pins.
+                        // Without clearing, renderTemplate's incremental logic sees same
+                        // element IDs as "existing" and skips creating new elements.
+                        canvas.clear();
+                        
                         const config = {
                             width: canvasSize!.width,
                             height: canvasSize!.height,
